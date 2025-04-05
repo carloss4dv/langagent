@@ -1,0 +1,57 @@
+# Requisitos para el agente de respuesta a preguntas con LangGraph
+
+# Dependencias principales
+langchain
+langchain-core
+langchain-community
+langchain-experimental
+langgraph
+langchain-text-splitters
+
+# Embeddings, vectorstore y procesamiento de documentos
+chromadb==0.5.0
+langchain-chroma
+langchain-nomic
+tiktoken
+unstructured[md]
+sentence-transformers
+faiss-cpu
+
+# Modelos y LLMs
+ollama
+gpt4all
+langchain-huggingface
+langchain-ollama
+langchainhub
+
+# Procesamiento de documentos
+
+markdownify
+rapidocr-onnxruntime
+beautifulsoup4
+html2text
+xmltodict
+lark
+
+# API y autenticación
+fastapi
+pydantic
+uvicorn
+langserve
+authlib
+nest-asyncio
+
+# Búsqueda y herramientas
+semanticscholar
+detectaicore
+
+# Análisis de datos
+openpyxl
+xlrd
+tabulate
+
+# Utilidades
+python-dotenv
+ipython
+streamlit-authenticator
+typing-extensions
