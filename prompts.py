@@ -67,12 +67,12 @@ PROMPTS = {
         - solicitudConvocatoria: Application processes, calls for proposals, and program applications
         - solicitudes_movilidad_OUT: Outgoing mobility applications, study abroad requests
         
-        Instructions:
-        1. Carefully analyze the question to understand its context and requirements
-        2. Consider the specific purpose of each cube
-        3. Select the most relevant cube based on the question's focus
-        4. If multiple cubes could be relevant, choose the primary one
-        5. If uncertain, select the most probable cube based on keywords and context
+        Analysis steps:
+        1. First, check for explicit cube mentions in the question
+        2. If found, select that cube regardless of other content
+        3. If not found, analyze keywords and context
+        4. Consider the specific purpose of each cube
+        5. Select the most relevant cube based on the question's focus
         
         Response format:
         - Provide a JSON response with a single key 'cubo'
@@ -85,7 +85,7 @@ PROMPTS = {
         <|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
     },
     
-    "hf.co/unsloth/Mistral-Small-3.1-24B-Instruct-2503-GGUF:latest": {
+    "hf.co/unsloth/Mistral-Small-3.1-24B-Instruct-2503-GGUF": {
         "rag": """[INST] You are an assistant for question-answering tasks. 
         Use the context to answer. If unsure, say you don't know. Keep it concise (3 sentences max).
         
@@ -138,6 +138,13 @@ PROMPTS = {
         - solicitudConvocatoria: Call for applications information
         - solicitudes_movilidad_OUT: Applications for outgoing mobility programs
         
+        Analysis steps:
+        1. First, check for explicit cube mentions in the question
+        2. If found, select that cube regardless of other content
+        3. If not found, analyze keywords and context
+        4. Consider the specific purpose of each cube
+        5. Select the most relevant cube based on the question's focus
+
         Based on the question, determine which cube contains the most relevant information.
         Provide your response in JSON format with a single key 'cubo' and the name of the relevant cube as the value.
         Do not include the 'Cubo' prefix in your response, just the name (e.g. 'matricula', not 'Cubomatricula').

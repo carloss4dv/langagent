@@ -456,10 +456,28 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         retry_count = state.get("retry_count", 0)
         max_retries = WORKFLOW_CONFIG["max_retries"]
         
-        if retry_count < max_retries:
-            return "retrieve"
-        else:
+        # Verificar si la generación actual es exitosa
+        hallucination_score = state.get("hallucination_score", {})
+        answer_score = state.get("answer_score", {})
+        
+        is_grounded = hallucination_score.get("score", "").lower() == "yes"
+        is_useful = answer_score.get("score", "").lower() == "yes"
+        
+        # Si la generación es exitosa o alcanzamos el máximo de reintentos, terminar
+        if (is_grounded and is_useful) or retry_count >= max_retries:
+            print(f"---DECISION: {'GENERATION SUCCESSFUL' if (is_grounded and is_useful) else 'MAX RETRIES REACHED'}---")
             return END
+        
+        # Si necesitamos reintentar, incrementar el contador
+        state["retry_count"] = retry_count + 1
+        print(f"---RETRY ATTEMPT {state['retry_count']} OF {max_retries}---")
+        
+        # Si estamos en el último reintento, usar todos los cubos disponibles
+        if state["retry_count"] == max_retries:
+            state["relevant_cubos"] = list(retrievers.keys())
+            print("---USING ALL AVAILABLE CUBES FOR FINAL ATTEMPT---")
+        
+        return "retrieve"
     
     workflow.add_conditional_edges(
         "generate",

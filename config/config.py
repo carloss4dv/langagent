@@ -12,7 +12,7 @@ LLM_CONFIG = {
     "max_tokens": 1024,        # Límite de tokens para las respuestas generadas
     "model_format": "json",    # Formato de salida (json, text, etc.)
     "default_model": "hf.co/unsloth/Mistral-Small-3.1-24B-Instruct-2503-GGUF",  # Modelo predeterminado para el LLM principal
-    "default_model2": "llama3.2:3b" # Modelo predeterminado para el LLM secundario (evaluación)
+    "default_model2": "llama3.1:8b" # Modelo predeterminado para el LLM secundario (evaluación)
 }
 
 # Configuración de Vector Store

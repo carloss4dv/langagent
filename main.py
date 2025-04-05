@@ -137,7 +137,7 @@ def setup_agent(data_dir=None, chroma_base_dir=None, local_llm=None, local_llm2=
     answer_grader = create_answer_grader(llm2)
     
     # Crear un router de preguntas que determine qué cubo usar
-    question_router = create_question_router(llm)
+    question_router = create_question_router(llm2)
     
     # Modificar create_workflow para manejar múltiples retrievers
     print("Creando flujo de trabajo con múltiples vectorstores...")
