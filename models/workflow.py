@@ -39,6 +39,36 @@ class GraphState(TypedDict):
     ambito: Optional[str]
     retrieval_details: Dict[str, Dict[str, Any]]
 
+def normalize_name(name: str) -> str:
+    """
+    Normaliza un nombre de cubo o ámbito eliminando acentos, espacios y convirtiendo a minúsculas.
+    
+    Args:
+        name (str): Nombre a normalizar
+        
+    Returns:
+        str: Nombre normalizado
+    """
+    if not name:
+        return ""
+        
+    # Mapeo de caracteres con acento a sin acento
+    accent_map = {
+        'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+        'Á': 'a', 'É': 'e', 'Í': 'i', 'Ó': 'o', 'Ú': 'u',
+        'ñ': 'n', 'Ñ': 'n'
+    }
+    
+    # Convertir a minúsculas y reemplazar caracteres con acento
+    normalized = name.lower()
+    for accented, unaccented in accent_map.items():
+        normalized = normalized.replace(accented, unaccented)
+    
+    # Eliminar espacios y caracteres especiales
+    normalized = re.sub(r'[^a-z0-9]', '', normalized)
+    
+    return normalized
+
 def find_relevant_cubos_by_keywords(query: str, available_cubos: List[str]) -> Tuple[List[str], Optional[str]]:
     """
     Encuentra cubos relevantes basados en palabras clave y ámbitos en la consulta.
@@ -171,30 +201,36 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             print(f"Router identified scope: {scope}")
             print(f"Router confidence: {confidence}")
             
-            # Map English scope names to Spanish ones
+            # Normalizar nombres
+            normalized_cube = normalize_name(cube_name)
+            normalized_scope = normalize_name(scope)
+            
+            # Mapeo de ámbitos normalizados a sus claves internas
             scope_mapping = {
-                "ACADEMIC": "ACADÉMICO",
-                "ADMISSION": "ADMISIÓN", 
-                "TEACHING": "DOCENCIA",
-                "DOCTORATE": "DOCTORADO",
-                "SPECIFIC DEGREES": "ESTUDIOS PROPIOS",
-                "R&D": "I+D+i",
-                "MOBILITY": "MOVILIDAD",
-                "HR": "RRHH"
+                "academico": "academico",
+                "admission": "admision",
+                "admission": "admision",
+                "teaching": "docencia",
+                "doctorate": "doctorado",
+                "specificdegrees": "estudios_propios",
+                "rd": "idi",
+                "mobility": "movilidad",
+                "hr": "rrhh"
             }
             
-            spanish_scope = scope_mapping.get(scope.upper(), scope)
+            # Obtener el ámbito normalizado
+            normalized_scope = scope_mapping.get(normalized_scope, normalized_scope)
             
-            # If we have high confidence and the cube exists, use it directly
-            if confidence == "HIGH" and cube_name in retrievers:
-                state["relevant_cubos"] = [cube_name]
-                state["ambito"] = spanish_scope
-                print(f"Using specific cube with high confidence: {cube_name}")
-            # If we have a valid scope but medium/low confidence, use all cubes in that scope
-            elif spanish_scope:
-                state["relevant_cubos"] = [cube_name] if cube_name else []
-                state["ambito"] = spanish_scope
-                print(f"Using scope {spanish_scope} with cube {cube_name}")
+            # Si tenemos alta confianza y el cubo existe, usarlo directamente
+            if confidence == "HIGH" and normalized_cube in retrievers:
+                state["relevant_cubos"] = [normalized_cube]
+                state["ambito"] = normalized_scope
+                print(f"Using specific cube with high confidence: {normalized_cube}")
+            # Si tenemos un ámbito válido pero confianza media/baja, usar todos los cubos de ese ámbito
+            elif normalized_scope in AMBITOS_CUBOS:
+                state["relevant_cubos"] = [normalized_cube] if normalized_cube else []
+                state["ambito"] = normalized_scope
+                print(f"Using scope {normalized_scope} with cube {normalized_cube}")
             else:
                 # Fallback to using all available cubes
                 state["relevant_cubos"] = list(retrievers.keys()) if isinstance(retrievers, dict) else []
