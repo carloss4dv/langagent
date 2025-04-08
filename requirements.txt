@@ -1,68 +1,64 @@
 # Requisitos para el agente de respuesta a preguntas con LangGraph
 
 # Dependencias principales
-langchain
-langchain-core
-langchain-community
-langchain-experimental
-langgraph
-langchain-text-splitters
+langchain==0.1.12
+langchain-core==0.1.31
+langchain-community==0.0.28
+langchain-experimental==0.0.55
+langgraph==0.0.26
+langchain-text-splitters==0.0.1
 
 # Integración con llama-index
-llama-index
-llama-index-embeddings-huggingface
-llama-index-llms-ollama
-llama-index-vector-stores-chroma
-llama-index-readers-file
-llama-index-agent-openai
-llama-index-program-openai
-llama-index-retrievers-bm25
-llama-index-question-gen-openai
-llama-index-evaluation-openai
+llama-index==0.10.20
+llama-index-embeddings-huggingface==0.1.6
+llama-index-llms-ollama==0.1.3
+llama-index-vector-stores-chroma==0.1.3
+llama-index-readers-file==0.1.4
+llama-index-retrievers-bm25==0.1.2
 
 # Embeddings, vectorstore y procesamiento de documentos
 chromadb==0.5.0
-langchain-chroma
-langchain-nomic
-tiktoken
-unstructured[md]
-sentence-transformers
-faiss-cpu
+langchain-chroma==0.0.3
+langchain-nomic==0.0.1
+tiktoken==0.6.0
+unstructured[md]==0.12.4
+sentence-transformers==2.5.1
+faiss-cpu==1.7.4
 
 # Modelos y LLMs
-ollama
-gpt4all
-langchain-huggingface
-langchain-ollama
-langchainhub
+ollama==0.1.6
+gpt4all==1.0.8
+langchain-huggingface==0.0.2
+langchain-ollama==0.0.2
+langchainhub==0.1.15
 
 # Procesamiento de documentos
-markdownify
-rapidocr-onnxruntime
-beautifulsoup4
-html2text
-xmltodict
-lark
+markdownify==0.11.6
+rapidocr-onnxruntime==1.3.0
+beautifulsoup4==4.12.3
+html2text==2024.2.26
+xmltodict==0.13.0
+lark==1.1.9
 
 # API y autenticación
-fastapi
-pydantic
-uvicorn
-langserve
-authlib
-nest-asyncio
+fastapi==0.110.0
+pydantic==2.6.3
+uvicorn==0.27.1
+langserve==0.0.49
+authlib==1.3.0
+nest-asyncio==1.6.0
 
 # Búsqueda y herramientas
-semanticscholar
-detectaicore
+semanticscholar==0.7.0
+detectaicore==0.0.1
 
 # Análisis de datos
-openpyxl
-xlrd
-tabulate
+openpyxl==3.1.2
+xlrd==2.0.1
+tabulate==0.9.0
 
 # Utilidades
-python-dotenv
-ipython
-streamlit-authenticator
-typing-extensions
+python-dotenv==1.0.1
+ipython==8.23.0
+streamlit-authenticator==0.3.1
+typing-extensions==4.10.0
