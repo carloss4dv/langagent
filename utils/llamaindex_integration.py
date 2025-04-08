@@ -8,13 +8,13 @@ de langagent basada en LangGraph, LLaMA3 y Chroma.
 
 from typing import List, Dict, Any, Optional
 from langchain_core.documents import Document
-from llamaindex.core import VectorStoreIndex, StorageContext
-from llamaindex.core.node_parser import SentenceSplitter
-from llamaindex.core.schema import IndexNode
-from llamaindex.core.retrievers import RecursiveRetriever
-from llamaindex.core.query_engine import RetrieverQueryEngine
-from llamaindex.core.postprocessor import MetadataReplacementPostProcessor
-from llamaindex.core.indices.document_summary import DocumentSummaryIndex
+from llama_index.core import VectorStoreIndex, StorageContext, Settings
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.schema import IndexNode
+from llama_index.core.retrievers import RecursiveRetriever
+from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.postprocessor import MetadataReplacementPostProcessor
+from llama_index.core.indices.document_summary import DocumentSummaryIndex
 import logging
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ def create_dual_retriever(documents: List[Document], embeddings, persist_directo
     """
     try:
         # Convertir documentos de LangChain a formato llama-index
-        from llamaindex.core.schema import Document as LlamaDocument
+        from llama_index.core.schema import Document as LlamaDocument
         llama_docs = []
         for doc in documents:
             llama_doc = LlamaDocument(
@@ -80,11 +80,11 @@ def create_dual_retriever(documents: List[Document], embeddings, persist_directo
             all_nodes.append(original_node)
         
         # Crear índice vectorial con todos los nodos
-        from llamaindex.vector_stores.chroma import ChromaVectorStore
-        from llamaindex.core.storage.storage_context import StorageContext
+        from llama_index.vector_stores.chroma import ChromaVectorStore
+        from llama_index.core.storage.storage_context import StorageContext
         
         # Adaptar embeddings de LangChain a llama-index
-        from llamaindex.embeddings.langchain import LangchainEmbedding
+        from llama_index.embeddings.langchain import LangchainEmbedding
         llama_embeddings = LangchainEmbedding(embeddings)
         
         # Crear ChromaVectorStore
@@ -96,11 +96,10 @@ def create_dual_retriever(documents: List[Document], embeddings, persist_directo
         # Crear contexto de almacenamiento
         storage_context = StorageContext.from_defaults(vector_store=vector_store)
         
-        # Crear índice vectorial
+        # Crear índice vectorial - usar Settings globales cuando sea posible
         vector_index = VectorStoreIndex(
             all_nodes,
-            storage_context=storage_context,
-            embed_model=llama_embeddings
+            storage_context=storage_context
         )
         
         # Crear retriever vectorial
@@ -161,7 +160,7 @@ def create_document_summary_retriever(documents: List[Document], embeddings, per
     """
     try:
         # Convertir documentos de LangChain a formato llama-index
-        from llamaindex.core.schema import Document as LlamaDocument
+        from llama_index.core.schema import Document as LlamaDocument
         llama_docs = []
         for doc in documents:
             llama_doc = LlamaDocument(
@@ -171,13 +170,12 @@ def create_document_summary_retriever(documents: List[Document], embeddings, per
             llama_docs.append(llama_doc)
         
         # Adaptar embeddings de LangChain a llama-index
-        from llamaindex.embeddings.langchain import LangchainEmbedding
+        from llama_index.embeddings.langchain import LangchainEmbedding
         llama_embeddings = LangchainEmbedding(embeddings)
         
-        # Crear índice de resumen de documentos
+        # Crear índice de resumen de documentos - usar Settings globales cuando sea posible
         doc_summary_index = DocumentSummaryIndex.from_documents(
-            llama_docs,
-            embed_model=llama_embeddings
+            llama_docs
         )
         
         # Crear retriever
@@ -230,22 +228,22 @@ def create_router_retriever(retrievers: Dict[str, Any], llm):
     """
     try:
         # Adaptar LLM de LangChain a llama-index
-        from llamaindex.llms.langchain import LangChainLLM
+        from llama_index.llms.langchain import LangChainLLM
         llama_llm = LangChainLLM(llm=llm)
         
         # Crear router retriever
-        from llamaindex.core.query_engine import RouterQueryEngine
-        from llamaindex.core.selectors import LLMSingleSelector
+        from llama_index.core.query_engine import RouterQueryEngine
+        from llama_index.core.selectors import LLMSingleSelector
         
         # Adaptar retrievers de LangChain a llama-index
-        from llamaindex.core.retrievers import BaseRetriever as LlamaBaseRetriever
+        from llama_index.core.retrievers import BaseRetriever as LlamaBaseRetriever
         
         class LangChainRetrieverAdapter(LlamaBaseRetriever):
             def __init__(self, langchain_retriever):
                 self.langchain_retriever = langchain_retriever
                 
             def _retrieve(self, query_str):
-                from llamaindex.core.schema import NodeWithScore, TextNode
+                from llama_index.core.schema import NodeWithScore, TextNode
                 
                 # Obtener documentos de LangChain
                 docs = self.langchain_retriever.get_relevant_documents(query_str)

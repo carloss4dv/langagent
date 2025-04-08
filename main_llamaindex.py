@@ -7,13 +7,13 @@ de RAG avanzado utilizando llama-index.
 
 from typing import List, Dict, Any, Optional
 from langchain_core.documents import Document
-from llamaindex.core import VectorStoreIndex, StorageContext
-from llamaindex.core.node_parser import SentenceSplitter
-from llamaindex.core.schema import IndexNode
-from llamaindex.core.retrievers import RecursiveRetriever
-from llamaindex.core.query_engine import RetrieverQueryEngine
-from llamaindex.core.postprocessor import MetadataReplacementPostProcessor
-from llamaindex.core.indices.document_summary import DocumentSummaryIndex
+from llama_index.core import VectorStoreIndex, StorageContext, Settings
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.schema import IndexNode
+from llama_index.core.retrievers import RecursiveRetriever
+from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.postprocessor import MetadataReplacementPostProcessor
+from llama_index.core.indices.document_summary import DocumentSummaryIndex
 import logging
 
 logger = logging.getLogger(__name__)
@@ -58,6 +58,39 @@ from langagent.config.config import (
     PATHS_CONFIG
 )
 
+def configure_llamaindex_settings(embeddings, llm, chunk_size=512, chunk_overlap=20):
+    """
+    Configura los ajustes globales de LlamaIndex.
+    
+    Args:
+        embeddings: Modelo de embeddings a utilizar
+        llm: Modelo de lenguaje a utilizar
+        chunk_size (int): Tamaño de chunks para el parser
+        chunk_overlap (int): Solapamiento entre chunks
+    """
+    # Adaptar embeddings de LangChain a llama-index si es necesario
+    from llama_index.embeddings.langchain import LangchainEmbedding
+    llama_embeddings = (
+        embeddings if hasattr(embeddings, "get_text_embedding") 
+        else LangchainEmbedding(embeddings)
+    )
+    
+    # Adaptar LLM de LangChain a llama-index si es necesario
+    from llama_index.llms.langchain import LangChainLLM
+    llama_llm = (
+        llm if hasattr(llm, "complete") 
+        else LangChainLLM(llm=llm)
+    )
+    
+    # Configurar Settings globales
+    Settings.embed_model = llama_embeddings
+    Settings.llm = llama_llm
+    Settings.node_parser = SentenceSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    Settings.num_output = 512
+    Settings.context_window = 3900
+    
+    logger.info("Configuración global de LlamaIndex completada")
+
 def setup_agent(documents: List[Document], embeddings, llm, persist_directory: str):
     """
     Configura el agente con los componentes necesarios para RAG avanzado.
@@ -72,6 +105,9 @@ def setup_agent(documents: List[Document], embeddings, llm, persist_directory: s
         agent: Agente configurado con capacidades de RAG avanzado
     """
     try:
+        # Configurar Settings globales de LlamaIndex
+        configure_llamaindex_settings(embeddings, llm)
+        
         # Crear retrievers
         from utils.llamaindex_integration import (
             create_dual_retriever,
@@ -101,7 +137,7 @@ def setup_agent(documents: List[Document], embeddings, llm, persist_directory: s
         )
         
         # Crear query engine
-        from llamaindex.core.query_engine import RetrieverQueryEngine
+        from llama_index.core.query_engine import RetrieverQueryEngine
         query_engine = RetrieverQueryEngine(
             retriever=router_retriever,
             response_synthesizer=llm
