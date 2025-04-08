@@ -3,10 +3,10 @@ Módulo para el flujo de control del agente utilizando LangGraph.
 
 Este módulo implementa el flujo de control para el agente de respuesta a preguntas
 utilizando LangGraph, con un mecanismo de reintento para respuestas no exitosas.
-Soporta múltiples vectorstores organizados en cubos.
+Soporta múltiples vectorstores organizados en cubos y ámbitos.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from typing_extensions import TypedDict
 from langchain_core.documents import Document
 from langgraph.graph import StateGraph, END
@@ -14,6 +14,7 @@ import json
 import re
 
 from langagent.config.config import WORKFLOW_CONFIG, VECTORSTORE_CONFIG
+from langagent.models.constants import AMBITOS_CUBOS, CUBO_TO_AMBITO, AMBITO_KEYWORDS
 
 class GraphState(TypedDict):
     """
@@ -25,6 +26,7 @@ class GraphState(TypedDict):
         documents: lista de documentos
         retry_count: contador de reintentos
         relevant_cubos: lista de cubos relevantes para la pregunta
+        ambito: ámbito identificado para la pregunta
         retrieval_details: detalles de recuperación por cubo
     """
     question: str
@@ -34,132 +36,74 @@ class GraphState(TypedDict):
     hallucination_score: Optional[str]
     answer_score: Optional[str]
     relevant_cubos: List[str]
+    ambito: Optional[str]
     retrieval_details: Dict[str, Dict[str, Any]]
 
-def find_relevant_cubos_by_keywords(query, available_cubos):
+def find_relevant_cubos_by_keywords(query: str, available_cubos: List[str]) -> Tuple[List[str], Optional[str]]:
     """
-    Encuentra cubos relevantes basados en palabras clave en la consulta.
+    Encuentra cubos relevantes basados en palabras clave y ámbitos en la consulta.
+    Si se identifica un ámbito, devuelve todos los cubos asociados a ese ámbito.
     
     Args:
-        query (str): La consulta del usuario
-        available_cubos (list): Lista de cubos disponibles
+        query: La consulta del usuario
+        available_cubos: Lista de cubos disponibles
         
     Returns:
-        list: Lista de cubos relevantes basados en keywords
+        Tuple[List[str], Optional[str]]: (Lista de cubos relevantes, ámbito identificado)
     """
-    # Mapeo de palabras clave a cubos con pesos de relevancia
-    keyword_to_cubo = {
-        # Acuerdos bilaterales
-        "acuerdo bilateral": ("acuerdos_bilaterales", 1.0),
-        "convenio": ("acuerdos_bilaterales", 0.9),
-        "acuerdo internacional": ("acuerdos_bilaterales", 0.8),
-        "colaboración": ("acuerdos_bilaterales", 0.7),
-        "partnership": ("acuerdos_bilaterales", 0.7),
-        
-        # Admisión
-        "admisión": ("admision", 1.0),
-        "acceso": ("admision", 0.9),
-        "entrada": ("admision", 0.8),
-        "nuevo ingreso": ("admision", 0.9),
-        "requisitos de admisión": ("admision", 1.0),
-        "proceso de admisión": ("admision", 1.0),
-        
-        # Cargo
-        "cargo": ("cargo", 1.0),
-        "puesto administrativo": ("cargo", 0.9),
-        "posición": ("cargo", 0.8),
-        "responsabilidad": ("cargo", 0.7),
-        
-        # Docencia asignatura
-        "asignatura": ("docenciaAsignatura", 1.0),
-        "materia": ("docenciaAsignatura", 0.9),
-        "curso": ("docenciaAsignatura", 0.8),
-        "programa académico": ("docenciaAsignatura", 0.9),
-        "plan de estudios": ("docenciaAsignatura", 0.8),
-        
-        # Docencia PDI
-        "docencia": ("docenciaPDI", 1.0),
-        "profesor": ("docenciaPDI", 0.9),
-        "PDI": ("docenciaPDI", 1.0),
-        "facultad": ("docenciaPDI", 0.8),
-        "profesorado": ("docenciaPDI", 0.9),
-        
-        # Egresados
-        "egresado": ("egresados", 1.0),
-        "graduado": ("egresados", 0.9),
-        "alumni": ("egresados", 0.8),
-        "titulado": ("egresados", 0.9),
-        "exalumno": ("egresados", 0.8),
-        
-        # Estudiantes IN
-        "estudiante extranjero": ("estudiantesIN", 1.0),
-        "estudiante internacional": ("estudiantesIN", 0.9),
-        "incoming": ("estudiantesIN", 0.8),
-        "exchange": ("estudiantesIN", 0.8),
-        "estudiante foráneo": ("estudiantesIN", 0.9),
-        
-        # Estudiantes OUT
-        "movilidad saliente": ("estudiantesOUT", 1.0),
-        "estudiante en el extranjero": ("estudiantesOUT", 0.9),
-        "outgoing": ("estudiantesOUT", 0.8),
-        "estudiante fuera": ("estudiantesOUT", 0.8),
-        "movilidad internacional": ("estudiantesOUT", 0.9),
-        
-        # Grupos
-        "grupo": ("grupos", 1.0),
-        "grupo de investigación": ("grupos", 0.9),
-        "equipo de investigación": ("grupos", 0.9),
-        "investigación": ("grupos", 0.8),
-        "línea de investigación": ("grupos", 0.9),
-        
-        # Índices bibliométricos
-        "bibliométrico": ("indicesBibliometricos", 1.0),
-        "publicación": ("indicesBibliometricos", 0.9),
-        "índice de impacto": ("indicesBibliometricos", 0.9),
-        "citas": ("indicesBibliometricos", 0.8),
-        "H-index": ("indicesBibliometricos", 0.9),
-        
-        # Matrícula
-        "matrícula": ("matricula", 1.0),
-        "inscripción": ("matricula", 0.9),
-        "registro": ("matricula", 0.8),
-        "enrollment": ("matricula", 0.8),
-        "registro académico": ("matricula", 0.9),
-        
-        # Rendimiento
-        "rendimiento": ("rendimiento", 1.0),
-        "resultados académicos": ("rendimiento", 0.9),
-        "calificación": ("rendimiento", 0.8),
-        "nota": ("rendimiento", 0.8),
-        "promedio": ("rendimiento", 0.8),
-        "aprobado": ("rendimiento", 0.7),
-        "reprobado": ("rendimiento", 0.7)
-    }
-    
-    # Diccionario para almacenar puntuaciones por cubo
-    cubo_scores = {}
-    
-    # Convertir la consulta a minúsculas para comparar keywords
     query_lower = query.lower()
     
-    # Buscar keywords en la consulta y acumular puntuaciones
-    for keyword, (cubo, score) in keyword_to_cubo.items():
-        if keyword.lower() in query_lower and cubo in available_cubos:
-            if cubo not in cubo_scores:
-                cubo_scores[cubo] = 0
-            cubo_scores[cubo] += score
+    # Buscar referencias explícitas a ámbitos
+    explicit_ambito_pattern = r"(?:ámbito|ambito)\s+(\w+)"
+    ambito_matches = re.findall(explicit_ambito_pattern, query_lower)
     
-    # Ordenar cubos por puntuación
-    sorted_cubos = sorted(cubo_scores.items(), key=lambda x: x[1], reverse=True)
+    # Verificar ámbitos explícitos
+    for match in ambito_matches:
+        ambito_key = match.lower().replace(" ", "_")
+        if ambito_key in AMBITOS_CUBOS:
+            # Devolver todos los cubos disponibles del ámbito
+            relevant_cubos = [
+                cubo for cubo in AMBITOS_CUBOS[ambito_key]["cubos"]
+                if cubo in available_cubos
+            ]
+            return relevant_cubos, ambito_key
     
-    # Seleccionar cubos con puntuación significativa (umbral de 0.5)
-    relevant_cubos = [cubo for cubo, score in sorted_cubos if score >= 0.5]
+    # Buscar referencias explícitas a cubos
+    explicit_cubo_pattern = r"(?:del|en el|del cubo|en el cubo)\s+(\w+)"
+    cubo_matches = re.findall(explicit_cubo_pattern, query_lower)
     
-    # Si no hay cubos relevantes, usar todos los disponibles
-    if not relevant_cubos:
-        relevant_cubos = list(available_cubos)
+    for match in cubo_matches:
+        if match in available_cubos:
+            # Identificar el ámbito del cubo
+            ambito = CUBO_TO_AMBITO.get(match)
+            if ambito:
+                # Devolver todos los cubos del ámbito
+                relevant_cubos = [
+                    cubo for cubo in AMBITOS_CUBOS[ambito]["cubos"]
+                    if cubo in available_cubos
+                ]
+                return relevant_cubos, ambito
+            return [match], None
     
-    return relevant_cubos
+    # Buscar keywords de ámbitos
+    ambito_scores = {}
+    for ambito, keywords in AMBITO_KEYWORDS.items():
+        score = sum(1 for keyword in keywords if keyword in query_lower)
+        if score > 0:
+            ambito_scores[ambito] = score
+    
+    # Si encontramos ámbitos por keywords
+    if ambito_scores:
+        # Seleccionar el ámbito con mayor puntuación
+        selected_ambito = max(ambito_scores.items(), key=lambda x: x[1])[0]
+        relevant_cubos = [
+            cubo for cubo in AMBITOS_CUBOS[selected_ambito]["cubos"]
+            if cubo in available_cubos
+        ]
+        return relevant_cubos, selected_ambito
+    
+    # Si no encontramos nada, devolver todos los cubos disponibles
+    return list(available_cubos), None
 
 def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grader, answer_grader, question_router):
     """
@@ -184,68 +128,87 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
     
     def route_question(state):
         """
-        Determina qué cubos son relevantes para la pregunta.
+        Determines which cubes are relevant for the question and the corresponding scope.
         
         Args:
-            state (dict): Estado actual del grafo.
+            state (dict): Current graph state.
             
         Returns:
-            dict: Estado actualizado con cubos relevantes identificados.
+            dict: Updated state with identified relevant cubes and scope.
         """
         print("---ROUTE QUESTION---")
         question = state["question"]
         print(question)
         
         try:
-            # Invocar el router y parsear el resultado
+            # Invoke router and parse result
             routing_result = question_router.invoke({"question": question})
             
-            # El router puede devolver un diccionario directamente o una cadena JSON
+            # Router can return a dictionary directly or a JSON string
             if isinstance(routing_result, dict):
-                cubo_name = routing_result.get("cubo", "")
-                datasource = routing_result.get("datasource", "")
+                cube_name = routing_result.get("cube", "")
+                scope = routing_result.get("scope", "")
+                confidence = routing_result.get("confidence", "LOW")
             elif isinstance(routing_result, str):
                 try:
-                    # Intentar parsear como JSON si es una cadena
                     parsed = json.loads(routing_result)
-                    cubo_name = parsed.get("cubo", "")
-                    datasource = parsed.get("datasource", "")
+                    cube_name = parsed.get("cube", "")
+                    scope = parsed.get("scope", "")
+                    confidence = parsed.get("confidence", "LOW")
                 except json.JSONDecodeError:
-                    # Si no es JSON válido, buscar el nombre del cubo en el texto
-                    match = re.search(r'"cubo"\s*:\s*"([^"]+)"', routing_result)
-                    cubo_name = match.group(1) if match else ""
-                    match = re.search(r'"datasource"\s*:\s*"([^"]+)"', routing_result)
-                    datasource = match.group(1) if match else ""
+                    # Fallback regex parsing if needed
+                    cube_match = re.search(r'"cube"\s*:\s*"([^"]+)"', routing_result)
+                    cube_name = cube_match.group(1) if cube_match else ""
+                    scope_match = re.search(r'"scope"\s*:\s*"([^"]+)"', routing_result)
+                    scope = scope_match.group(1) if scope_match else ""
+                    confidence = "LOW"
             else:
-                cubo_name = ""
-                datasource = ""
+                cube_name = ""
+                scope = ""
+                confidence = "LOW"
                 
-            print(f"Router ha identificado el cubo: {cubo_name}")
+            print(f"Router identified cube: {cube_name}")
+            print(f"Router identified scope: {scope}")
+            print(f"Router confidence: {confidence}")
             
-            # Verificar si el cubo existe
-            if cubo_name and cubo_name in retrievers:
-                state["relevant_cubos"] = [cubo_name]
-                print(f"Usando cubo específico: {cubo_name}")
+            # Map English scope names to Spanish ones
+            scope_mapping = {
+                "ACADEMIC": "ACADÉMICO",
+                "ADMISSION": "ADMISIÓN", 
+                "TEACHING": "DOCENCIA",
+                "DOCTORATE": "DOCTORADO",
+                "SPECIFIC DEGREES": "ESTUDIOS PROPIOS",
+                "R&D": "I+D+i",
+                "MOBILITY": "MOVILIDAD",
+                "HR": "RRHH"
+            }
+            
+            spanish_scope = scope_mapping.get(scope.upper(), scope)
+            
+            # If we have high confidence and the cube exists, use it directly
+            if confidence == "HIGH" and cube_name in retrievers:
+                state["relevant_cubos"] = [cube_name]
+                state["ambito"] = spanish_scope
+                print(f"Using specific cube with high confidence: {cube_name}")
+            # If we have a valid scope but medium/low confidence, use all cubes in that scope
+            elif spanish_scope:
+                state["relevant_cubos"] = [cube_name] if cube_name else []
+                state["ambito"] = spanish_scope
+                print(f"Using scope {spanish_scope} with cube {cube_name}")
             else:
-                # Si el cubo no existe o no se identificó, usar cubos relevantes basados en keywords
-                print(f"Cubo '{cubo_name}' no encontrado o no especificado. Buscando cubos relevantes por palabras clave.")
-                relevant_cubos = find_relevant_cubos_by_keywords(question, list(retrievers.keys()))
+                # Fallback to using all available cubes
+                state["relevant_cubos"] = list(retrievers.keys()) if isinstance(retrievers, dict) else []
+                state["ambito"] = None
+                print("No specific scope identified. Using all available cubes.")
                 
-                if relevant_cubos:
-                    state["relevant_cubos"] = relevant_cubos
-                    print(f"Cubos relevantes por keywords: {relevant_cubos}")
-                else:
-                    # Si no se encontraron cubos relevantes, usar todos
-                    state["relevant_cubos"] = list(retrievers.keys())
-                    print("Usando todos los cubos disponibles")
-                    
         except Exception as e:
-            print(f"Error en route_question: {e}")
-            # En caso de error, usar todos los cubos
-            state["relevant_cubos"] = list(retrievers.keys())
-            print("Error en router. Usando todos los cubos disponibles")
+            print(f"Error in route_question: {e}")
+            # On error, use all cubes if retrievers is a dict
+            state["relevant_cubos"] = list(retrievers.keys()) if isinstance(retrievers, dict) else []
+            state["ambito"] = None
+            print("Error in router. Using all available cubes.")
         
-        # Inicializar contador de reintentos
+        # Initialize retry counter
         state["retry_count"] = 0
         state["retrieval_details"] = {}
         
@@ -264,12 +227,22 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         print("---RETRIEVE---")
         question = state["question"]
         retry_count = state.get("retry_count", 0)
-        relevant_cubos = state.get("relevant_cubos", list(retrievers.keys()))
+        ambito = state.get("ambito")
+        
+        # Si tenemos un ámbito identificado, usar todos sus cubos
+        if ambito and ambito in AMBITOS_CUBOS:
+            relevant_cubos = [
+                cubo for cubo in AMBITOS_CUBOS[ambito]["cubos"]
+                if cubo in retrievers
+            ]
+            print(f"Usando todos los cubos del ámbito {AMBITOS_CUBOS[ambito]['nombre']}")
+        else:
+            relevant_cubos = state.get("relevant_cubos", list(retrievers.keys()))
         
         all_docs = []
         retrieval_details = {}
         
-        # Para cada cubo relevante, recuperar documentos
+        # Recuperar documentos de cada cubo relevante
         for cubo in relevant_cubos:
             if cubo in retrievers:
                 try:
@@ -277,13 +250,14 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                     retriever = retrievers[cubo]
                     docs = retriever.invoke(question)
                     
-                    # Añadir metadatos sobre el cubo de origen a cada documento
+                    # Añadir metadatos sobre el cubo y ámbito
                     for doc in docs:
                         doc.metadata["cubo_source"] = cubo
+                        doc.metadata["ambito"] = CUBO_TO_AMBITO.get(cubo)
                     
-                    # Guardar los documentos y detalles para este cubo
                     retrieval_details[cubo] = {
                         "count": len(docs),
+                        "ambito": CUBO_TO_AMBITO.get(cubo),
                         "first_doc_snippet": docs[0].page_content[:100] + "..." if docs else "No documents retrieved"
                     }
                     
@@ -297,21 +271,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                         "error": str(e)
                     }
         
-        # Si no se encontraron documentos, intentar con todos los cubos en caso de reintentos
-        if not all_docs and retry_count > 0:
-            print("No se encontraron documentos en los cubos iniciales. Probando con todos los cubos...")
-            for cubo, retriever in retrievers.items():
-                if cubo not in relevant_cubos:
-                    try:
-                        docs = retriever.invoke(question)
-                        for doc in docs:
-                            doc.metadata["cubo_source"] = cubo
-                        all_docs.extend(docs)
-                        print(f"Recuperados {len(docs)} documentos del cubo {cubo}")
-                    except Exception as e:
-                        print(f"Error al recuperar documentos del cubo {cubo}: {e}")
-        
-        # Limitar el número total de documentos para no sobrecargar el modelo
+        # Limitar el número total de documentos
         max_docs = VECTORSTORE_CONFIG.get("max_docs_total", 10)
         if len(all_docs) > max_docs:
             all_docs = all_docs[:max_docs]
@@ -321,49 +281,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             "question": question,
             "retry_count": retry_count,
             "relevant_cubos": relevant_cubos,
-            "retrieval_details": retrieval_details
-        }
-    
-    def grade_documents(state):
-        """
-        Determina si los documentos recuperados son relevantes para la pregunta.
-        
-        Args:
-            state (dict): Estado actual del grafo.
-            
-        Returns:
-            dict: Estado actualizado con documentos filtrados.
-        """
-        print("---CHECK DOCUMENT RELEVANCE TO QUESTION---")
-        question = state["question"]
-        documents = state["documents"]
-        retry_count = state.get("retry_count", 0)
-        relevant_cubos = state.get("relevant_cubos", [])
-        retrieval_details = state.get("retrieval_details", {})
-        
-        # Evaluar cada documento
-        filtered_docs = []
-        for d in documents:
-            score = retrieval_grader.invoke(
-                {"document": d.page_content, "question": question}
-            )
-            score_value = score["score"].lower() if isinstance(score, dict) else "no"
-            
-            if score_value == "yes":
-                print("---GRADE: DOCUMENT RELEVANT---")
-                filtered_docs.append(d)
-            else:
-                print("---GRADE: DOCUMENT NOT RELEVANT---")
-        
-        print("---ASSESS GRADED DOCUMENTS---")
-        if not filtered_docs:
-            print("---DECISION: ALL DOCUMENTS ARE NOT RELEVANT TO QUESTION---")
-        
-        return {
-            "documents": filtered_docs if filtered_docs else documents,
-            "question": question,
-            "retry_count": retry_count,
-            "relevant_cubos": relevant_cubos,
+            "ambito": ambito,
             "retrieval_details": retrieval_details
         }
     
@@ -427,20 +345,19 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             "hallucination_score": hallucination_score,
             "answer_score": answer_score,
             "relevant_cubos": relevant_cubos,
+            "ambito": state.get("ambito"),
             "retrieval_details": retrieval_details
         }
     
     # Añadir nodos al grafo
     workflow.add_node("route_question", route_question)
     workflow.add_node("retrieve", retrieve)
-    workflow.add_node("grade_documents", grade_documents)
     workflow.add_node("generate", generate)
     
-    # Definir bordes
+    # Definir bordes - flujo simplificado
     workflow.set_entry_point("route_question")
     workflow.add_edge("route_question", "retrieve")
-    workflow.add_edge("retrieve", "grade_documents")
-    workflow.add_edge("grade_documents", "generate")
+    workflow.add_edge("retrieve", "generate")
     
     # Definir condiciones para reintentos o finalización
     def should_retry(state):
@@ -473,17 +390,17 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         print(f"---RETRY ATTEMPT {state['retry_count']} OF {max_retries}---")
         
         # Si estamos en el último reintento, usar todos los cubos disponibles
-        if state["retry_count"] == max_retries:
+        if state["retry_count"] == max_retries - 1:
             state["relevant_cubos"] = list(retrievers.keys())
             print("---USING ALL AVAILABLE CUBES FOR FINAL ATTEMPT---")
         
-        return "retrieve"
+        return "generate"
     
     workflow.add_conditional_edges(
         "generate",
         should_retry,
         {
-            "retrieve": "retrieve",
+            "generate": "generate",
             END: END
         }
     )

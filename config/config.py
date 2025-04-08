@@ -12,13 +12,13 @@ LLM_CONFIG = {
     "max_tokens": 1024,        # Límite de tokens para las respuestas generadas
     "model_format": "json",    # Formato de salida (json, text, etc.)
     "default_model": "hf.co/unsloth/Mistral-Small-3.1-24B-Instruct-2503-GGUF",  # Modelo predeterminado para el LLM principal
-    "default_model2": "llama3.1:8b" # Modelo predeterminado para el LLM secundario (evaluación)
+    "default_model2": "qwen2.5:7b" # Modelo predeterminado para el LLM secundario (evaluación)
 }
 
 # Configuración de Vector Store
 VECTORSTORE_CONFIG = {
     "chunk_size": 250,         # Tamaño de los fragmentos de texto para indexación
-    "chunk_overlap": 0,        # Superposición entre fragmentos
+    "chunk_overlap": 20,        # Superposición entre fragmentos
     "k_retrieval": 6,          # Número de documentos a recuperar
     "similarity_threshold": 0.7,  # Umbral mínimo de similitud para considerar un documento relevante
 }
