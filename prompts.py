@@ -231,11 +231,9 @@ PROMPTS = {
         <|im_start|>assistant""",
 
         "hallucination_grader": """<|im_start|>system
-        You are a strict evaluator that checks if a generated response is fully supported by the provided documents.
-        Your ONLY task is to determine if ALL information in the generation is present in the documents.
-        You MUST respond with a JSON object containing ONLY a "score" key with value "yes" or "no".
-        DO NOT include any explanations, analysis, or additional information.
-        Example response: {"score": "yes"} or {"score": "no"}<|im_end|>
+        You are a strict evaluator. Check if ALL information in the generation is EXPLICITLY present in the documents.
+        Respond ONLY with: {{"score": "yes"}} if everything is supported, or {{"score": "no"}} if anything is not explicitly present.
+        Do not include any other text or explanation.  ONLY RESPOND WITH THE JSON.<|im_end|>
         <|im_start|>user
         Documents: {documents}
         Generation: {generation}<|im_end|>

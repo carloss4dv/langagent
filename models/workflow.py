@@ -252,13 +252,13 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
     
     def retrieve(state):
         """
-        Recupera documentos de los vectorstores relevantes.
+        Recupera documentos de los vectorstores relevantes y los filtra por relevancia.
         
         Args:
             state (dict): Estado actual del grafo.
             
         Returns:
-            dict: Estado actualizado con los documentos recuperados.
+            dict: Estado actualizado con los documentos recuperados y filtrados.
         """
         print("\n=== INICIO DE RECUPERACIÓN DE DOCUMENTOS ===")
         print(f"Pregunta: {state['question']}")
@@ -298,18 +298,37 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                     
                     print(f"Documentos recuperados del cubo {cubo}: {len(docs)}")
                     
-                    # Añadir metadatos sobre el cubo y ámbito
+                    # Filtrar documentos por relevancia usando el retrieval_grader
+                    relevant_docs = []
                     for doc in docs:
-                        doc.metadata["cubo_source"] = cubo
-                        doc.metadata["ambito"] = CUBO_TO_AMBITO.get(cubo)
+                        # Evaluar relevancia del documento
+                        relevance = retrieval_grader.invoke({
+                            "document": doc.page_content,
+                            "question": question
+                        })
+                        
+                        # Extraer score de la respuesta
+                        if isinstance(relevance, dict) and "score" in relevance:
+                            is_relevant = relevance["score"].lower() == "yes"
+                        else:
+                            # Por defecto, considerar el documento como relevante
+                            is_relevant = True
+                        
+                        if is_relevant:
+                            # Añadir metadatos sobre el cubo y ámbito
+                            doc.metadata["cubo_source"] = cubo
+                            doc.metadata["ambito"] = CUBO_TO_AMBITO.get(cubo)
+                            relevant_docs.append(doc)
                     
                     retrieval_details[cubo] = {
                         "count": len(docs),
+                        "relevant_count": len(relevant_docs),
                         "ambito": CUBO_TO_AMBITO.get(cubo),
-                        "first_doc_snippet": docs[0].page_content[:100] + "..." if docs else "No documents retrieved"
+                        "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
                     }
                     
-                    all_docs.extend(docs)
+                    all_docs.extend(relevant_docs)
+                    print(f"Documentos relevantes del cubo {cubo}: {len(relevant_docs)}")
                     print(f"Total acumulado de documentos: {len(all_docs)}")
                     
                 except Exception as e:
@@ -318,6 +337,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                     print(f"Mensaje de error: {str(e)}")
                     retrieval_details[cubo] = {
                         "count": 0,
+                        "relevant_count": 0,
                         "error": str(e),
                         "error_type": type(e).__name__
                     }
@@ -332,7 +352,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         print(f"Total de documentos recuperados: {len(all_docs)}")
         print(f"Detalles por cubo:")
         for cubo, details in retrieval_details.items():
-            print(f"- {cubo}: {details['count']} documentos")
+            print(f"- {cubo}: {details['count']} documentos recuperados, {details.get('relevant_count', 0)} relevantes")
             if "error" in details:
                 print(f"  Error: {details['error']}")
         
