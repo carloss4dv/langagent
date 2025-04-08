@@ -370,19 +370,51 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         # Verificar alucinaciones
         print("---CHECK HALLUCINATIONS---")
         documents_text = "\n".join([d.page_content for d in documents])
-        hallucination_score = hallucination_grader.invoke(
+        hallucination_eval = hallucination_grader.invoke(
             {"documents": documents_text, "generation": generation}
         )
+        print(f"Hallucination evaluation: {hallucination_eval}")
         
         # Verificar si la respuesta aborda la pregunta
         print("---GRADE GENERATION vs QUESTION---")
-        answer_score = answer_grader.invoke(
+        answer_eval = answer_grader.invoke(
             {"question": question, "generation": generation}
         )
+        print(f"Answer evaluation: {answer_eval}")
+        
+        # Función auxiliar para extraer score de diferentes formatos de respuesta
+        def extract_score(response) -> bool:
+            """
+            Extrae un valor booleano de la respuesta del evaluador.
+            
+            Args:
+                response: Respuesta del evaluador (dict, str, bool, int, float)
+                
+            Returns:
+                bool: True si la evaluación es positiva, False en caso contrario
+            """
+            try:
+                # Si es un diccionario, buscar la clave 'score' primero
+                if isinstance(response, dict):
+                    if "score" in response:
+                        value = str(response["score"]).lower().strip()
+                        return value == "yes" or value == "true" or value == "1"
+                        
+                    # Si no hay 'score', buscar otras claves comunes
+                    for key in ["result", "evaluation", "is_grounded", "is_relevant"]:
+                        if key in response:
+                            value = str(response[key]).lower().strip()
+                            return value == "yes" or value == "true" or value == "1"
+                            
+            except Exception as e:
+                print(f"Error extracting score: {e}")
+                
+            # Por defecto, asumir que no es válido
+            return False
         
         # Determinar si la generación es exitosa
-        is_grounded = hallucination_score["score"].lower() == "yes" if isinstance(hallucination_score, dict) else False
-        is_useful = answer_score["score"].lower() == "yes" if isinstance(answer_score, dict) else False
+        is_grounded = extract_score(hallucination_eval)
+        is_useful = extract_score(answer_eval)
         
         if is_grounded:
             print("---DECISION: GENERATION IS GROUNDED IN DOCUMENTS---")
@@ -394,18 +426,32 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         else:
             print("---DECISION: GENERATION DOES NOT ADDRESS QUESTION---")
         
+        # Formatear la respuesta
+        if isinstance(generation, dict):
+            if "answer" in generation:
+                formatted_generation = generation["answer"]
+            else:
+                formatted_generation = str(generation)
+        else:
+            formatted_generation = str(generation)
+        
+        # Limpiar y formatear la respuesta
+        formatted_generation = formatted_generation.strip()
+        formatted_generation = re.sub(r'\n\s*\n', '\n\n', formatted_generation)  # Eliminar líneas vacías múltiples
+        formatted_generation = re.sub(r'\s+', ' ', formatted_generation)  # Eliminar espacios múltiples
+        
         # Si la generación no es exitosa, incrementar contador de reintentos
         if not (is_grounded and is_useful):
             retry_count += 1
             print(f"---RETRY ATTEMPT {retry_count}---")
-            
+        
         return {
             "documents": documents,
             "question": question,
-            "generation": generation,
+            "generation": formatted_generation,
             "retry_count": retry_count,
-            "hallucination_score": hallucination_score,
-            "answer_score": answer_score,
+            "hallucination_score": hallucination_eval,
+            "answer_score": answer_eval,
             "relevant_cubos": relevant_cubos,
             "ambito": state.get("ambito"),
             "retrieval_details": retrieval_details
