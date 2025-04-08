@@ -9,16 +9,16 @@ langgraph
 langchain-text-splitters
 
 # Integración con llama-index
-llama-index-core
-llama-index-embeddings
-llama-index-llms
-llama-index-vector-stores
-llama-index-readers
-llama-index-agent
-llama-index-program
-llama-index-retrievers
-llama-index-question-gen
-llama-index-evaluation
+llama-index
+llama-index-embeddings-huggingface
+llama-index-llms-ollama
+llama-index-vector-stores-chroma
+llama-index-readers-file
+llama-index-agent-openai
+llama-index-program-openai
+llama-index-retrievers-bm25
+llama-index-question-gen-openai
+llama-index-evaluation-openai
 
 # Embeddings, vectorstore y procesamiento de documentos
 chromadb==0.5.0
@@ -37,7 +37,6 @@ langchain-ollama
 langchainhub
 
 # Procesamiento de documentos
-
 markdownify
 rapidocr-onnxruntime
 beautifulsoup4
