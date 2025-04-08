@@ -13,8 +13,10 @@ from chromadb.utils.embedding_functions import create_langchain_embedding
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.embeddings import Embeddings
 from chromadb.api.types import EmbeddingFunction
+import logging
+import time
 
-
+logger = logging.getLogger(__name__)
 
 def create_embeddings(model_name: str = "intfloat/multilingual-e5-large-instruct"):
     """
@@ -61,19 +63,43 @@ def load_vectorstore(persist_directory: str, embeddings):
     """
     return Chroma(persist_directory=persist_directory, embedding_function=embeddings)
 
-def create_retriever(vectorstore, k: int = None):
-    """
-    Crea un recuperador (retriever) a partir de una base de datos vectorial.
+def create_retriever(vectorstore, k=None, similarity_threshold=0.7):
+    """Crea un retriever a partir de un vectorstore."""
+    if k is None:
+        k = VECTORSTORE_CONFIG["k_retrieval"]
     
-    Args:
-        vectorstore: Base de datos vectorial.
-        k (int, optional): Número de documentos a recuperar.
-        
-    Returns:
-        Retriever: Recuperador configurado.
-    """
-    # Usar valor de configuración si no se proporciona k
-    k = k if k is not None else VECTORSTORE_CONFIG["k_retrieval"]
+    retriever = vectorstore.as_retriever(
+        search_type="similarity_score_threshold",
+        search_kwargs={
+            "k": k,
+            "score_threshold": similarity_threshold
+        }
+    )
     
-    res = vectorstore.as_retriever(k=k)
-    return res
+    # Añadir logging para seguimiento
+    logger.info(f"Retriever creado con k={k} y umbral de similitud={similarity_threshold}")
+    
+    return retriever
+
+def retrieve_documents(retriever, query, max_retries=3):
+    """Recupera documentos con manejo de errores y reintentos."""
+    for attempt in range(max_retries):
+        try:
+            docs = retriever.get_relevant_documents(query)
+            if not docs:
+                logger.warning(f"No se encontraron documentos relevantes para la consulta: {query}")
+                return []
+            
+            # Logging detallado de los documentos recuperados
+            for i, doc in enumerate(docs):
+                logger.debug(f"Documento {i+1}: Score={doc.metadata.get('score', 'N/A')}, "
+                           f"Fuente={doc.metadata.get('source', 'N/A')}")
+            
+            return docs
+            
+        except Exception as e:
+            logger.error(f"Error en intento {attempt + 1}: {str(e)}")
+            if attempt == max_retries - 1:
+                logger.error("Se agotaron los reintentos")
+                return []
+            time.sleep(1)  # Esperar antes de reintentar

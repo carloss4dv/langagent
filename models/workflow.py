@@ -224,7 +224,11 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         Returns:
             dict: Estado actualizado con los documentos recuperados.
         """
-        print("---RETRIEVE---")
+        print("\n=== INICIO DE RECUPERACIÓN DE DOCUMENTOS ===")
+        print(f"Pregunta: {state['question']}")
+        print(f"Intento actual: {state.get('retry_count', 0)}")
+        print(f"Ámbito identificado: {state.get('ambito', 'No identificado')}")
+        
         question = state["question"]
         retry_count = state.get("retry_count", 0)
         ambito = state.get("ambito")
@@ -235,9 +239,12 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                 cubo for cubo in AMBITOS_CUBOS[ambito]["cubos"]
                 if cubo in retrievers
             ]
-            print(f"Usando todos los cubos del ámbito {AMBITOS_CUBOS[ambito]['nombre']}")
+            print(f"\nUsando cubos del ámbito {AMBITOS_CUBOS[ambito]['nombre']}:")
+            print(f"Cubos disponibles: {relevant_cubos}")
         else:
             relevant_cubos = state.get("relevant_cubos", list(retrievers.keys()))
+            print(f"\nUsando cubos relevantes identificados:")
+            print(f"Cubos disponibles: {relevant_cubos}")
         
         all_docs = []
         retrieval_details = {}
@@ -246,9 +253,14 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         for cubo in relevant_cubos:
             if cubo in retrievers:
                 try:
-                    print(f"Recuperando documentos del cubo: {cubo}")
+                    print(f"\nProcesando cubo: {cubo}")
+                    print(f"Retriever disponible: {cubo in retrievers}")
+                    
                     retriever = retrievers[cubo]
+                    print("Iniciando recuperación de documentos...")
                     docs = retriever.invoke(question)
+                    
+                    print(f"Documentos recuperados del cubo {cubo}: {len(docs)}")
                     
                     # Añadir metadatos sobre el cubo y ámbito
                     for doc in docs:
@@ -262,19 +274,33 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                     }
                     
                     all_docs.extend(docs)
-                    print(f"Recuperados {len(docs)} documentos del cubo {cubo}")
+                    print(f"Total acumulado de documentos: {len(all_docs)}")
                     
                 except Exception as e:
-                    print(f"Error al recuperar documentos del cubo {cubo}: {e}")
+                    print(f"\nERROR al recuperar documentos del cubo {cubo}:")
+                    print(f"Tipo de error: {type(e).__name__}")
+                    print(f"Mensaje de error: {str(e)}")
                     retrieval_details[cubo] = {
                         "count": 0,
-                        "error": str(e)
+                        "error": str(e),
+                        "error_type": type(e).__name__
                     }
         
         # Limitar el número total de documentos
         max_docs = VECTORSTORE_CONFIG.get("max_docs_total", 10)
         if len(all_docs) > max_docs:
+            print(f"\nLímite de documentos alcanzado ({max_docs}). Recortando resultados...")
             all_docs = all_docs[:max_docs]
+        
+        print("\n=== RESUMEN DE LA RECUPERACIÓN ===")
+        print(f"Total de documentos recuperados: {len(all_docs)}")
+        print(f"Detalles por cubo:")
+        for cubo, details in retrieval_details.items():
+            print(f"- {cubo}: {details['count']} documentos")
+            if "error" in details:
+                print(f"  Error: {details['error']}")
+        
+        print("=== FIN DE RECUPERACIÓN DE DOCUMENTOS ===\n")
         
         return {
             "documents": all_docs,

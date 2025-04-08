@@ -17,10 +17,11 @@ LLM_CONFIG = {
 
 # Configuración de Vector Store
 VECTORSTORE_CONFIG = {
-    "chunk_size": 250,         # Tamaño de los fragmentos de texto para indexación
-    "chunk_overlap": 20,        # Superposición entre fragmentos
+    "chunk_size": 500,         # Tamaño de los fragmentos de texto para indexación
+    "chunk_overlap": 50,        # Superposición entre fragmentos
     "k_retrieval": 6,          # Número de documentos a recuperar
     "similarity_threshold": 0.7,  # Umbral mínimo de similitud para considerar un documento relevante
+    "max_docs_total": 15       # Aumentar el límite total de documentos
 }
 
 # Configuración de API
