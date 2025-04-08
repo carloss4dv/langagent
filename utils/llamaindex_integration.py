@@ -8,13 +8,13 @@ de langagent basada en LangGraph, LLaMA3 y Chroma.
 
 from typing import List, Dict, Any, Optional
 from langchain_core.documents import Document
-from llama_index.core import VectorStoreIndex, StorageContext
-from llama_index.core.node_parser import SentenceSplitter
-from llama_index.core.schema import IndexNode
-from llama_index.core.retrievers import RecursiveRetriever
-from llama_index.core.query_engine import RetrieverQueryEngine
-from llama_index.core.postprocessor import MetadataReplacementPostProcessor
-from llama_index.core.indices.document_summary import DocumentSummaryIndex
+from llamaindex.core import VectorStoreIndex, StorageContext
+from llamaindex.core.node_parser import SentenceSplitter
+from llamaindex.core.schema import IndexNode
+from llamaindex.core.retrievers import RecursiveRetriever
+from llamaindex.core.query_engine import RetrieverQueryEngine
+from llamaindex.core.postprocessor import MetadataReplacementPostProcessor
+from llamaindex.core.indices.document_summary import DocumentSummaryIndex
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,26 +24,25 @@ def create_dual_retriever(documents: List[Document], embeddings, persist_directo
                          synthesis_chunk_size: int = 1024,
                          chunk_overlap: int = 20):
     """
-    Crea un retriever que separa los chunks usados para recuperación de los usados para síntesis.
+    Crea un retriever que utiliza chunks duales para mejorar la recuperación.
     
-    Implementa la técnica "Decoupling Chunks Used for Retrieval vs. Chunks Used for Synthesis"
-    de llama-index, que permite optimizar la recuperación mientras se mantiene suficiente
-    contexto para la generación.
+    Implementa la técnica "Dual Chunks" de llama-index, que divide los documentos
+    en chunks pequeños para recuperación precisa y chunks grandes para síntesis.
     
     Args:
         documents (List[Document]): Lista de documentos a indexar
         embeddings: Modelo de embeddings a utilizar
         persist_directory (str): Directorio donde persistir la base de datos
-        retrieval_chunk_size (int): Tamaño de chunk para recuperación
-        synthesis_chunk_size (int): Tamaño de chunk para síntesis
-        chunk_overlap (int): Superposición entre chunks
+        retrieval_chunk_size (int): Tamaño de chunks para recuperación
+        synthesis_chunk_size (int): Tamaño de chunks para síntesis
+        chunk_overlap (int): Solapamiento entre chunks
         
     Returns:
-        retriever: Retriever configurado con la técnica de separación de chunks
+        retriever: Retriever configurado con chunks duales
     """
     try:
         # Convertir documentos de LangChain a formato llama-index
-        from llama_index.core.schema import Document as LlamaDocument
+        from llamaindex.core.schema import Document as LlamaDocument
         llama_docs = []
         for doc in documents:
             llama_doc = LlamaDocument(
@@ -81,11 +80,11 @@ def create_dual_retriever(documents: List[Document], embeddings, persist_directo
             all_nodes.append(original_node)
         
         # Crear índice vectorial con todos los nodos
-        from llama_index.vector_stores.chroma import ChromaVectorStore
-        from llama_index.core.storage.storage_context import StorageContext
+        from llamaindex.vector_stores.chroma import ChromaVectorStore
+        from llamaindex.core.storage.storage_context import StorageContext
         
         # Adaptar embeddings de LangChain a llama-index
-        from llama_index.embeddings.langchain import LangchainEmbedding
+        from llamaindex.embeddings.langchain import LangchainEmbedding
         llama_embeddings = LangchainEmbedding(embeddings)
         
         # Crear ChromaVectorStore
@@ -162,7 +161,7 @@ def create_document_summary_retriever(documents: List[Document], embeddings, per
     """
     try:
         # Convertir documentos de LangChain a formato llama-index
-        from llama_index.core.schema import Document as LlamaDocument
+        from llamaindex.core.schema import Document as LlamaDocument
         llama_docs = []
         for doc in documents:
             llama_doc = LlamaDocument(
@@ -172,7 +171,7 @@ def create_document_summary_retriever(documents: List[Document], embeddings, per
             llama_docs.append(llama_doc)
         
         # Adaptar embeddings de LangChain a llama-index
-        from llama_index.embeddings.langchain import LangchainEmbedding
+        from llamaindex.embeddings.langchain import LangchainEmbedding
         llama_embeddings = LangchainEmbedding(embeddings)
         
         # Crear índice de resumen de documentos
@@ -231,22 +230,22 @@ def create_router_retriever(retrievers: Dict[str, Any], llm):
     """
     try:
         # Adaptar LLM de LangChain a llama-index
-        from llama_index.llms.langchain import LangChainLLM
+        from llamaindex.llms.langchain import LangChainLLM
         llama_llm = LangChainLLM(llm=llm)
         
         # Crear router retriever
-        from llama_index.core.query_engine import RouterQueryEngine
-        from llama_index.core.selectors import LLMSingleSelector
+        from llamaindex.core.query_engine import RouterQueryEngine
+        from llamaindex.core.selectors import LLMSingleSelector
         
         # Adaptar retrievers de LangChain a llama-index
-        from llama_index.core.retrievers import BaseRetriever as LlamaBaseRetriever
+        from llamaindex.core.retrievers import BaseRetriever as LlamaBaseRetriever
         
         class LangChainRetrieverAdapter(LlamaBaseRetriever):
             def __init__(self, langchain_retriever):
                 self.langchain_retriever = langchain_retriever
                 
             def _retrieve(self, query_str):
-                from llama_index.core.schema import NodeWithScore, TextNode
+                from llamaindex.core.schema import NodeWithScore, TextNode
                 
                 # Obtener documentos de LangChain
                 docs = self.langchain_retriever.get_relevant_documents(query_str)

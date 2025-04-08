@@ -1,10 +1,23 @@
 """
-Módulo principal para la configuración y ejecución del agente con integración de llama-index.
+Módulo principal para la integración de llama-index con langagent.
 
-Este script configura y ejecuta el agente de respuesta a preguntas
-utilizando LangGraph, LLaMA3, Chroma vector store y capacidades avanzadas de RAG
-proporcionadas por llama-index.
+Este módulo proporciona la configuración y ejecución del agente con capacidades
+de RAG avanzado utilizando llama-index.
 """
+
+from typing import List, Dict, Any, Optional
+from langchain_core.documents import Document
+from llamaindex.core import VectorStoreIndex, StorageContext
+from llamaindex.core.node_parser import SentenceSplitter
+from llamaindex.core.schema import IndexNode
+from llamaindex.core.retrievers import RecursiveRetriever
+from llamaindex.core.query_engine import RetrieverQueryEngine
+from llamaindex.core.postprocessor import MetadataReplacementPostProcessor
+from llamaindex.core.indices.document_summary import DocumentSummaryIndex
+import logging
+
+logger = logging.getLogger(__name__)
+
 import re
 import os
 import argparse
@@ -45,193 +58,83 @@ from langagent.config.config import (
     PATHS_CONFIG
 )
 
-def setup_agent(data_dir=None, chroma_base_dir=None, local_llm=None, local_llm2=None, 
-                use_advanced_rag=True, advanced_rag_techniques=None):
+def setup_agent(documents: List[Document], embeddings, llm, persist_directory: str):
     """
-    Configura el agente con todos sus componentes, creando una vectorstore separada
-    para cada cubo identificado en los documentos. Opcionalmente utiliza técnicas
-    avanzadas de RAG proporcionadas por llama-index.
+    Configura el agente con los componentes necesarios para RAG avanzado.
     
     Args:
-        data_dir (str, optional): Directorio con los documentos markdown.
-        chroma_base_dir (str, optional): Directorio base para las bases de datos vectoriales.
-        local_llm (str, optional): Nombre del modelo LLM principal.
-        local_llm2 (str, optional): Nombre del segundo modelo LLM.
-        use_advanced_rag (bool, optional): Si se deben utilizar técnicas avanzadas de RAG.
-        advanced_rag_techniques (list, optional): Lista de técnicas avanzadas a utilizar.
-            Opciones: 'dual_chunks', 'document_summary', 'router', 'optimize_embeddings'.
-            Si es None, se utilizan todas las técnicas.
+        documents (List[Document]): Lista de documentos a indexar
+        embeddings: Modelo de embeddings a utilizar
+        llm: Modelo de lenguaje a utilizar
+        persist_directory (str): Directorio donde persistir la base de datos
         
     Returns:
-        tuple: Workflow compilado y componentes del agente.
+        agent: Agente configurado con capacidades de RAG avanzado
     """
-    print_title("Configurando el agente con integración de llama-index")
-    
-    # Usar valores de configuración si no se proporcionan argumentos
-    data_dir = data_dir or PATHS_CONFIG["default_data_dir"]
-    chroma_base_dir = chroma_base_dir or PATHS_CONFIG["default_chroma_dir"]
-    local_llm = local_llm or LLM_CONFIG["default_model"]
-    local_llm2 = local_llm2 or LLM_CONFIG["default_model2"]
-    
-    if advanced_rag_techniques is None and use_advanced_rag:
-        advanced_rag_techniques = ['dual_chunks', 'document_summary', 'router', 'optimize_embeddings']
-    elif not use_advanced_rag:
-        advanced_rag_techniques = []
-    
-    # Crear embeddings (compartidos por todas las vectorstores)
-    print("Creando embeddings...")
-    embeddings = create_embeddings()
-    
-    # Opcionalmente optimizar embeddings
-    if 'optimize_embeddings' in advanced_rag_techniques:
-        print("Optimizando embeddings con técnicas de llama-index...")
-        embeddings = optimize_embeddings(embeddings, doc_splits if 'doc_splits' in locals() else [], chroma_base_dir)
-    
-    # Cargar documentos y agruparlos por cubo
-    print("Cargando documentos y agrupándolos por cubo...")
-    all_documents = load_documents_from_directory(data_dir)
-    
-    # Dividir documentos en chunks más pequeños
-    print("Dividiendo documentos...")
-    text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=VECTORSTORE_CONFIG["chunk_size"], 
-        chunk_overlap=VECTORSTORE_CONFIG["chunk_overlap"]
-    )
-    
-    # Diccionario para agrupar los documentos por cubo
-    cubo_documents = {}
-    
-    # Extraer y agrupar por nombre de cubo
-    for doc in all_documents:
-        # Extraer el nombre del cubo del nombre del archivo o metadatos
-        file_path = doc.metadata.get('source', '')
-        file_name = os.path.basename(file_path)
+    try:
+        # Crear retrievers
+        from utils.llamaindex_integration import (
+            create_dual_retriever,
+            create_document_summary_retriever,
+            create_router_retriever
+        )
         
-        # Buscar el patrón info_cubo_X_vY.md y extraer X como nombre del cubo
-        match = re.search(r'info_cubo_([^_]+)_v\d+\.md', file_name)
-        if match:
-            cubo_name = match.group(1)
-            if cubo_name not in cubo_documents:
-                cubo_documents[cubo_name] = []
-            cubo_documents[cubo_name].append(doc)
-        else:
-            # Si no sigue el patrón, usar un grupo por defecto
-            if "general" not in cubo_documents:
-                cubo_documents["general"] = []
-            cubo_documents["general"].append(doc)
-    
-    # Diccionarios para guardar los retrievers por cubo
-    retrievers = {}
-    vectorstores = {}
-    
-    # Procesar cada cubo y crear su vectorstore
-    for cubo_name, docs in cubo_documents.items():
-        print(f"Procesando documentos para el cubo: {cubo_name}")
+        # Crear retriever dual
+        dual_retriever = create_dual_retriever(
+            documents=documents,
+            embeddings=embeddings,
+            persist_directory=persist_directory
+        )
         
-        # Verificar que hay documentos para procesar
-        if not docs:
-            print(f"No hay documentos para procesar en el cubo {cubo_name}, saltando...")
-            continue
-            
-        # Dividir documentos en chunks
-        doc_splits = text_splitter.split_documents(docs)
+        # Crear retriever de resumen de documentos
+        summary_retriever = create_document_summary_retriever(
+            documents=documents,
+            embeddings=embeddings,
+            llm=llm,
+            persist_directory=persist_directory
+        )
         
-        # Verificar que hay chunks después de dividir
-        if not doc_splits:
-            print(f"No se generaron chunks para el cubo {cubo_name}, saltando...")
-            continue
+        # Crear retriever router
+        router_retriever = create_router_retriever(
+            retrievers=[dual_retriever, summary_retriever],
+            llm=llm
+        )
         
-        # Crear directorio para vectorstore de este cubo
-        cubo_chroma_dir = os.path.join(chroma_base_dir, f"Cubo{cubo_name}")
+        # Crear query engine
+        from llamaindex.core.query_engine import RetrieverQueryEngine
+        query_engine = RetrieverQueryEngine(
+            retriever=router_retriever,
+            response_synthesizer=llm
+        )
         
-        # Crear o cargar vectorstore para este cubo
-        if not os.path.exists(cubo_chroma_dir):
-            print(f"Creando nueva base de datos vectorial para {cubo_name}...")
-            db = create_vectorstore(doc_splits, embeddings, cubo_chroma_dir)
-        else:
-            print(f"Cargando base de datos vectorial existente para {cubo_name}...")
-            db = load_vectorstore(cubo_chroma_dir, embeddings)
+        # Adaptar el query engine a la interfaz de LangChain
+        from langchain_core.retrievers import BaseRetriever
         
-        # Guardar la vectorstore
-        vectorstores[cubo_name] = db
+        class QueryEngineAdapter(BaseRetriever):
+            def __init__(self, query_engine):
+                super().__init__()
+                self.query_engine = query_engine
+                
+            def _get_relevant_documents(self, query: str):
+                # Obtener respuesta del query engine
+                response = self.query_engine.query(query)
+                
+                # Convertir respuesta a documentos de LangChain
+                docs = []
+                for node in response.source_nodes:
+                    doc = Document(
+                        page_content=node.get_content(),
+                        metadata=node.metadata
+                    )
+                    docs.append(doc)
+                return docs
         
-        # Crear retriever según las técnicas avanzadas seleccionadas
-        retriever_created = False
+        # Devolver el agente adaptado
+        return QueryEngineAdapter(query_engine)
         
-        if 'dual_chunks' in advanced_rag_techniques:
-            print(f"Creando dual retriever para {cubo_name}...")
-            retrievers[cubo_name] = create_dual_retriever(
-                doc_splits, 
-                embeddings, 
-                os.path.join(cubo_chroma_dir, "dual_chunks"),
-                retrieval_chunk_size=256,
-                synthesis_chunk_size=1024
-            )
-            retriever_created = True
-            
-        if 'document_summary' in advanced_rag_techniques and not retriever_created:
-            print(f"Creando document summary retriever para {cubo_name}...")
-            retrievers[cubo_name] = create_document_summary_retriever(
-                doc_splits,
-                embeddings,
-                os.path.join(cubo_chroma_dir, "doc_summary")
-            )
-            retriever_created = True
-            
-        if not retriever_created:
-            # Retriever estándar si no se utilizan técnicas avanzadas
-            retrievers[cubo_name] = create_retriever(db, k=VECTORSTORE_CONFIG["k_retrieval"])
-    
-    # Crear LLMs
-    print("Configurando modelos de lenguaje...")
-    llm = create_llm(model_name=local_llm)
-    llm2 = create_llm(model_name=local_llm2)
-    
-    # Crear cadenas
-    rag_chain = create_rag_chain(llm)
-    retrieval_grader = create_retrieval_grader(llm2)
-    hallucination_grader = create_hallucination_grader(llm2)
-    answer_grader = create_answer_grader(llm2)
-    
-    # Crear un router de preguntas que determine qué cubo usar
-    question_router = create_question_router(llm2)
-    
-    # Opcionalmente crear un router retriever
-    if 'router' in advanced_rag_techniques:
-        print("Creando router retriever con llama-index...")
-        try:
-            router_retriever = create_router_retriever(retrievers, llm2)
-            # Reemplazar todos los retrievers con el router
-            for cubo_name in retrievers.keys():
-                retrievers[cubo_name] = router_retriever
-            print("Router retriever creado exitosamente")
-        except Exception as e:
-            print(f"Error al crear router retriever: {str(e)}")
-            print("Continuando con los retrievers individuales")
-    
-    # Modificar create_workflow para manejar múltiples retrievers
-    print("Creando flujo de trabajo con múltiples vectorstores...")
-    workflow = create_workflow(
-        retrievers, 
-        rag_chain, 
-        retrieval_grader, 
-        hallucination_grader, 
-        answer_grader, 
-        question_router
-    )
-    
-    # Compilar workflow
-    app = workflow.compile()
-    
-    return app, {
-        "retrievers": retrievers,
-        "vectorstores": vectorstores,
-        "rag_chain": rag_chain,
-        "retrieval_grader": retrieval_grader,
-        "hallucination_grader": hallucination_grader,
-        "answer_grader": answer_grader,
-        "question_router": question_router
-    }
+    except Exception as e:
+        logger.error(f"Error al configurar el agente: {str(e)}")
+        raise
 
 def run_agent(app, question):
     """
