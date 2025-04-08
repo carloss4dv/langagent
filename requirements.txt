@@ -8,6 +8,18 @@ langchain-experimental
 langgraph
 langchain-text-splitters
 
+# Integración con llama-index
+llama-index-core
+llama-index-embeddings
+llama-index-llms
+llama-index-vector-stores
+llama-index-readers
+llama-index-agent
+llama-index-program
+llama-index-retrievers
+llama-index-question-gen
+llama-index-evaluation
+
 # Embeddings, vectorstore y procesamiento de documentos
 chromadb==0.5.0
 langchain-chroma
