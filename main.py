@@ -38,7 +38,86 @@ from langagent.config.config import (
     PATHS_CONFIG
 )
 
-def setup_agent(data_dir=None, chroma_base_dir=None, local_llm=None, local_llm2=None):
+def load_consultas_guardadas(consultas_dir):
+    """
+    Carga las consultas guardadas de un directorio y las organiza por ámbito.
+    
+    Args:
+        consultas_dir (str): Directorio que contiene los archivos de consultas guardadas.
+        
+    Returns:
+        dict: Diccionario con consultas organizadas por ámbito.
+    """
+    consultas_por_ambito = {}
+    
+    # Verificar si el directorio existe
+    if not os.path.exists(consultas_dir):
+        print(f"Directorio de consultas guardadas no encontrado: {consultas_dir}")
+        return consultas_por_ambito
+    
+    # Mapeo de nombres de archivo a ámbitos
+    mapeo_archivo_ambito = {
+        "matricula": "academico",
+        "rendimiento": "academico",
+        "egresados": "academico",
+        "cohortes": "academico",
+        "admision": "admision",
+        # Añadir más mapeos según sea necesario
+    }
+    
+    # Listar archivos en el directorio
+    archivos = os.listdir(consultas_dir)
+    for archivo in archivos:
+        if archivo.endswith(".md"):
+            # Determinar el ámbito basado en el nombre del archivo
+            ambito = None
+            for clave, valor in mapeo_archivo_ambito.items():
+                if clave in archivo.lower():
+                    ambito = valor
+                    break
+            
+            if ambito is None:
+                print(f"No se pudo determinar el ámbito para {archivo}")
+                continue
+            
+            # Crear documentos a partir del archivo
+            ruta_completa = os.path.join(consultas_dir, archivo)
+            with open(ruta_completa, 'r', encoding='utf-8') as f:
+                contenido = f.read()
+            
+            # Dividir el contenido en consultas individuales
+            consultas = re.split(r'\n---\n', contenido)
+            
+            # Procesar cada consulta
+            for i, consulta in enumerate(consultas):
+                if consulta.strip():  # Ignorar consultas vacías
+                    # Extraer el título de la consulta
+                    match_titulo = re.search(r'##\s+(.+)', consulta)
+                    titulo = match_titulo.group(1).strip() if match_titulo else f"Consulta {i+1}"
+                    
+                    # Crear un documento para la consulta
+                    doc = Document(
+                        page_content=consulta,
+                        metadata={
+                            'source': ruta_completa,
+                            'ambito': ambito,
+                            'tipo': 'consulta_guardada',
+                            'titulo': titulo
+                        }
+                    )
+                    
+                    # Agregar al diccionario por ámbito
+                    if ambito not in consultas_por_ambito:
+                        consultas_por_ambito[ambito] = []
+                    consultas_por_ambito[ambito].append(doc)
+    
+    # Imprimir estadísticas
+    for ambito, docs in consultas_por_ambito.items():
+        print(f"Cargadas {len(docs)} consultas guardadas para el ámbito {ambito}")
+    
+    return consultas_por_ambito
+
+def setup_agent(data_dir=None, chroma_base_dir=None, local_llm=None, local_llm2=None, consultas_dir=None):
     """
     Configura el agente con todos sus componentes, creando una vectorstore separada
     para cada cubo identificado en los documentos.
@@ -48,6 +127,7 @@ def setup_agent(data_dir=None, chroma_base_dir=None, local_llm=None, local_llm2=
         chroma_base_dir (str, optional): Directorio base para las bases de datos vectoriales.
         local_llm (str, optional): Nombre del modelo LLM principal.
         local_llm2 (str, optional): Nombre del segundo modelo LLM.
+        consultas_dir (str, optional): Directorio con las consultas guardadas.
         
     Returns:
         tuple: Workflow compilado y componentes del agente.
@@ -59,6 +139,7 @@ def setup_agent(data_dir=None, chroma_base_dir=None, local_llm=None, local_llm2=
     chroma_base_dir = chroma_base_dir or PATHS_CONFIG["default_chroma_dir"]
     local_llm = local_llm or LLM_CONFIG["default_model"]
     local_llm2 = local_llm2 or LLM_CONFIG["default_model2"]
+    consultas_dir = consultas_dir or os.path.join(os.path.dirname(data_dir), "consulas_guardadas")
     
     # Crear embeddings (compartidos por todas las vectorstores)
     print("Creando embeddings...")
@@ -67,6 +148,10 @@ def setup_agent(data_dir=None, chroma_base_dir=None, local_llm=None, local_llm2=
     # Cargar documentos y agruparlos por cubo
     print("Cargando documentos y agrupándolos por cubo...")
     all_documents = load_documents_from_directory(data_dir)
+    
+    # Cargar consultas guardadas
+    print("Cargando consultas guardadas...")
+    consultas_por_ambito = load_consultas_guardadas(consultas_dir)
     
     # Dividir documentos en chunks más pequeños
     print("Dividiendo documentos...")
@@ -101,6 +186,9 @@ def setup_agent(data_dir=None, chroma_base_dir=None, local_llm=None, local_llm2=
     retrievers = {}
     vectorstores = {}
     
+    # Vectorstores para consultas guardadas por ámbito
+    consultas_vectorstores = {}
+    
     # Procesar cada cubo y crear su vectorstore
     for cubo_name, docs in cubo_documents.items():
         print(f"Procesando documentos para el cubo: {cubo_name}")
@@ -125,6 +213,31 @@ def setup_agent(data_dir=None, chroma_base_dir=None, local_llm=None, local_llm2=
         # Crear retriever para este cubo
         retrievers[cubo_name] = create_retriever(db, k=VECTORSTORE_CONFIG["k_retrieval"])
     
+    # Procesar consultas guardadas por ámbito
+    for ambito, consultas in consultas_por_ambito.items():
+        print(f"Procesando consultas guardadas para el ámbito: {ambito}")
+        
+        # Dividir consultas en chunks
+        consulta_splits = text_splitter.split_documents(consultas)
+        
+        # Crear directorio para vectorstore de consultas de este ámbito
+        consultas_chroma_dir = os.path.join(chroma_base_dir, f"Consultas_{ambito}")
+        
+        # Crear o cargar vectorstore para las consultas de este ámbito
+        if not os.path.exists(consultas_chroma_dir):
+            print(f"Creando nueva base de datos vectorial para consultas de {ambito}...")
+            db = create_vectorstore(consulta_splits, embeddings, consultas_chroma_dir)
+        else:
+            print(f"Cargando base de datos vectorial existente para consultas de {ambito}...")
+            db = load_vectorstore(consultas_chroma_dir, embeddings)
+        
+        # Guardar la vectorstore de consultas
+        consultas_vectorstores[ambito] = db
+        
+        # Crear retriever para las consultas de este ámbito y agregarlo a los retrievers
+        retriever_key = f"consultas_{ambito}"
+        retrievers[retriever_key] = create_retriever(db, k=VECTORSTORE_CONFIG["k_retrieval"])
+    
     # Crear LLMs
     print("Configurando modelos de lenguaje...")
     llm = create_llm(model_name=local_llm)
@@ -136,7 +249,7 @@ def setup_agent(data_dir=None, chroma_base_dir=None, local_llm=None, local_llm2=
     hallucination_grader = create_hallucination_grader(llm2)
     answer_grader = create_answer_grader(llm2)
     
-    # Crear un router de preguntas que determine qué cubo usar
+    # Crear un router de preguntas que determine qué cubo usar y si es una consulta
     question_router = create_question_router(llm2)
     
     # Modificar create_workflow para manejar múltiples retrievers
@@ -156,6 +269,7 @@ def setup_agent(data_dir=None, chroma_base_dir=None, local_llm=None, local_llm2=
     return app, {
         "retrievers": retrievers,
         "vectorstores": vectorstores,
+        "consultas_vectorstores": consultas_vectorstores,
         "rag_chain": rag_chain,
         "retrieval_grader": retrieval_grader,
         "hallucination_grader": hallucination_grader,
@@ -201,6 +315,7 @@ def main():
     parser.add_argument("--chroma_dir", default=None, help="Directorio para la base de datos vectorial")
     parser.add_argument("--local_llm", default=None, help="Modelo LLM principal")
     parser.add_argument("--local_llm2", default=None, help="Modelo LLM secundario (opcional)")
+    parser.add_argument("--consultas_dir", default=None, help="Directorio con consultas guardadas")
     parser.add_argument("--question", help="Pregunta a responder")
     
     args = parser.parse_args()
@@ -210,7 +325,8 @@ def main():
         args.data_dir, 
         args.chroma_dir, 
         args.local_llm, 
-        args.local_llm2
+        args.local_llm2,
+        args.consultas_dir
     )
     
     # Si se proporciona una pregunta, ejecutar el agente

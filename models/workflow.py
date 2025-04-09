@@ -28,6 +28,8 @@ class GraphState(TypedDict):
         relevant_cubos: lista de cubos relevantes para la pregunta
         ambito: ámbito identificado para la pregunta
         retrieval_details: detalles de recuperación por cubo
+        is_consulta: indica si la pregunta es sobre una consulta guardada
+        consulta_documents: documentos de consultas guardadas recuperados
     """
     question: str
     generation: str
@@ -38,6 +40,8 @@ class GraphState(TypedDict):
     relevant_cubos: List[str]
     ambito: Optional[str]
     retrieval_details: Dict[str, Dict[str, Any]]
+    is_consulta: bool
+    consulta_documents: List[Document]
 
 def normalize_name(name: str) -> str:
     """
@@ -159,18 +163,34 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
     def route_question(state):
         """
         Determines which cubes are relevant for the question and the corresponding scope.
+        Also identifies if the question is about a saved query.
         
         Args:
             state (dict): Current graph state.
             
         Returns:
-            dict: Updated state with identified relevant cubes and scope.
+            dict: Updated state with identified relevant cubes, scope, and if it's a query.
         """
         print("---ROUTE QUESTION---")
         question = state["question"]
         print(question)
         
+        # Inicializar el indicador de consulta
+        state["is_consulta"] = False
+        state["consulta_documents"] = []
+        
         try:
+            # Determinar si la pregunta es sobre una consulta guardada
+            consulta_keywords = [
+                "consulta guardada", "consultas guardadas", "dashboard", 
+                "visualización", "visualizacion", "reporte", "informe", 
+                "cuadro de mando", "análisis predefinido", "analisis predefinido"
+            ]
+            
+            # Verificar si alguna palabra clave está en la pregunta
+            question_lower = question.lower()
+            es_consulta = any(keyword in question_lower for keyword in consulta_keywords)
+            
             # Invoke router and parse result
             routing_result = question_router.invoke({"question": question})
             
@@ -221,14 +241,34 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             # Obtener el ámbito normalizado
             normalized_scope = scope_mapping.get(normalized_scope, normalized_scope)
             
+            # Marcar si es una consulta guardada basado en las palabras clave
+            state["is_consulta"] = es_consulta
+            
             # Si tenemos alta confianza y el cubo existe, usarlo directamente
             if confidence == "HIGH" and normalized_cube in retrievers:
                 state["relevant_cubos"] = [normalized_cube]
                 state["ambito"] = normalized_scope
                 print(f"Using specific cube with high confidence: {normalized_cube}")
+                
+                # Si es una consulta y tenemos el ámbito, añadir el retriever de consultas
+                if es_consulta and normalized_scope:
+                    consulta_retriever_key = f"consultas_{normalized_scope}"
+                    if consulta_retriever_key in retrievers:
+                        state["relevant_cubos"].append(consulta_retriever_key)
+                        print(f"Adding saved query retriever for scope: {normalized_scope}")
+            
             # Si tenemos un ámbito válido pero confianza media/baja, usar todos los cubos de ese ámbito
             elif normalized_scope in AMBITOS_CUBOS:
-                state["relevant_cubos"] = [normalized_cube] if normalized_cube else []
+                # Inicializar con el cubo específico si existe
+                state["relevant_cubos"] = [normalized_cube] if normalized_cube in retrievers else []
+                
+                # Añadir retriever de consultas guardadas si aplica
+                if es_consulta:
+                    consulta_retriever_key = f"consultas_{normalized_scope}"
+                    if consulta_retriever_key in retrievers:
+                        state["relevant_cubos"].append(consulta_retriever_key)
+                        print(f"Adding saved query retriever for scope: {normalized_scope}")
+                
                 state["ambito"] = normalized_scope
                 print(f"Using scope {normalized_scope} with cube {normalized_cube}")
             else:
@@ -252,120 +292,104 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
     
     def retrieve(state):
         """
-        Recupera documentos de los vectorstores relevantes y los filtra por relevancia.
+        Recupera documentos relevantes para la pregunta utilizando los cubos identificados.
         
         Args:
             state (dict): Estado actual del grafo.
             
         Returns:
-            dict: Estado actualizado con los documentos recuperados y filtrados.
+            dict: Estado actualizado con documentos recuperados.
         """
-        print("\n=== INICIO DE RECUPERACIÓN DE DOCUMENTOS ===")
-        print(f"Pregunta: {state['question']}")
-        print(f"Intento actual: {state.get('retry_count', 0)}")
-        print(f"Ámbito identificado: {state.get('ambito', 'No identificado')}")
-        
+        print("---RETRIEVE---")
         question = state["question"]
-        retry_count = state.get("retry_count", 0)
-        ambito = state.get("ambito")
+        relevant_cubos = state["relevant_cubos"]
         
-        # Si tenemos un ámbito identificado, usar todos sus cubos
-        if ambito and ambito in AMBITOS_CUBOS:
-            relevant_cubos = [
-                cubo for cubo in AMBITOS_CUBOS[ambito]["cubos"]
-                if cubo in retrievers
-            ]
-            print(f"\nUsando cubos del ámbito {AMBITOS_CUBOS[ambito]['nombre']}:")
-            print(f"Cubos disponibles: {relevant_cubos}")
-        else:
-            relevant_cubos = state.get("relevant_cubos", list(retrievers.keys()))
-            print(f"\nUsando cubos relevantes identificados:")
-            print(f"Cubos disponibles: {relevant_cubos}")
+        print(f"Question: {question}")
+        print(f"Using cubes: {relevant_cubos}")
         
-        all_docs = []
+        all_documents = []
         retrieval_details = {}
+        consulta_documents = []
         
         # Recuperar documentos de cada cubo relevante
         for cubo in relevant_cubos:
             if cubo in retrievers:
-                try:
-                    print(f"\nProcesando cubo: {cubo}")
-                    print(f"Retriever disponible: {cubo in retrievers}")
+                print(f"Retrieving from {cubo}...")
+                docs = retrievers[cubo].get_relevant_documents(question)
+                
+                # Verificar si es un retriever de consultas guardadas
+                if cubo.startswith("consultas_"):
+                    print(f"Found {len(docs)} saved query documents from {cubo}")
+                    # Añadir al listado específico de documentos de consultas
+                    consulta_documents.extend(docs)
                     
-                    retriever = retrievers[cubo]
-                    print("Iniciando recuperación de documentos...")
-                    docs = retriever.invoke(question)
-                    
-                    print(f"Documentos recuperados del cubo {cubo}: {len(docs)}")
-                    
-                    # Filtrar documentos por relevancia usando el retrieval_grader
-                    relevant_docs = []
-                    for doc in docs:
-                        # Evaluar relevancia del documento
-                        relevance = retrieval_grader.invoke({
-                            "document": doc.page_content,
-                            "question": question
-                        })
-                        
-                        # Extraer score de la respuesta
-                        if isinstance(relevance, dict) and "score" in relevance:
-                            is_relevant = relevance["score"].lower() == "yes"
-                        else:
-                            # Por defecto, considerar el documento como relevante
-                            is_relevant = True
-                        
-                        if is_relevant:
-                            # Añadir metadatos sobre el cubo y ámbito
-                            doc.metadata["cubo_source"] = cubo
-                            doc.metadata["ambito"] = CUBO_TO_AMBITO.get(cubo)
-                            relevant_docs.append(doc)
-                    
+                    # Agregar info al registro de detalles
                     retrieval_details[cubo] = {
                         "count": len(docs),
-                        "relevant_count": len(relevant_docs),
-                        "ambito": CUBO_TO_AMBITO.get(cubo),
-                        "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
+                        "documents": docs
                     }
+                else:
+                    # Verificar relevancia de documentos para cubos normales
+                    relevant_docs = []
+                    print(f"Evaluating relevance of {len(docs)} documents from {cubo}")
                     
-                    all_docs.extend(relevant_docs)
-                    print(f"Documentos relevantes del cubo {cubo}: {len(relevant_docs)}")
-                    print(f"Total acumulado de documentos: {len(all_docs)}")
+                    for doc in docs:
+                        try:
+                            # Evaluar relevancia del documento
+                            score_result = retrieval_grader.invoke({
+                                "document": doc.page_content,
+                                "question": question
+                            })
+                            
+                            # Determinar si el documento es relevante
+                            is_relevant = False
+                            if isinstance(score_result, dict) and "score" in score_result:
+                                is_relevant = score_result["score"].lower() == "yes"
+                            elif isinstance(score_result, str):
+                                # Intentar interpretar resultado como JSON
+                                try:
+                                    parsed = json.loads(score_result)
+                                    is_relevant = parsed.get("score", "").lower() == "yes"
+                                except:
+                                    # Búsqueda por regex si falla el parsing JSON
+                                    score_match = re.search(r'"score"\s*:\s*"(\w+)"', score_result)
+                                    if score_match:
+                                        is_relevant = score_match.group(1).lower() == "yes"
+                            
+                            # Añadir documento si es relevante
+                            if is_relevant:
+                                relevant_docs.append(doc)
+                                print(f"Document considered relevant")
+                            else:
+                                print(f"Document NOT relevant, skipping...")
+                                
+                        except Exception as e:
+                            print(f"Error evaluating document relevance: {e}")
+                            # En caso de error, considerar el documento como relevante
+                            relevant_docs.append(doc)
                     
-                except Exception as e:
-                    print(f"\nERROR al recuperar documentos del cubo {cubo}:")
-                    print(f"Tipo de error: {type(e).__name__}")
-                    print(f"Mensaje de error: {str(e)}")
+                    # Añadir documentos relevantes a la lista completa
+                    all_documents.extend(relevant_docs)
+                    
+                    # Agregar info al registro de detalles
                     retrieval_details[cubo] = {
-                        "count": 0,
-                        "relevant_count": 0,
-                        "error": str(e),
-                        "error_type": type(e).__name__
+                        "total": len(docs),
+                        "relevant": len(relevant_docs),
+                        "documents": relevant_docs
                     }
         
-        # Limitar el número total de documentos
-        max_docs = VECTORSTORE_CONFIG.get("max_docs_total", 10)
-        if len(all_docs) > max_docs:
-            print(f"\nLímite de documentos alcanzado ({max_docs}). Recortando resultados...")
-            all_docs = all_docs[:max_docs]
+        # Añadir los documentos de consultas guardadas al estado y a la lista general
+        state["consulta_documents"] = consulta_documents
+        all_documents.extend(consulta_documents)
         
-        print("\n=== RESUMEN DE LA RECUPERACIÓN ===")
-        print(f"Total de documentos recuperados: {len(all_docs)}")
-        print(f"Detalles por cubo:")
-        for cubo, details in retrieval_details.items():
-            print(f"- {cubo}: {details['count']} documentos recuperados, {details.get('relevant_count', 0)} relevantes")
-            if "error" in details:
-                print(f"  Error: {details['error']}")
+        # Actualizar estado
+        state["documents"] = all_documents
+        state["retrieval_details"] = retrieval_details
         
-        print("=== FIN DE RECUPERACIÓN DE DOCUMENTOS ===\n")
+        print(f"Retrieved a total of {len(all_documents)} relevant documents" 
+              f" ({len(consulta_documents)} are saved queries)")
         
-        return {
-            "documents": all_docs,
-            "question": question,
-            "retry_count": retry_count,
-            "relevant_cubos": relevant_cubos,
-            "ambito": ambito,
-            "retrieval_details": retrieval_details
-        }
+        return state
     
     def generate(state):
         """
@@ -477,60 +501,81 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             "retrieval_details": retrieval_details
         }
     
-    # Añadir nodos al grafo
-    workflow.add_node("route_question", route_question)
-    workflow.add_node("retrieve", retrieve)
-    workflow.add_node("generate", generate)
-    
-    # Definir bordes - flujo simplificado
-    workflow.set_entry_point("route_question")
-    workflow.add_edge("route_question", "retrieve")
-    workflow.add_edge("retrieve", "generate")
-    
-    # Definir condiciones para reintentos o finalización
     def should_retry(state):
         """
-        Determina si se debe reintentar la generación.
+        Determina si se debe reintentar la consulta.
         
         Args:
             state (dict): Estado actual del grafo.
             
         Returns:
-            str: Siguiente nodo a ejecutar.
+            bool: True si se debe reintentar, False en caso contrario.
         """
+        print("---SHOULD RETRY---")
+        
         retry_count = state.get("retry_count", 0)
-        max_retries = WORKFLOW_CONFIG["max_retries"]
+        max_retries = WORKFLOW_CONFIG.get("max_retries", 2)
         
-        # Verificar si la generación actual es exitosa
-        hallucination_score = state.get("hallucination_score", {})
-        answer_score = state.get("answer_score", {})
+        # Verificar si la respuesta actual es satisfactoria
+        hallucination_score = state.get("hallucination_score")
+        answer_score = state.get("answer_score")
         
-        is_grounded = hallucination_score.get("score", "").lower() == "yes"
-        is_useful = answer_score.get("score", "").lower() == "yes"
+        is_hallucination = False
+        is_useful = False
         
-        # Si la generación es exitosa o alcanzamos el máximo de reintentos, terminar
-        if (is_grounded and is_useful) or retry_count >= max_retries:
-            print(f"---DECISION: {'GENERATION SUCCESSFUL' if (is_grounded and is_useful) else 'MAX RETRIES REACHED'}---")
-            return END
+        # Interpretar los scores
+        if isinstance(hallucination_score, dict) and "score" in hallucination_score:
+            is_hallucination = hallucination_score["score"].lower() != "yes"
         
-        # Si necesitamos reintentar, incrementar el contador
-        state["retry_count"] = retry_count + 1
-        print(f"---RETRY ATTEMPT {state['retry_count']} OF {max_retries}---")
+        if isinstance(answer_score, dict) and "score" in answer_score:
+            is_useful = answer_score["score"].lower() == "yes"
         
-        # Si estamos en el último reintento, usar todos los cubos disponibles
-        if state["retry_count"] == max_retries - 1:
-            state["relevant_cubos"] = list(retrievers.keys())
-            print("---USING ALL AVAILABLE CUBES FOR FINAL ATTEMPT---")
+        # Determinar si necesitamos un nuevo intento
+        need_retry = (is_hallucination or not is_useful) and retry_count < max_retries
         
-        return "generate"
+        if need_retry:
+            print(f"Reintento {retry_count + 1}/{max_retries} necesario.")
+            print(f"Hallucination: {'Sí' if is_hallucination else 'No'}")
+            print(f"Respuesta útil: {'Sí' if is_useful else 'No'}")
+            
+            # Incrementar contador de reintentos
+            state["retry_count"] = retry_count + 1
+            
+            # Si estamos en el último intento, ampliar la búsqueda
+            if state["retry_count"] == max_retries - 1:
+                print("Último intento: ampliando criterios de búsqueda...")
+                # Si la pregunta es sobre una consulta, añadir más retrievers de consultas
+                if state.get("is_consulta", False) and state.get("ambito"):
+                    ambito = state["ambito"]
+                    relevant_cubos = list(state.get("relevant_cubos", []))
+                    consulta_key = f"consultas_{ambito}"
+                    if consulta_key not in relevant_cubos:
+                        relevant_cubos.append(consulta_key)
+                        state["relevant_cubos"] = relevant_cubos
+                        print(f"Añadiendo retriever de consultas para {ambito}")
+        else:
+            reason = "Respuesta satisfactoria" if (not is_hallucination and is_useful) else "Máximo de reintentos alcanzado"
+            print(f"No se necesita reintento. Razón: {reason}")
+        
+        return need_retry
     
+    # Añadimos los nodos al grafo
+    workflow.add_node("route_question", route_question)
+    workflow.add_node("retrieve", retrieve)
+    workflow.add_node("generate", generate)
+    workflow.add_node("should_retry", should_retry)
+    
+    # Configuramos las transiciones
+    workflow.set_entry_point("route_question")
+    workflow.add_edge("route_question", "retrieve")
+    workflow.add_edge("retrieve", "generate")
     workflow.add_conditional_edges(
-        "generate",
-        should_retry,
+        "should_retry",
         {
-            "generate": "generate",
-            END: END
+            True: "route_question",
+            False: END 
         }
     )
+    workflow.add_edge("generate", "should_retry")
     
     return workflow

@@ -54,8 +54,87 @@ from langagent.config.config import (
 # Configurar logging
 logger = logging.getLogger(__name__)
 
+def load_consultas_guardadas(consultas_dir):
+    """
+    Carga las consultas guardadas de un directorio y las organiza por ámbito.
+    
+    Args:
+        consultas_dir (str): Directorio que contiene los archivos de consultas guardadas.
+        
+    Returns:
+        dict: Diccionario con consultas organizadas por ámbito.
+    """
+    consultas_por_ambito = {}
+    
+    # Verificar si el directorio existe
+    if not os.path.exists(consultas_dir):
+        print(f"Directorio de consultas guardadas no encontrado: {consultas_dir}")
+        return consultas_por_ambito
+    
+    # Mapeo de nombres de archivo a ámbitos
+    mapeo_archivo_ambito = {
+        "matricula": "academico",
+        "rendimiento": "academico",
+        "egresados": "academico",
+        "cohortes": "academico",
+        "admision": "admision",
+        # Añadir más mapeos según sea necesario
+    }
+    
+    # Listar archivos en el directorio
+    archivos = os.listdir(consultas_dir)
+    for archivo in archivos:
+        if archivo.endswith(".md"):
+            # Determinar el ámbito basado en el nombre del archivo
+            ambito = None
+            for clave, valor in mapeo_archivo_ambito.items():
+                if clave in archivo.lower():
+                    ambito = valor
+                    break
+            
+            if ambito is None:
+                print(f"No se pudo determinar el ámbito para {archivo}")
+                continue
+            
+            # Crear documentos a partir del archivo
+            ruta_completa = os.path.join(consultas_dir, archivo)
+            with open(ruta_completa, 'r', encoding='utf-8') as f:
+                contenido = f.read()
+            
+            # Dividir el contenido en consultas individuales
+            consultas = re.split(r'\n---\n', contenido)
+            
+            # Procesar cada consulta
+            for i, consulta in enumerate(consultas):
+                if consulta.strip():  # Ignorar consultas vacías
+                    # Extraer el título de la consulta
+                    match_titulo = re.search(r'##\s+(.+)', consulta)
+                    titulo = match_titulo.group(1).strip() if match_titulo else f"Consulta {i+1}"
+                    
+                    # Crear un documento para la consulta
+                    doc = Document(
+                        page_content=consulta,
+                        metadata={
+                            'source': ruta_completa,
+                            'ambito': ambito,
+                            'tipo': 'consulta_guardada',
+                            'titulo': titulo
+                        }
+                    )
+                    
+                    # Agregar al diccionario por ámbito
+                    if ambito not in consultas_por_ambito:
+                        consultas_por_ambito[ambito] = []
+                    consultas_por_ambito[ambito].append(doc)
+    
+    # Imprimir estadísticas
+    for ambito, docs in consultas_por_ambito.items():
+        print(f"Cargadas {len(docs)} consultas guardadas para el ámbito {ambito}")
+    
+    return consultas_por_ambito
+
 def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm2=None, 
-                use_advanced_rag=False, advanced_techniques=None):
+                use_advanced_rag=False, advanced_techniques=None, consultas_dir=None):
     """
     Configura el agente con todos sus componentes para RAG avanzado.
     
@@ -66,6 +145,7 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
         local_llm2 (str, optional): Nombre del segundo modelo LLM.
         use_advanced_rag (bool): Si se deben usar técnicas avanzadas de RAG
         advanced_techniques (list): Lista de técnicas avanzadas específicas a utilizar
+        consultas_dir (str, optional): Directorio con las consultas guardadas.
         
     Returns:
         tuple: Workflow compilado y componentes del agente.
@@ -77,6 +157,7 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
     persist_directory = persist_directory or PATHS_CONFIG["default_chroma_dir"]
     local_llm = local_llm or LLM_CONFIG["default_model"]
     local_llm2 = local_llm2 or LLM_CONFIG.get("default_model2", local_llm)
+    consultas_dir = consultas_dir or os.path.join(os.path.dirname(data_dir), "consulas_guardadas")
     
     # Verificar qué técnicas avanzadas usar
     advanced_techniques = advanced_techniques or []
@@ -91,6 +172,10 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
     # Cargar documentos
     print("Cargando documentos...")
     all_documents = load_documents_from_directory(data_dir)
+    
+    # Cargar consultas guardadas
+    print("Cargando consultas guardadas...")
+    consultas_por_ambito = load_consultas_guardadas(consultas_dir)
     
     # Dividir documentos en chunks más pequeños
     print("Dividiendo documentos...")
@@ -139,6 +224,9 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
     retrievers = {}
     vectorstores = {}
     
+    # Vectorstores para consultas guardadas por ámbito
+    consultas_vectorstores = {}
+    
     # Procesar cada cubo y crear su vectorstore/retrievers
     for cubo_name, docs in cubo_documents.items():
         print(f"Procesando documentos para el cubo: {cubo_name}")
@@ -180,6 +268,48 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
             # Para un retriever estándar, usamos create_retriever de vectorstore.py
             from langagent.utils.vectorstore import create_retriever
             retrievers[cubo_name] = create_retriever(db, k=VECTORSTORE_CONFIG["k_retrieval"])
+    
+    # Procesar consultas guardadas por ámbito
+    for ambito, consultas in consultas_por_ambito.items():
+        print(f"Procesando consultas guardadas para el ámbito: {ambito}")
+        
+        # Dividir consultas en chunks
+        consulta_splits = text_splitter.split_documents(consultas)
+        
+        # Crear directorio para vectorstore de consultas de este ámbito
+        consultas_persist_dir = os.path.join(persist_directory, f"Consultas_{ambito}")
+        
+        # Crear o cargar vectorstore para las consultas de este ámbito
+        if not os.path.exists(consultas_persist_dir):
+            print(f"Creando nueva base de datos vectorial para consultas de {ambito}...")
+            db = create_vectorstore(consulta_splits, embeddings, consultas_persist_dir)
+        else:
+            print(f"Cargando base de datos vectorial existente para consultas de {ambito}...")
+            db = load_vectorstore(consultas_persist_dir, embeddings)
+        
+        # Guardar la vectorstore de consultas
+        consultas_vectorstores[ambito] = db
+        
+        # Crear retriever para las consultas de este ámbito y agregarlo a los retrievers
+        retriever_key = f"consultas_{ambito}"
+        
+        if 'dual_chunks' in advanced_techniques:
+            retrievers[retriever_key] = create_dual_retriever(
+                documents=consulta_splits,
+                embeddings=embeddings,
+                persist_directory=os.path.join(consultas_persist_dir, "dual")
+            )
+        elif 'document_summary' in advanced_techniques:
+            retrievers[retriever_key] = create_document_summary_retriever(
+                documents=consulta_splits,
+                embeddings=embeddings,
+                persist_directory=os.path.join(consultas_persist_dir, "summary"),
+                llm=llm2 if llm2 else llm
+            )
+        else:
+            # Para un retriever estándar
+            from langagent.utils.vectorstore import create_retriever
+            retrievers[retriever_key] = create_retriever(db, k=VECTORSTORE_CONFIG["k_retrieval"])
     
     # Si se solicita la técnica de router, combinar los retrievers
     if 'router' in advanced_techniques and len(retrievers) > 1:
@@ -229,6 +359,7 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
     return app, {
         "retrievers": retrievers,
         "vectorstores": vectorstores,
+        "consultas_vectorstores": consultas_vectorstores,
         "rag_chain": rag_chain,
         "retrieval_grader": retrieval_grader,
         "hallucination_grader": hallucination_grader,
@@ -269,60 +400,44 @@ def run_agent(app, question):
 
 def main():
     """Función principal para ejecutar el agente desde línea de comandos."""
-    parser = argparse.ArgumentParser(description="Agente de respuesta a preguntas con LangGraph y llama-index")
-    parser.add_argument("--data_dir", default=None, help="Directorio con documentos markdown")
-    parser.add_argument("--chroma_dir", default=None, help="Directorio para la base de datos vectorial")
+    parser = argparse.ArgumentParser(description="Agente avanzado de respuesta a preguntas con LlamaIndex")
+    parser.add_argument("--data_dir", default=None, help="Directorio con documentos")
+    parser.add_argument("--persist_dir", default=None, help="Directorio para la base de datos vectorial")
     parser.add_argument("--local_llm", default=None, help="Modelo LLM principal")
     parser.add_argument("--local_llm2", default=None, help="Modelo LLM secundario (opcional)")
+    parser.add_argument("--consultas_dir", default=None, help="Directorio con consultas guardadas")
     parser.add_argument("--question", help="Pregunta a responder")
-    parser.add_argument("--use_advanced_rag", action="store_true", help="Utilizar técnicas avanzadas de RAG")
-    parser.add_argument("--advanced_techniques", nargs="+", 
-                        choices=['dual_chunks', 'document_summary', 'router', 'optimize_embeddings'],
-                        help="Técnicas avanzadas específicas a utilizar")
+    parser.add_argument("--advanced_rag", action="store_true", help="Usar técnicas avanzadas de RAG")
+    parser.add_argument("--techniques", nargs="+", choices=["dual_chunks", "document_summary", "router", "optimize_embeddings"],
+                       help="Técnicas específicas de RAG avanzado a utilizar")
     
     args = parser.parse_args()
     
-    try:
-        # Configurar agente
-        app, components = setup_agent(
-            data_dir=args.data_dir, 
-            persist_directory=args.chroma_dir, 
-            local_llm=args.local_llm, 
-            local_llm2=args.local_llm2,
-            use_advanced_rag=args.use_advanced_rag,
-            advanced_techniques=args.advanced_techniques
-        )
-        
-        # Si se proporciona una pregunta, ejecutar el agente
-        if args.question:
-            run_agent(app, args.question)
-        else:
-            # Modo interactivo
-            print_title("Modo interactivo")
-            print("Escribe 'salir' para terminar")
-            
-            while True:
-                try:
-                    question = input("\nPregunta: ")
-                    if question.lower() in ["salir", "exit", "quit"]:
-                        break
-                    
-                    if not question.strip():
-                        print("Por favor, introduce una pregunta válida.")
-                        continue
-                        
-                    run_agent(app, question)
-                except KeyboardInterrupt:
-                    print("\nOperación interrumpida por el usuario.")
-                    break
-                except Exception as e:
-                    print(f"\nError al procesar la pregunta: {str(e)}")
-                    print("Puedes intentar con otra pregunta o escribir 'salir' para terminar.")
-    except Exception as e:
-        print(f"Error al inicializar el agente: {str(e)}")
-        return 1
+    # Configurar agente
+    app, components = setup_agent(
+        data_dir=args.data_dir, 
+        persist_directory=args.persist_dir, 
+        local_llm=args.local_llm, 
+        local_llm2=args.local_llm2,
+        use_advanced_rag=args.advanced_rag,
+        advanced_techniques=args.techniques,
+        consultas_dir=args.consultas_dir
+    )
     
-    return 0
+    # Si se proporciona una pregunta, ejecutar el agente
+    if args.question:
+        run_agent(app, args.question)
+    else:
+        # Modo interactivo
+        print_title("Modo interactivo")
+        print("Escribe 'salir' para terminar")
+        
+        while True:
+            question = input("\nPregunta: ")
+            if question.lower() in ["salir", "exit", "quit"]:
+                break
+            
+            run_agent(app, question)
 
 if __name__ == "__main__":
     exit_code = main()

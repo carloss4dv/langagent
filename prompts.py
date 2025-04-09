@@ -41,12 +41,14 @@ PROMPTS = {
         "question_router": """<|begin_of_text|><|start_header_id|>system<|end_header_id|> 
         You are an expert router that determines which data cube (cubo) and scope (ámbito) are most relevant to answer university-related questions from SEGEDA (DATUZ: Open Data and Transparency UZ).
         Your primary task is to analyze the question and select the most appropriate data cube and its corresponding scope.
+        You also need to determine if the question is about a saved query/report/dashboard.
         
         IMPORTANT RULES:
         1. If the question explicitly mentions a scope (e.g., "ámbito ACADÉMICO", "ámbito MOVILIDAD"), you MUST select that scope
         2. If the question mentions a cube name (e.g., "cubo MATRÍCULA"), identify its corresponding scope
         3. If multiple scopes/cubes are mentioned, select the one that appears to be the main focus
         4. Consider the specific metrics and dimensions available in each cube
+        5. If the question asks about saved queries, reports, dashboards, visualizations, or predefined analyses, set is_query field to true
         
         Available scopes (ámbitos) and their cubes:
 
@@ -92,17 +94,17 @@ PROMPTS = {
         - PUESTO: Job positions
         
         You must respond with a JSON string in this exact format (including quotes):
-        {{"cube": "EXACT_CUBE_NAME", "scope": "EXACT_SCOPE_NAME", "confidence": "HIGH/MEDIUM/LOW"}}
+        {{"cube": "EXACT_CUBE_NAME", "scope": "EXACT_SCOPE_NAME", "confidence": "HIGH/MEDIUM/LOW", "is_query": true/false}}
         
         Examples:
         For a question about student enrollment:
-        {{"cube": "MATRÍCULA", "scope": "ACADÉMICO", "confidence": "HIGH"}}
+        {{"cube": "MATRÍCULA", "scope": "ACADÉMICO", "confidence": "HIGH", "is_query": false}}
         
-        For a question about research groups:
-        {{"cube": "GRUPOS DE INVESTIGACIÓN", "scope": "I+D+i", "confidence": "HIGH"}}
+        For a question about saved reports on research groups:
+        {{"cube": "GRUPOS DE INVESTIGACIÓN", "scope": "I+D+i", "confidence": "HIGH", "is_query": true}}
         
-        For a question about doctoral thesis completion time:
-        {{"cube": "DOCTORADO RD 99/2011", "scope": "DOCTORADO", "confidence": "HIGH"}}
+        For a question about dashboard visualizations for doctoral thesis completion time:
+        {{"cube": "DOCTORADO RD 99/2011", "scope": "DOCTORADO", "confidence": "HIGH", "is_query": true}}
         
         <|eot_id|><|start_header_id|>user<|end_header_id|>
         Question: {question} 
@@ -153,6 +155,7 @@ PROMPTS = {
         2. If the question mentions a cube name (e.g., "cubo MATRÍCULA"), identify its corresponding scope
         3. If multiple scopes/cubes are mentioned, select the one that appears to be the main focus
         4. If you can identify a specific cube based on the question content and metrics needed, select it
+        5. If the question is about saved queries, reports, dashboards, visualizations, or predefined analyses, set is_query to true
 
         Available scopes and their cubes with their main metrics:
 
@@ -201,14 +204,24 @@ PROMPTS = {
         {
             "cube": "EXACT_CUBE_NAME",
             "scope": "EXACT_SCOPE_NAME",
-            "confidence": "HIGH/MEDIUM/LOW"
+            "confidence": "HIGH/MEDIUM/LOW",
+            "is_query": true/false
         }
 
         Example for a question about student enrollment:
         {
             "cube": "MATRÍCULA",
             "scope": "ACADEMIC",
-            "confidence": "HIGH"
+            "confidence": "HIGH",
+            "is_query": false
+        }
+
+        Example for a question about saved reports on student mobility:
+        {
+            "cube": "ESTUDIANTES OUT",
+            "scope": "MOBILITY",
+            "confidence": "MEDIUM",
+            "is_query": true
         }
 
         [/INST]"""
@@ -248,63 +261,64 @@ PROMPTS = {
 
         "question_router": """<|im_start|>system
         You are a router that determines which data cube and scope are most relevant to answer university-related questions from SEGEDA (DATUZ: Open Data and Transparency UZ).
+        You also need to determine if the question is about a saved query/report/dashboard.
 
         IMPORTANT RULES:
-        1. If the question explicitly mentions a scope (e.g., "ámbito ACADÉMICO"), you MUST select that scope
-        2. If the question mentions a cube name (e.g., "cubo MATRÍCULA"), identify its corresponding scope
-        3. If multiple scopes/cubes are mentioned, select the one that appears to be the main focus
-        4. If you can identify a specific cube based on the question content and metrics needed, select it
+        1. If the question explicitly mentions a scope (e.g., "ámbito ACADÉMICO"), select that scope
+        2. If the question mentions a cube name (e.g., "cubo MATRÍCULA"), identify its scope
+        3. If multiple scopes/cubes are mentioned, select the main focus
+        4. If the question is about saved queries, reports, dashboards, or visualizations, set is_query to true
 
-        Available scopes and their cubes with their main metrics:
+        Available scopes (ámbitos) and their cubes:
 
-        ACADEMIC:
-        - ENROLLMENT (MATRÍCULA): Enrolled students, credits enrolled, new students
-        - PERFORMANCE (RENDIMIENTO): Academic performance metrics
-        - GRADUATES (EGRESADOS): Graduate information
-        - COHORT (COHORTE): Student progression analysis
+        ADMISIÓN:
+        - ADMISIÓN: Admission processes and requirements
+        - OFERTA DE PLAZAS: Available positions and capacity
+        
+        ACADÉMICO:
+        - COHORTE: Cohort analysis and student progression
+        - EGRESADOS: Graduate and alumni information
+        - MATRÍCULA: Enrollment and registration data
+        - RENDIMIENTO: Academic performance metrics
+        
+        DOCTORADO:
+        - DOCTORADO RD 99/2011: Doctoral studies information
+        
+        ESTUDIOS PROPIOS:
+        - MATRÍCULA DE ESTUDIOS PROPIOS: Specific degree programs enrollment
+        
+        DOCENCIA:
+        - DOCENCIA ASIGNATURA: Course and subject teaching data
+        - DOCENCIA PDI: Faculty teaching information
+        
+        I+D+i:
+        - GRUPOS DE INVESTIGACIÓN: Research groups data
+        - ÍNDICES BIBLIOMÉTRICOS: Bibliometric indicators
+        - MOVILIDAD DE ENTRADA: Incoming research mobility
+        - PRODUCCIÓN CIENTÍFICA: Scientific production
+        - PROYECTOS Y CONTRATOS: Research projects and contracts
+        - RECURSOS HUMANOS DE I+D+i: R&D human resources
+        - SOLICITUD CONVOCATORIA: Grant applications
+        
+        MOVILIDAD:
+        - ACUERDOS BILATERALES: International agreements
+        - ESTUDIANTES IN: Incoming student mobility
+        - ESTUDIANTES OUT: Outgoing student mobility
+        - SOLICITUDES DE MOVILIDAD OUT: Outgoing mobility applications
+        
+        RRHH:
+        - CARGO: Administrative positions
+        - PDI: Teaching and research staff
+        - PTGAS: Administrative and services staff
+        - PUESTO: Job positions
 
-        ADMISSION:
-        - ADMISSION (ADMISIÓN): Admission processes data
-        - AVAILABLE PLACES (OFERTA PLAZAS): Capacity and positions
-
-        TEACHING:
-        - COURSE TEACHING (DOCENCIA ASIGNATURA): Course data
-        - FACULTY TEACHING (DOCENCIA PDI): Faculty information
-
-        DOCTORATE:
-        - DOCTORATE RD 99/2011: Doctoral studies data
-
-        SPECIFIC DEGREES:
-        - SPECIFIC PROGRAMS ENROLLMENT (MATRÍCULA ESTUDIOS PROPIOS)
-
-        R&D:
-        - RESEARCH GROUPS (GRUPOS): Research groups data
-        - BIBLIOMETRIC INDICES (ÍNDICES BIBLIOMÉTRICOS)
-        - INCOMING MOBILITY (MOVILIDAD ENTRADA)
-        - SCIENTIFIC PRODUCTION (PRODUCCIÓN CIENTÍFICA)
-        - RESEARCH PROJECTS (PROYECTOS)
-        - R&D HUMAN RESOURCES (RRHH IDI)
-        - GRANT APPLICATIONS (SOLICITUD CONVOCATORIA)
-
-        MOBILITY:
-        - BILATERAL AGREEMENTS (ACUERDOS BILATERALES)
-        - INCOMING STUDENTS (ESTUDIANTES IN)
-        - OUTGOING STUDENTS (ESTUDIANTES OUT)
-        - OUTGOING MOBILITY APPLICATIONS (SOLICITUDES MOVILIDAD OUT)
-
-        HR:
-        - POSITIONS (CARGO): Administrative positions
-        - TEACHING STAFF (PDI): Faculty staff
-        - ADMIN STAFF (PTGAS): Administrative personnel
-        - JOB POSITIONS (PUESTO): Job roles
-
-        You must respond with a JSON string in this exact format (including quotes):
-        {{"cube": "EXACT_CUBE_NAME", "scope": "EXACT_SCOPE_NAME", "confidence": "HIGH/MEDIUM/LOW"}}
-
-        Example for a question about student enrollment:
-        {{"cube": "MATRÍCULA", "scope": "ACADEMIC", "confidence": "HIGH"}}
-
-        <|im_end|>
+        Response format:
+        {
+          "cube": "EXACT_CUBE_NAME",
+          "scope": "EXACT_SCOPE_NAME",
+          "confidence": "HIGH/MEDIUM/LOW",
+          "is_query": true/false
+        }<|im_end|>
         <|im_start|>user
         Question: {question}<|im_end|>
         <|im_start|>assistant"""
