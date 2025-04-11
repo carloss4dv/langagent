@@ -14,7 +14,10 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Importaciones de langagent para la carga de documentos y creación de modelos
-from langagent.utils.document_loader import load_documents_from_directory
+from langagent.utils.document_loader import (
+    load_documents_from_directory,
+    load_consultas_guardadas
+)
 from langagent.utils.vectorstore import (
     create_embeddings,
     create_vectorstore, 
