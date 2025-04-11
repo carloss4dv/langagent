@@ -28,6 +28,8 @@ class GraphState(TypedDict):
         relevant_cubos: lista de cubos relevantes para la pregunta
         ambito: ámbito identificado para la pregunta
         retrieval_details: detalles de recuperación por cubo
+        is_consulta: indica si la pregunta es sobre una consulta guardada
+        consulta_documents: documentos de consultas guardadas recuperados
     """
     question: str
     generation: str
@@ -38,6 +40,8 @@ class GraphState(TypedDict):
     relevant_cubos: List[str]
     ambito: Optional[str]
     retrieval_details: Dict[str, Dict[str, Any]]
+    is_consulta: bool
+    consulta_documents: List[Document]
 
 def normalize_name(name: str) -> str:
     """
@@ -159,18 +163,34 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
     def route_question(state):
         """
         Determines which cubes are relevant for the question and the corresponding scope.
+        Also identifies if the question is about a saved query.
         
         Args:
             state (dict): Current graph state.
             
         Returns:
-            dict: Updated state with identified relevant cubes and scope.
+            dict: Updated state with identified relevant cubes, scope, and if it's a query.
         """
         print("---ROUTE QUESTION---")
         question = state["question"]
         print(question)
         
+        # Inicializar el indicador de consulta
+        state["is_consulta"] = False
+        state["consulta_documents"] = []
+        
         try:
+            # Determinar si la pregunta es sobre una consulta guardada
+            consulta_keywords = [
+                "consulta guardada", "consultas guardadas", "dashboard", 
+                "visualización", "visualizacion", "reporte", "informe", 
+                "cuadro de mando", "análisis predefinido", "analisis predefinido"
+            ]
+            
+            # Verificar si alguna palabra clave está en la pregunta
+            question_lower = question.lower()
+            es_consulta = any(keyword in question_lower for keyword in consulta_keywords)
+            
             # Invoke router and parse result
             routing_result = question_router.invoke({"question": question})
             
@@ -179,12 +199,14 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                 cube_name = routing_result.get("cube", "")
                 scope = routing_result.get("scope", "")
                 confidence = routing_result.get("confidence", "LOW")
+                is_query = routing_result.get("is_query", False)
             elif isinstance(routing_result, str):
                 try:
                     parsed = json.loads(routing_result)
                     cube_name = parsed.get("cube", "")
                     scope = parsed.get("scope", "")
                     confidence = parsed.get("confidence", "LOW")
+                    is_query = parsed.get("is_query", False)
                 except json.JSONDecodeError:
                     # Fallback regex parsing if needed
                     cube_match = re.search(r'"cube"\s*:\s*"([^"]+)"', routing_result)
@@ -192,14 +214,17 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                     scope_match = re.search(r'"scope"\s*:\s*"([^"]+)"', routing_result)
                     scope = scope_match.group(1) if scope_match else ""
                     confidence = "LOW"
+                    is_query = False
             else:
                 cube_name = ""
                 scope = ""
                 confidence = "LOW"
-                
+                is_query = False
+            
             print(f"Router identified cube: {cube_name}")
             print(f"Router identified scope: {scope}")
             print(f"Router confidence: {confidence}")
+            print(f"Is query: {is_query}")
             
             # Normalizar nombres
             normalized_cube = normalize_name(cube_name)
@@ -221,14 +246,34 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             # Obtener el ámbito normalizado
             normalized_scope = scope_mapping.get(normalized_scope, normalized_scope)
             
+            # Marcar si es una consulta guardada basado en las palabras clave o el router
+            state["is_consulta"] = es_consulta or is_query
+            
             # Si tenemos alta confianza y el cubo existe, usarlo directamente
             if confidence == "HIGH" and normalized_cube in retrievers:
                 state["relevant_cubos"] = [normalized_cube]
                 state["ambito"] = normalized_scope
                 print(f"Using specific cube with high confidence: {normalized_cube}")
+                
+                # Si es una consulta y tenemos el ámbito, añadir el retriever de consultas
+                if state["is_consulta"] and normalized_scope:
+                    consulta_retriever_key = f"consultas_{normalized_scope}"
+                    if consulta_retriever_key in retrievers:
+                        state["relevant_cubos"].append(consulta_retriever_key)
+                        print(f"Adding saved query retriever for scope: {normalized_scope}")
+            
             # Si tenemos un ámbito válido pero confianza media/baja, usar todos los cubos de ese ámbito
             elif normalized_scope in AMBITOS_CUBOS:
-                state["relevant_cubos"] = [normalized_cube] if normalized_cube else []
+                # Inicializar con el cubo específico si existe
+                state["relevant_cubos"] = [normalized_cube] if normalized_cube in retrievers else []
+                
+                # Añadir retriever de consultas guardadas si aplica
+                if state["is_consulta"]:
+                    consulta_retriever_key = f"consultas_{normalized_scope}"
+                    if consulta_retriever_key in retrievers:
+                        state["relevant_cubos"].append(consulta_retriever_key)
+                        print(f"Adding saved query retriever for scope: {normalized_scope}")
+                
                 state["ambito"] = normalized_scope
                 print(f"Using scope {normalized_scope} with cube {normalized_cube}")
             else:
@@ -236,7 +281,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                 state["relevant_cubos"] = list(retrievers.keys()) if isinstance(retrievers, dict) else []
                 state["ambito"] = None
                 print("No specific scope identified. Using all available cubes.")
-                
+            
         except Exception as e:
             print(f"Error in route_question: {e}")
             # On error, use all cubes if retrievers is a dict

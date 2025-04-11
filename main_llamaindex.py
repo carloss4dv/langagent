@@ -55,7 +55,7 @@ from langagent.config.config import (
 logger = logging.getLogger(__name__)
 
 def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm2=None, 
-                use_advanced_rag=False, advanced_techniques=None):
+                use_advanced_rag=False, advanced_techniques=None, consultas_dir=None):
     """
     Configura el agente con todos sus componentes para RAG avanzado.
     
@@ -66,6 +66,7 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
         local_llm2 (str, optional): Nombre del segundo modelo LLM.
         use_advanced_rag (bool): Si se deben usar técnicas avanzadas de RAG
         advanced_techniques (list): Lista de técnicas avanzadas específicas a utilizar
+        consultas_dir (str, optional): Directorio con las consultas guardadas.
         
     Returns:
         tuple: Workflow compilado y componentes del agente.
@@ -77,6 +78,7 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
     persist_directory = persist_directory or PATHS_CONFIG["default_chroma_dir"]
     local_llm = local_llm or LLM_CONFIG["default_model"]
     local_llm2 = local_llm2 or LLM_CONFIG.get("default_model2", local_llm)
+    consultas_dir = consultas_dir or os.path.join(os.path.dirname(data_dir), "consultas_guardadas")
     
     # Verificar qué técnicas avanzadas usar
     advanced_techniques = advanced_techniques or []
@@ -91,6 +93,10 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
     # Cargar documentos
     print("Cargando documentos...")
     all_documents = load_documents_from_directory(data_dir)
+    
+    # Cargar consultas guardadas
+    print("Cargando consultas guardadas...")
+    consultas_por_ambito = load_consultas_guardadas(consultas_dir)
     
     # Dividir documentos en chunks más pequeños
     print("Dividiendo documentos...")
@@ -139,6 +145,9 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
     retrievers = {}
     vectorstores = {}
     
+    # Vectorstores para consultas guardadas por ámbito
+    consultas_vectorstores = {}
+    
     # Procesar cada cubo y crear su vectorstore/retrievers
     for cubo_name, docs in cubo_documents.items():
         print(f"Procesando documentos para el cubo: {cubo_name}")
@@ -180,6 +189,50 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
             # Para un retriever estándar, usamos create_retriever de vectorstore.py
             from langagent.utils.vectorstore import create_retriever
             retrievers[cubo_name] = create_retriever(db, k=VECTORSTORE_CONFIG["k_retrieval"])
+    
+    # Procesar consultas guardadas por ámbito
+    for ambito, consultas in consultas_por_ambito.items():
+        print(f"Procesando consultas guardadas para el ámbito: {ambito}")
+        
+        # Dividir consultas en chunks
+        consulta_splits = text_splitter.split_documents(consultas)
+        
+        # Crear directorio para vectorstore de consultas de este ámbito
+        consultas_persist_dir = os.path.join(persist_directory, f"Consultas_{ambito}")
+        
+        # Crear o cargar vectorstore para las consultas de este ámbito
+        if not os.path.exists(consultas_persist_dir):
+            print(f"Creando nueva base de datos vectorial para consultas de {ambito}...")
+            db = create_vectorstore(consulta_splits, embeddings, consultas_persist_dir)
+        else:
+            print(f"Cargando base de datos vectorial existente para consultas de {ambito}...")
+            db = load_vectorstore(consultas_persist_dir, embeddings)
+        
+        # Guardar la vectorstore de consultas
+        consultas_vectorstores[ambito] = db
+        
+        # Crear retriever para las consultas de este ámbito
+        retriever_key = f"consultas_{ambito}"
+        
+        # Aplicar técnicas avanzadas si están habilitadas
+        if 'dual_chunks' in advanced_techniques:
+            print(f"Creando dual retriever para consultas de {ambito}...")
+            retrievers[retriever_key] = create_dual_retriever(
+                documents=consulta_splits,
+                embeddings=embeddings,
+                persist_directory=os.path.join(consultas_persist_dir, "dual")
+            )
+        elif 'document_summary' in advanced_techniques:
+            print(f"Creando document summary retriever para consultas de {ambito}...")
+            retrievers[retriever_key] = create_document_summary_retriever(
+                documents=consulta_splits,
+                embeddings=embeddings,
+                persist_directory=os.path.join(consultas_persist_dir, "summary"),
+                llm=llm2 if llm2 else llm
+            )
+        else:
+            # Retriever estándar para consultas
+            retrievers[retriever_key] = create_retriever(db, k=VECTORSTORE_CONFIG["k_retrieval"])
     
     # Si se solicita la técnica de router, combinar los retrievers
     if 'router' in advanced_techniques and len(retrievers) > 1:
@@ -229,6 +282,7 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
     return app, {
         "retrievers": retrievers,
         "vectorstores": vectorstores,
+        "consultas_vectorstores": consultas_vectorstores,
         "rag_chain": rag_chain,
         "retrieval_grader": retrieval_grader,
         "hallucination_grader": hallucination_grader,
