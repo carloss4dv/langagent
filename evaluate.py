@@ -159,6 +159,11 @@ class TruLensEvaluator:
                 self.f_context_relevance
             ]
         )
+        
+        print("\n=== INSTRUMENTACIÓN DEBUG ===")
+        print("Selectores disponibles:")
+        print(f"- Input: {tru_chain.select_inputs()}")
+        print(f"- Output: {tru_chain.select_output()}")
 
         # Ejecutar la evaluación
         with self.tru as recording:
