@@ -12,7 +12,8 @@ LLM_CONFIG = {
     "max_tokens": 1024,        # Límite de tokens para las respuestas generadas
     "model_format": "json",    # Formato de salida (json, text, etc.)
     "default_model": "hf.co/unsloth/Mistral-Small-3.1-24B-Instruct-2503-GGUF",  # Modelo predeterminado para el LLM principal
-    "default_model2": "qwen2.5:7b" # Modelo predeterminado para el LLM secundario (evaluación)
+    "default_model2": "qwen2.5:7b", # Modelo predeterminado para el LLM secundario (evaluación)
+    "default_model3": "ollama/llama3.1:8b" # Modelo predeterminado para el LLM tercero (evaluación)
 }
 
 # Configuración de Vector Store
@@ -40,7 +41,7 @@ WORKFLOW_CONFIG = {
 
 # Rutas y Directorios
 PATHS_CONFIG = {
-    "default_data_dir": "./data",           # Directorio predeterminado para datos
+    "default_data_dir": "./output_md",           # Directorio predeterminado para datos
     "default_chroma_dir": "./chroma",       # Directorio predeterminado para la base de datos vectorial
     "log_dir": "./logs",                    # Directorio para archivos de registro
 }
