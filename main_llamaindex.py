@@ -81,7 +81,7 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
     persist_directory = persist_directory or PATHS_CONFIG["default_chroma_dir"]
     local_llm = local_llm or LLM_CONFIG["default_model"]
     local_llm2 = local_llm2 or LLM_CONFIG.get("default_model2", local_llm)
-    consultas_dir = consultas_dir or os.path.join(os.path.dirname(data_dir), "consultas_guardadas")
+    consultas_dir = consultas_dir or os.path.join(data_dir, "consultas_guardadas")
     
     # Verificar qué técnicas avanzadas usar
     advanced_techniques = advanced_techniques or []
@@ -265,7 +265,12 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
     # Crear un router de preguntas si hay múltiples cubos
     question_router = None
     if len(retrievers) > 1:
-        question_router = create_question_router(llm2 if llm2 else llm)
+        if 'router' in advanced_techniques:
+            # Si estamos usando la técnica de router de llama-index, usar el router retriever
+            question_router = create_router_retriever(retrievers, llm2 if llm2 else llm)
+        else:
+            # Si no, usar el router de preguntas estándar
+            question_router = create_question_router(llm2 if llm2 else llm)
     
     # Crear workflow
     print("Creando flujo de trabajo...")
