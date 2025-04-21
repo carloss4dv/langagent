@@ -29,11 +29,6 @@ class TruLensEvaluator:
         # Configurar LiteLLM con Ollama como proveedor
         self.provider = LiteLLM(model_engine="ollama/" + LLM_CONFIG["default_model3"])
 
-        # Feedback functions básicas
-        self.f_relevance = Feedback(self.provider.relevance).on_input_output()
-        self.f_groundedness = Feedback(Groundedness(groundedness_provider=self.provider).groundedness_measure).on(
-            TruChain._get_selector().context.collect()
-        ).on_output()
 
         # Feedback functions personalizadas
         self.f_no_answer = Feedback(self._no_answer_feedback).on_input_output()
@@ -152,8 +147,6 @@ class TruLensEvaluator:
             self.agent.workflow,
             app_id=f"LangChainAgent-{LLM_CONFIG['default_model']}",
             feedbacks=[
-                self.f_relevance,
-                self.f_groundedness,
                 self.f_no_answer,
                 self.f_response_completeness,
                 self.f_context_relevance
@@ -202,8 +195,6 @@ class TruLensEvaluator:
 
         # Calcular promedios
         avg_scores = {
-            "relevance": np.mean([r['evaluation']['relevance'] for r in results]),
-            "groundedness": np.mean([r['evaluation']['groundedness'] for r in results]),
             "no_answer": np.mean([r['evaluation']['no_answer_feedback'] for r in results]),
             "completeness": np.mean([r['evaluation']['response_completeness'] for r in results]),
             "context_relevance": np.mean([r['evaluation']['context_relevance'] for r in results])
@@ -230,8 +221,6 @@ class TruLensEvaluator:
 
         # Resumen de puntuaciones
         report += "### Puntuaciones Promedio\n"
-        report += f"- Relevancia respuesta: {evaluation_results['average_scores']['relevance']:.2f}\n"
-        report += f"- Groundedness: {evaluation_results['average_scores']['groundedness']:.2f}\n"
         report += f"- Respuesta a pregunta: {evaluation_results['average_scores']['no_answer']:.2f}\n"
         report += f"- Completitud respuesta: {evaluation_results['average_scores']['completeness']:.2f}\n"
         report += f"- Relevancia contexto: {evaluation_results['average_scores']['context_relevance']:.2f}\n\n"
@@ -242,8 +231,6 @@ class TruLensEvaluator:
             report += f"#### Pregunta {i+1}: {result['question']}\n"
             report += f"- **Respuesta**: {result['response']}\n"
             report += "- **Puntuaciones**:\n"
-            report += f"  - Relevancia: {result['evaluation']['relevance']:.2f}\n"
-            report += f"  - Groundedness: {result['evaluation']['groundedness']:.2f}\n"
             report += f"  - Respuesta a pregunta: {result['evaluation']['no_answer_feedback']:.2f}\n"
             report += f"  - Completitud: {result['evaluation']['response_completeness']:.2f}\n"
             report += f"  - Relevancia contexto: {result['evaluation']['context_relevance']:.2f}\n\n"
