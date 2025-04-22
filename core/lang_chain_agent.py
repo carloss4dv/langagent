@@ -8,17 +8,17 @@ import re
 import os
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from utils.document_loader import (
+from langagent.utils.document_loader import (
     load_documents_from_directory,
     load_consultas_guardadas
 )
-from utils.vectorstore import (
+from langagent.utils.vectorstore import (
     create_embeddings, 
     create_vectorstore, 
     load_vectorstore, 
     create_retriever
 )
-from models.llm import (
+from langagent.models.llm import (
     create_llm, 
     create_rag_chain, 
     create_retrieval_grader, 
@@ -26,14 +26,14 @@ from models.llm import (
     create_answer_grader, 
     create_question_router
 )
-from models.workflow import create_workflow
-from utils.terminal_visualization import (
+from langagent.models.workflow import create_workflow
+from langagent.utils.terminal_visualization import (
     print_title, 
     print_documents, 
     print_workflow_result, 
     print_workflow_steps
 )
-from config.config import (
+from langagent.config.config import (
     LLM_CONFIG,
     VECTORSTORE_CONFIG,
     PATHS_CONFIG

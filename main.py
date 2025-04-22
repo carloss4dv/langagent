@@ -16,17 +16,17 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
-from utils.document_loader import (
+from langagent.utils.document_loader import (
     load_documents_from_directory,
     load_consultas_guardadas
 )
-from utils.vectorstore import (
+from langagent.utils.vectorstore import (
     create_embeddings, 
     create_vectorstore, 
     load_vectorstore, 
     create_retriever
 )
-from models.llm import (
+from langagent.models.llm import (
     create_llm, 
     create_rag_chain, 
     create_retrieval_grader, 
@@ -34,19 +34,19 @@ from models.llm import (
     create_answer_grader, 
     create_question_router
 )
-from models.workflow import create_workflow
-from utils.terminal_visualization import (
+from langagent.models.workflow import create_workflow
+from langagent.utils.terminal_visualization import (
     print_title, 
     print_documents, 
     print_workflow_result, 
     print_workflow_steps
 )
-from config.config import (
+from langagent.config.config import (
     LLM_CONFIG,
     VECTORSTORE_CONFIG,
     PATHS_CONFIG
 )
-from core.lang_chain_agent import LangChainAgent
+from langagent.core.lang_chain_agent import LangChainAgent
 
 def main():
     """Función principal para ejecutar el agente desde línea de comandos."""

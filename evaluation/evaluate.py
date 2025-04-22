@@ -30,7 +30,7 @@ if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 # Importar LangChainAgent desde el módulo core
-from core.lang_chain_agent import LangChainAgent
+from langagent.core.lang_chain_agent import LangChainAgent
 
 deepeval.logger.setLevel(deepeval.logging.INFO)
 
