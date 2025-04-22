@@ -8,17 +8,17 @@ import re
 import os
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langagent.utils.document_loader import (
+from utils.document_loader import (
     load_documents_from_directory,
     load_consultas_guardadas
 )
-from langagent.utils.vectorstore import (
+from utils.vectorstore import (
     create_embeddings, 
     create_vectorstore, 
     load_vectorstore, 
     create_retriever
 )
-from langagent.models.llm import (
+from models.llm import (
     create_llm, 
     create_rag_chain, 
     create_retrieval_grader, 
@@ -26,14 +26,14 @@ from langagent.models.llm import (
     create_answer_grader, 
     create_question_router
 )
-from langagent.models.workflow import create_workflow
-from langagent.utils.terminal_visualization import (
+from models.workflow import create_workflow
+from utils.terminal_visualization import (
     print_title, 
     print_documents, 
     print_workflow_result, 
     print_workflow_steps
 )
-from langagent.config.config import (
+from config.config import (
     LLM_CONFIG,
     VECTORSTORE_CONFIG,
     PATHS_CONFIG
@@ -197,33 +197,31 @@ class LangChainAgent:
         
         # Compilar workflow
         self.app = self.workflow.compile()
-
-    def run(self, question):
+    
+    def run(self, query):
         """
-        Ejecuta el agente con una pregunta.
+        Ejecuta el agente con una consulta del usuario.
         
         Args:
-            question (str): Pregunta a responder.
+            query (str): Consulta del usuario.
             
         Returns:
-            dict: Resultado final del workflow.
+            Dict: Resultado de la ejecución del agente.
         """
-        print_title(f"Procesando pregunta: {question}")
+        print_title(f"Consulta: {query}")
         
-        # Ejecutar workflow
-        inputs = {"question": question}
-        state_transitions = []
+        # Ejecutar el workflow
+        result = self.app.invoke({"query": query})
         
-        for output in self.app.stream(inputs):
-            state_transitions.append(output)
-            for key, value in output.items():
-                print(f"Completado: {key}")
+        # Mostrar documentos recuperados
+        if "documents" in result:
+            print_documents(result["documents"], "Documentos Recuperados")
         
-        # Imprimir pasos del workflow
-        print_workflow_steps(state_transitions)
+        # Mostrar resultados
+        print_workflow_result(result)
         
-        # Imprimir resultado final
-        final_output = state_transitions[-1]
-        print_workflow_result(final_output)
+        # Mostrar pasos del workflow si están disponibles
+        if "workflow_trace" in result:
+            print_workflow_steps(result["workflow_trace"])
         
-        return final_output 
+        return result 

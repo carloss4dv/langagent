@@ -10,7 +10,7 @@ import os
 import json
 import argparse
 from datetime import datetime
-from evaluate import AgentEvaluator, guardar_resultados_deepeval
+from evaluation.evaluate import AgentEvaluator, guardar_resultados_deepeval
 
 # Casos de prueba basados en los cubos de datos del sistema
 CASOS_PRUEBA = [

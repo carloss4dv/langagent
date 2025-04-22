@@ -10,17 +10,17 @@ import argparse
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from langagent.utils.document_loader import (
+from utils.document_loader import (
     load_documents_from_directory,
     load_consultas_guardadas
 )
-from langagent.utils.vectorstore import (
+from utils.vectorstore import (
     create_embeddings, 
     create_vectorstore, 
     load_vectorstore, 
     create_retriever
 )
-from langagent.models.llm import (
+from models.llm import (
     create_llm, 
     create_rag_chain, 
     create_retrieval_grader, 
@@ -28,19 +28,19 @@ from langagent.models.llm import (
     create_answer_grader, 
     create_question_router
 )
-from langagent.models.workflow import create_workflow
-from langagent.utils.terminal_visualization import (
+from models.workflow import create_workflow
+from utils.terminal_visualization import (
     print_title, 
     print_documents, 
     print_workflow_result, 
     print_workflow_steps
 )
-from langagent.config.config import (
+from config.config import (
     LLM_CONFIG,
     VECTORSTORE_CONFIG,
     PATHS_CONFIG
 )
-from lang_chain_agent import LangChainAgent
+from core.lang_chain_agent import LangChainAgent
 
 def main():
     """Función principal para ejecutar el agente desde línea de comandos."""
@@ -61,9 +61,12 @@ def main():
         local_llm2=args.local_llm2
     )
     
-    # Ejecutar el agente con una pregunta de ejemplo
-    question = "¿Cuál es la capital de Francia?"
-    agent.run(question)
+    # Ejecutar el agente con la pregunta proporcionada o una de ejemplo
+    question = args.question if args.question else "¿Cómo se calcula la tasa de éxito académico?"
+    print(f"Ejecutando consulta: {question}")
+    result = agent.run(question)
+    
+    return result
 
 if __name__ == "__main__":
     main()
