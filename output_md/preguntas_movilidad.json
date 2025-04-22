@@ -1,0 +1,266 @@
+[
+    {
+        "pregunta": "¿Cuál es el número total de solicitudes de movilidad presentadas por estudiantes de Unizar?"
+    },
+    {
+        "pregunta": "¿Cuántas solicitudes de movilidad han sido aceptadas?"
+    },
+    {
+        "pregunta": "¿Cuántas solicitudes aceptadas no se han hecho efectivas debido a renuncias?"
+    },
+    {
+        "pregunta": "¿Cómo se clasifican los datos de movilidad según la nacionalidad de los estudiantes?"
+    },
+    {
+        "pregunta": "¿Qué rangos de edad se consideran para clasificar a los estudiantes en las solicitudes de movilidad?"
+    },
+    {
+        "pregunta": "¿Cómo se determina el nivel de estudios de los estudiantes que solicitan movilidad?"
+    },
+    {
+        "pregunta": "¿Qué programas de movilidad están disponibles para los estudiantes de Unizar?"
+    },
+    {
+        "pregunta": "¿Cómo se clasifica la información de movilidad según el idioma del contrato de estudios?"
+    },
+    {
+        "pregunta": "¿Qué universidades de destino están incluidas en las solicitudes de movilidad?"
+    },
+    {
+        "pregunta": "¿Qué áreas de estudio están disponibles para los acuerdos de movilidad?"
+    },
+    {
+        "pregunta": "¿Cuál es el número total de solicitudes presentadas a convocatorias de proyectos de I+D+i?"
+    },
+    {
+        "pregunta": "¿Cuál es el importe total solicitado en las convocatorias de proyectos de I+D+i?"
+    },
+    {
+        "pregunta": "¿Cuántas solicitudes han sido concedidas en las convocatorias de proyectos de I+D+i?"
+    },
+    {
+        "pregunta": "¿Cuál es la tasa de éxito de las solicitudes en las convocatorias de proyectos de I+D+i?"
+    },
+    {
+        "pregunta": "¿Cómo se clasifican las convocatorias según el año de convocatoria?"
+    },
+    {
+        "pregunta": "¿Qué tipos de convocatorias están disponibles para los proyectos de I+D+i?"
+    },
+    {
+        "pregunta": "¿Cómo se clasifica el ámbito territorial de las convocatorias de proyectos de I+D+i?"
+    },
+    {
+        "pregunta": "¿Qué atributos se consideran para clasificar a los solicitantes de proyectos de I+D+i?"
+    },
+    {
+        "pregunta": "¿Cómo se determina si una solicitud ha sido concedida o denegada?"
+    },
+    {
+        "pregunta": "¿Qué áreas de conocimiento se consideran para los solicitantes de proyectos de I+D+i?"
+    },
+    {
+        "pregunta": "¿Cuál es la tasa de éxito de los estudiantes en sus estudios?"
+    },
+    {
+        "pregunta": "¿Cómo se calcula la tasa de rendimiento académico de los estudiantes?"
+    },
+    {
+        "pregunta": "¿Qué criterios se utilizan para determinar la tasa de evaluación de los estudiantes?"
+    },
+    {
+        "pregunta": "¿Qué significa que un estudiante tenga créditos evaluados?"
+    },
+    {
+        "pregunta": "¿Cuáles son las calificaciones que se consideran para los créditos superados?"
+    },
+    {
+        "pregunta": "¿Qué diferencia hay entre créditos presentados y créditos suspendidos?"
+    },
+    {
+        "pregunta": "¿Cómo se contabilizan los alumnos evaluados en un curso académico?"
+    },
+    {
+        "pregunta": "¿Qué información se utiliza para clasificar a los alumnos superados?"
+    },
+    {
+        "pregunta": "¿Qué atributos se consideran para clasificar a los alumnos presentados?"
+    },
+    {
+        "pregunta": "¿Cómo se determina la nota media de admisión de los estudiantes?"
+    },
+    {
+        "pregunta": "¿Cuántos puestos de trabajo existen en la UZ?"
+    },
+    {
+        "pregunta": "¿Cómo se clasifican los puestos de trabajo según el centro al que están adscritos?"
+    },
+    {
+        "pregunta": "¿Qué tipos de dedicación existen para los puestos de trabajo en la UZ?"
+    },
+    {
+        "pregunta": "¿Cómo se agrupan los puestos de trabajo según el departamento al que pertenecen?"
+    },
+    {
+        "pregunta": "¿Qué criterios se utilizan para clasificar los puestos según el grupo de pertenencia?"
+    },
+    {
+        "pregunta": "¿Cómo se determina el nivel de complemento de los puestos de trabajo?"
+    },
+    {
+        "pregunta": "¿Qué categorías de puestos de trabajo existen en la UZ?"
+    },
+    {
+        "pregunta": "¿Cómo se clasifica el desempeño de los puestos de trabajo?"
+    },
+    {
+        "pregunta": "¿Qué situaciones pueden tener los puestos de trabajo en la UZ?"
+    },
+    {
+        "pregunta": "¿Cómo se identifica si un puesto está vinculado a proyectos de investigación?"
+    },
+    {
+        "pregunta": "¿Cuántos proyectos de I+D+i están vigentes en un año determinado?"
+    },
+    {
+        "pregunta": "¿Cuál es el número de proyectos nuevos de I+D+i en un año específico?"
+    },
+    {
+        "pregunta": "¿Qué importe se concede generalmente a los proyectos de I+D+i?"
+    },
+    {
+        "pregunta": "¿Cómo se calculan los ingresos totales de los proyectos de I+D+i?"
+    },
+    {
+        "pregunta": "¿Qué tipos de costes se consideran en los proyectos de I+D+i?"
+    },
+    {
+        "pregunta": "¿Cómo se clasifican los proyectos según el año natural?"
+    },
+    {
+        "pregunta": "¿Qué atributos se utilizan para clasificar a los investigadores principales de los proyectos?"
+    },
+    {
+        "pregunta": "¿Cómo se agrupan los proyectos de I+D+i según su categoría?"
+    },
+    {
+        "pregunta": "¿Qué oficinas gestoras están involucradas en la gestión de proyectos de I+D+i?"
+    },
+    {
+        "pregunta": "¿Cómo se determina el ámbito territorial de un proyecto de I+D+i?"
+    },
+    {
+        "pregunta": "¿Cuántos autores han publicado artículos, libros o participado en congresos en un periodo determinado?"
+    },
+    {
+        "pregunta": "¿Cuál es el número total de artículos publicados en un año específico?"
+    },
+    {
+        "pregunta": "¿Cuántos capítulos de libro se han publicado en un año determinado?"
+    },
+    {
+        "pregunta": "¿Cuántos libros se han publicado en un año específico?"
+    },
+    {
+        "pregunta": "¿Cuántas actividades se han realizado en congresos en un año determinado?"
+    },
+    {
+        "pregunta": "¿Cómo se clasifican los autores según el centro al que pertenecen?"
+    },
+    {
+        "pregunta": "¿Qué categorías de actividades en congresos existen?"
+    },
+    {
+        "pregunta": "¿Cómo se determina si un artículo está publicado en acceso abierto?"
+    },
+    {
+        "pregunta": "¿Qué idiomas se utilizan para las publicaciones científicas?"
+    },
+    {
+        "pregunta": "¿Cómo se clasifica la tipología de los artículos científicos?"
+    },
+    {
+        "pregunta": "¿Cuántas plazas de nuevo ingreso se ofertan cada año en la UZ?"
+    },
+    {
+        "pregunta": "¿Cuál es el número de plazas matriculadas por estudiantes de nuevo ingreso?"
+    },
+    {
+        "pregunta": "¿Cuántas plazas han sido solicitadas por los estudiantes?"
+    },
+    {
+        "pregunta": "¿Qué significa la nota de corte en la adjudicación de plazas?"
+    },
+    {
+        "pregunta": "¿Cómo se determina la nota de corte definitiva en la convocatoria ordinaria?"
+    },
+    {
+        "pregunta": "¿Qué diferencias existen entre la nota de corte de la adjudicación ordinaria y extraordinaria?"
+    },
+    {
+        "pregunta": "¿Cómo se clasifican las plazas según el curso académico?"
+    },
+    {
+        "pregunta": "¿Qué criterios se utilizan para clasificar las plazas según el centro?"
+    },
+    {
+        "pregunta": "¿Cómo se determina el cupo de adjudicación de las plazas?"
+    },
+    {
+        "pregunta": "¿Qué tipos de acceso se consideran para la oferta de plazas?"
+    },
+    {
+        "pregunta": "¿Cuántas movilidades de entrada se han realizado en un año específico?"
+    },
+    {
+        "pregunta": "¿Cómo se clasifican las movilidades según el año en que se realizaron?"
+    },
+    {
+        "pregunta": "¿Qué atributos se utilizan para clasificar a los investigadores en las movilidades?"
+    },
+    {
+        "pregunta": "¿Cómo se determina la duración de las movilidades?"
+    },
+    {
+        "pregunta": "¿Qué criterios se utilizan para clasificar las movilidades según su fecha de inicio y finalización?"
+    },
+    {
+        "pregunta": "¿Cómo se identifica si un investigador ha realizado una prórroga de su movilidad?"
+    },
+    {
+        "pregunta": "¿Qué tipos de entidades de origen existen para los investigadores en movilidad?"
+    },
+    {
+        "pregunta": "¿Cómo se clasifica la tipología de las movilidades?"
+    },
+    {
+        "pregunta": "¿Cuántos alumnos están matriculados en un plan de estudios oficial en un curso académico?"
+    },
+    {
+        "pregunta": "¿Qué son los créditos matriculados y cómo se contabilizan?"
+    },
+    {
+        "pregunta": "¿Cuántos alumnos participan en programas de movilidad de salida?"
+    },
+    {
+        "pregunta": "¿Qué define a un alumno de nuevo ingreso?"
+    },
+    {
+        "pregunta": "¿Cómo se calcula el ratio de créditos por alumnos matriculados?"
+    },
+    {
+        "pregunta": "¿Qué criterios se utilizan para clasificar a los estudiantes según su país de nacionalidad?"
+    },
+    {
+        "pregunta": "¿Cómo se determina el rango de edad de los estudiantes matriculados?"
+    },
+    {
+        "pregunta": "¿Qué tipos de asignaturas existen y cómo se clasifican?"
+    },
+    {
+        "pregunta": "¿Cómo se identifica el curso más alto matriculado por un estudiante?"
+    },
+    {
+        "pregunta": "¿Qué significa que un estudio sea interuniversitario?"
+    }
+] 

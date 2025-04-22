@@ -9,7 +9,7 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from typing import List, Optional
 from langagent.config.config import VECTORSTORE_CONFIG
-from chromadb.utils.embedding_functions import create_langchain_embedding
+from chromadb.utils.embedding_functions import chroma_langchain_embedding_function
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.embeddings import Embeddings
 from chromadb.api.types import EmbeddingFunction

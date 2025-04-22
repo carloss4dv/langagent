@@ -41,12 +41,14 @@ PROMPTS = {
         "question_router": """<|begin_of_text|><|start_header_id|>system<|end_header_id|> 
         You are an expert router that determines which data cube (cubo) and scope (ámbito) are most relevant to answer university-related questions from SEGEDA (DATUZ: Open Data and Transparency UZ).
         Your primary task is to analyze the question and select the most appropriate data cube and its corresponding scope.
+        You also need to determine if the question is about a saved query/report/dashboard.
         
         IMPORTANT RULES:
         1. If the question explicitly mentions a scope (e.g., "ámbito ACADÉMICO", "ámbito MOVILIDAD"), you MUST select that scope
         2. If the question mentions a cube name (e.g., "cubo MATRÍCULA"), identify its corresponding scope
         3. If multiple scopes/cubes are mentioned, select the one that appears to be the main focus
         4. Consider the specific metrics and dimensions available in each cube
+        5. If the question asks about saved queries, reports, dashboards, visualizations, or predefined analyses, set is_query field to true
         
         Available scopes (ámbitos) and their cubes:
 
@@ -92,17 +94,17 @@ PROMPTS = {
         - PUESTO: Job positions
         
         You must respond with a JSON string in this exact format (including quotes):
-        {{"cube": "EXACT_CUBE_NAME", "scope": "EXACT_SCOPE_NAME", "confidence": "HIGH/MEDIUM/LOW"}}
+        {{"cube": "EXACT_CUBE_NAME", "scope": "EXACT_SCOPE_NAME", "confidence": "HIGH/MEDIUM/LOW", "is_query": true/false}}
         
         Examples:
         For a question about student enrollment:
-        {{"cube": "MATRÍCULA", "scope": "ACADÉMICO", "confidence": "HIGH"}}
+        {{"cube": "MATRÍCULA", "scope": "ACADÉMICO", "confidence": "HIGH", "is_query": false}}
         
-        For a question about research groups:
-        {{"cube": "GRUPOS DE INVESTIGACIÓN", "scope": "I+D+i", "confidence": "HIGH"}}
+        For a question about saved reports on research groups:
+        {{"cube": "GRUPOS DE INVESTIGACIÓN", "scope": "I+D+i", "confidence": "HIGH", "is_query": true}}
         
-        For a question about doctoral thesis completion time:
-        {{"cube": "DOCTORADO RD 99/2011", "scope": "DOCTORADO", "confidence": "HIGH"}}
+        For a question about dashboard visualizations for doctoral thesis completion time:
+        {{"cube": "DOCTORADO RD 99/2011", "scope": "DOCTORADO", "confidence": "HIGH", "is_query": true}}
         
         <|eot_id|><|start_header_id|>user<|end_header_id|>
         Question: {question} 

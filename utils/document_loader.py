@@ -6,7 +6,7 @@ y procesarlos para su uso en sistemas de recuperación de información.
 """
 
 import os
-from typing import List
+from typing import Dict, List
 from langchain_core.documents import Document
 from langchain_community.document_loaders import UnstructuredMarkdownLoader
 
@@ -60,3 +60,51 @@ def load_documents_from_directory(directory_path: str) -> List[Document]:
         all_docs.extend(docs)
     
     return all_docs
+
+def load_consultas_guardadas(consultas_dir: str) -> Dict[str, List[Document]]:
+    """
+    Carga las consultas guardadas organizadas por ámbito.
+    
+    Args:
+        consultas_dir (str): Directorio donde se encuentran las consultas guardadas.
+        
+    Returns:
+        Dict[str, List[Document]]: Diccionario con las consultas organizadas por ámbito.
+    """
+    consultas_por_ambito = {}
+    
+    # Verificar si el directorio existe
+    if not os.path.exists(consultas_dir):
+        print(f"El directorio de consultas {consultas_dir} no existe. Se creará uno vacío.")
+        return consultas_por_ambito
+    
+    # Recorrer cada archivo en el directorio
+    for filename in os.listdir(consultas_dir):
+        if filename.endswith(".md"):
+            # Extraer el ámbito del nombre del archivo
+            # Formato esperado: consulta_ambito_nombre.md
+            parts = filename.split('_')
+            if len(parts) >= 2:
+                ambito = parts[1]  # El ámbito es la segunda parte
+                
+                # Leer el contenido del archivo
+                file_path = os.path.join(consultas_dir, filename)
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    
+                # Crear el documento
+                doc = Document(
+                    page_content=content,
+                    metadata={
+                        "source": file_path,
+                        "ambito": ambito,
+                        "tipo": "consulta_guardada"
+                    }
+                )
+                
+                # Agregar al diccionario por ámbito
+                if ambito not in consultas_por_ambito:
+                    consultas_por_ambito[ambito] = []
+                consultas_por_ambito[ambito].append(doc)
+    
+    return consultas_por_ambito
