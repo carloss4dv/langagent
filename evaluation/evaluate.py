@@ -23,6 +23,7 @@ from deepeval.metrics import (
 )
 from deepeval.test_case import LLMTestCase
 import deepeval
+from deepeval.dataset import Golden
 
 # Asegurarnos que podemos importar desde el directorio raíz
 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -309,9 +310,171 @@ class AgentEvaluator:
         self.test_cases.append(test_case)
         return test_case
     
+    def convertir_a_golden(self, preguntas: List[str], respuestas_esperadas: List[str] = None):
+        """
+        Convierte una lista de preguntas y respuestas esperadas en objetos Golden
+        para su uso en la evaluación.
+        
+        Args:
+            preguntas (List[str]): Lista de preguntas a evaluar.
+            respuestas_esperadas (List[str], optional): Lista de respuestas esperadas.
+                
+        Returns:
+            List: Lista de objetos Golden.
+        """
+        # Normalizar respuestas esperadas
+        if respuestas_esperadas is None:
+            respuestas_esperadas = [None] * len(preguntas)
+        elif len(respuestas_esperadas) < len(preguntas):
+            # Completar con None si hay menos respuestas que preguntas
+            respuestas_esperadas.extend([None] * (len(preguntas) - len(respuestas_esperadas)))
+        
+        goldens = []
+        for pregunta, respuesta_esperada in zip(preguntas, respuestas_esperadas):
+            golden = Golden(
+                input=pregunta,
+                expected_output=respuesta_esperada
+            )
+            goldens.append(golden)
+        
+        return goldens
+
+    def convertir_goldens_a_test_cases(self, goldens):
+        """
+        Convierte objetos Golden a casos de prueba LLMTestCase ejecutando el agente
+        para cada pregunta en los Golden.
+        
+        Args:
+            goldens: Lista de objetos Golden.
+                
+        Returns:
+            List: Lista de objetos LLMTestCase.
+        """
+        test_cases = []
+        
+        for golden in goldens:
+            # Registrar el tiempo de inicio
+            tiempo_inicio = time.time()
+            
+            # Ejecutar el agente para obtener la respuesta
+            pregunta = golden.input
+            resultado = self.agent.run(pregunta)
+            
+            # Calcular tiempo de completado
+            tiempo_completado = time.time() - tiempo_inicio
+            
+            # Guardar la respuesta completa para análisis
+            self.raw_outputs.append({
+                "pregunta": pregunta,
+                "resultado_completo": resultado,
+                "tiempo_completado": tiempo_completado
+            })
+            
+            # Extraer el texto de la respuesta
+            generation = None
+            if "generation" in resultado:
+                generation = self.extraer_texto_respuesta(resultado["generation"])
+            if not generation and "response" in resultado:
+                generation = self.extraer_texto_respuesta(resultado["response"])
+            
+            # Obtener el contexto utilizado
+            documents = resultado.get("documents", [])
+            is_consulta = resultado.get("is_consulta", False)
+            consulta_documents = resultado.get("consulta_documents", [])
+            
+            # Si es una consulta, agregar los documentos de consulta al contexto
+            if is_consulta and consulta_documents:
+                context_docs = consulta_documents
+            else:
+                # Usar los documentos recuperados normalmente
+                context_docs = documents
+            
+            # Extraer el contexto
+            context = self.obtener_contexto_formateado(context_docs)
+            
+            # Crear un caso de prueba
+            test_case = deepeval.test_case.LLMTestCase(
+                input=golden.input,
+                actual_output=generation or "No se pudo extraer una respuesta",
+                expected_output=golden.expected_output,
+                retrieval_context=context,
+            )
+            
+            # Guardar metadatos adicionales
+            test_case.completion_time = tiempo_completado
+            
+            test_cases.append(test_case)
+        
+        return test_cases
+
+    def obtener_contexto_formateado(self, context_docs):
+        """
+        Convierte los documentos al formato esperado por deepeval.
+        
+        Args:
+            context_docs: Lista de documentos a formatear.
+                
+        Returns:
+            List[str]: Lista de strings con el contenido de los documentos.
+        """
+        formatted_context = []
+        for doc in context_docs:
+            if isinstance(doc, Document):
+                # Si es un objeto Document de LangChain
+                formatted_context.append(doc.page_content)
+            elif isinstance(doc, dict) and "page_content" in doc:
+                # Si es un diccionario con page_content
+                formatted_context.append(doc["page_content"])
+            elif isinstance(doc, dict) and "text" in doc:
+                # Si es un diccionario con text
+                formatted_context.append(doc["text"])
+            elif isinstance(doc, str):
+                # Si es un string directamente
+                formatted_context.append(doc)
+            else:
+                # En cualquier otro caso, convertir a string
+                formatted_context.append(str(doc))
+        return formatted_context
+
+    def query_with_context(self, input_query):
+        """
+        Ejecuta una consulta y devuelve el resultado y el contexto.
+        
+        Args:
+            input_query (str): La consulta a ejecutar.
+                
+        Returns:
+            Tuple: (contexto, respuesta)
+        """
+        resultado = self.agent.run(input_query)
+        generation = None
+        
+        if "generation" in resultado:
+            generation = self.extraer_texto_respuesta(resultado["generation"])
+        if not generation and "response" in resultado:
+            generation = self.extraer_texto_respuesta(resultado["response"])
+        
+        # Obtener el contexto utilizado
+        documents = resultado.get("documents", [])
+        is_consulta = resultado.get("is_consulta", False)
+        consulta_documents = resultado.get("consulta_documents", [])
+        
+        # Si es una consulta, agregar los documentos de consulta al contexto
+        if is_consulta and consulta_documents:
+            context_docs = consulta_documents
+        else:
+            # Usar los documentos recuperados normalmente
+            context_docs = documents
+        
+        # Extraer el contexto
+        context = self.obtener_contexto_formateado(context_docs)
+        
+        return context, generation
+
     def evaluar(self, preguntas: List[str], respuestas_esperadas: List[str] = None):
         """
         Evalúa una lista de preguntas con las métricas configuradas.
+        Primero recopila todas las respuestas y luego realiza la evaluación.
         
         Args:
             preguntas (List[str]): Lista de preguntas a evaluar.
@@ -321,88 +484,34 @@ class AgentEvaluator:
         Returns:
             Dict: Resultados de la evaluación, incluyendo métricas y puntuaciones.
         """
-        # Normalizar respuestas esperadas
-        if respuestas_esperadas is None:
-            respuestas_esperadas = [None] * len(preguntas)
-        elif len(respuestas_esperadas) < len(preguntas):
-            # Completar con None si hay menos respuestas que preguntas
-            respuestas_esperadas.extend([None] * (len(preguntas) - len(respuestas_esperadas)))
+        # Convertir preguntas y respuestas a objetos Golden
+        goldens = self.convertir_a_golden(preguntas, respuestas_esperadas)
         
-        # Crear casos de prueba para cada pregunta
-        for pregunta, respuesta_esperada in zip(preguntas, respuestas_esperadas):
-            self.evaluar_pregunta(pregunta, respuesta_esperada)
+        # Crear dataset para pruebas
+        golden_dataset = goldens
         
-        # Lista de nombres de métricas que utilizamos
-        metric_names = [
-            "answer_relevancy",
-            "faithfulness",
-            "contextual_relevancy",
-            "contextual_recall",
-            "contextual_precision"
+        # Convertir los goldens a casos de prueba
+        data = self.convertir_goldens_a_test_cases(golden_dataset)
+        
+        # Definir las métricas para la evaluación
+        metrics = [
+            deepeval.metrics.AnswerRelevancyMetric(),
+            deepeval.metrics.FaithfulnessMetric(),
+            deepeval.metrics.ContextualPrecisionMetric(),
+            deepeval.metrics.ContextualRecallMetric(),
+            deepeval.metrics.ContextualRelevancyMetric()
         ]
         
-        # Generar resultados
+        # Evaluar todos los casos de prueba con todas las métricas
+        results = deepeval.evaluate(data, metrics=metrics)
+        
+        # Guardar los casos de prueba para uso posterior
+        self.test_cases = data
+        
         return {
-            "metric_names": metric_names,
-            "test_cases": self.test_cases
+            "results": results,
+            "test_cases": data
         }
-    
-    def evaluar_pregunta(self, pregunta: str, respuesta_esperada: str = None):
-        """
-        Evalúa una sola pregunta con todas las métricas configuradas.
-        
-        Args:
-            pregunta (str): Pregunta a evaluar.
-            respuesta_esperada (str, optional): Respuesta esperada para la pregunta.
-            
-        Returns:
-            Dict: Resultados de la evaluación para esta pregunta.
-        """
-        # Crear caso de prueba
-        test_case = self.crear_caso_prueba(pregunta, respuesta_esperada)
-        
-        # Crear métricas individuales para esta evaluación
-        answer_relevancy = AnswerRelevancyMetric(threshold=0.7)
-        faithfulness = FaithfulnessMetric(threshold=0.7)
-        contextual_relevancy = ContextualRelevancyMetric(threshold=0.7)
-        contextual_recall = ContextualRecallMetric(threshold=0.7)
-        contextual_precision = ContextualPrecisionMetric(threshold=0.7)
-        
-        # Inicializar results para almacenar resultados
-        test_case.results = {}
-        
-        # Evaluar con cada métrica directamente
-        try:
-            result = evaluate(test_case, answer_relevancy)
-            test_case.results["answer_relevancy"] = result
-        except Exception as e:
-            print(f"Error evaluando métrica answer_relevancy: {e}")
-        
-        try:
-            result = evaluate(test_case, faithfulness)
-            test_case.results["faithfulness"] = result
-        except Exception as e:
-            print(f"Error evaluando métrica faithfulness: {e}")
-        
-        try:
-            result = evaluate(test_case, contextual_relevancy)
-            test_case.results["contextual_relevancy"] = result
-        except Exception as e:
-            print(f"Error evaluando métrica contextual_relevancy: {e}")
-        
-        try:
-            result = evaluate(test_case, contextual_recall)
-            test_case.results["contextual_recall"] = result
-        except Exception as e:
-            print(f"Error evaluando métrica contextual_recall: {e}")
-        
-        try:
-            result = evaluate(test_case, contextual_precision)
-            test_case.results["contextual_precision"] = result
-        except Exception as e:
-            print(f"Error evaluando métrica contextual_precision: {e}")
-        
-        return test_case
 
 def guardar_resultados_deepeval(evaluador, resultados, ruta_salida=None):
     """
@@ -426,86 +535,49 @@ def guardar_resultados_deepeval(evaluador, resultados, ruta_salida=None):
         os.makedirs("output_eval", exist_ok=True)
         archivo_resultados = os.path.join("output_eval", f"eval_results_{timestamp}.json")
     
-    # Obtener nombres de métricas
-    metric_names = resultados.get("metric_names", [
-        "answer_relevancy",
-        "faithfulness",
-        "contextual_relevancy",
-        "contextual_recall",
-        "contextual_precision"
-    ])
+    # Obtener los resultados de la evaluación y los casos de prueba
+    test_cases = resultados.get("test_cases", [])
+    eval_results = resultados.get("results", {})
     
     # Preparar resultados para serialización
     resultados_json = {
         "timestamp": timestamp,
         "nombre_evaluacion": f"Evaluación {timestamp}",
-        "metricas": metric_names,
-        "num_preguntas": len(evaluador.test_cases),
-        "puntuaciones": {},
+        "num_preguntas": len(test_cases),
+        "metricas": {},
         "casos": []
     }
     
-    # Calcular puntuaciones agregadas para cada métrica
-    for metric_name in metric_names:
-        scores = []
-        for test_case in evaluador.test_cases:
-            if hasattr(test_case, "results") and metric_name in test_case.results:
-                result = test_case.results[metric_name]
-                if hasattr(result, "score") and result.score is not None:
-                    scores.append(result.score)
-        
-        if scores:
-            resultados_json["puntuaciones"][metric_name] = {
-                "promedio": sum(scores) / len(scores),
-                "min": min(scores),
-                "max": max(scores)
+    # Extraer puntuaciones de las métricas
+    if hasattr(eval_results, "metrics"):
+        for metric in eval_results.metrics:
+            metric_name = metric.__class__.__name__.replace("Metric", "").lower()
+            resultados_json["metricas"][metric_name] = {
+                "promedio": getattr(eval_results, f"{metric_name}_score", None),
+                "passed": getattr(eval_results, f"{metric_name}_passed", False)
             }
-        else:
-            resultados_json["puntuaciones"][metric_name] = {"promedio": None, "min": None, "max": None}
     
     # Datos de cada caso
-    for i, test_case in enumerate(evaluador.test_cases):
+    for i, test_case in enumerate(test_cases):
         caso = {
             "id": i + 1,
             "pregunta": test_case.input,
             "respuesta": test_case.actual_output,
             "esperado": test_case.expected_output,
-            "contexto": test_case.context[:3],  # Limitar a los primeros 3 fragmentos para no hacer el archivo demasiado grande
+            "contexto": test_case.retrieval_context[:3] if hasattr(test_case, "retrieval_context") else [],
             "puntuaciones": {}
         }
         
-        # Procesar puntuaciones específicas para el formato de respuesta actualizado
-        hallucination_score = getattr(test_case, "hallucination_score", None)
-        answer_score = getattr(test_case, "answer_score", None)
-        
-        # Convertir string "yes"/"no" a booleano si es necesario
-        if isinstance(hallucination_score, str):
-            hallucination_score = hallucination_score.lower() == "yes"
-        if isinstance(answer_score, str):
-            answer_score = answer_score.lower() == "yes"
-            
         # Añadir metadatos relevantes
         caso["metadata"] = {
-            "tiempo_completado": test_case.completion_time,
-            "tokens_totales": test_case.token_cost,
-            "modelo": getattr(test_case, "model_info", "unknown"),
-            "cubos_relevantes": getattr(test_case, "relevant_cubos", []),
-            "es_consulta": getattr(test_case, "is_consulta", False),
-            "puntuacion_alucinacion": hallucination_score,
-            "puntuacion_respuesta": answer_score
+            "tiempo_completado": getattr(test_case, "completion_time", 0),
         }
         
-        # Añadir puntuaciones individuales
-        if hasattr(test_case, "results"):
-            for metric_name in metric_names:
-                if metric_name in test_case.results:
-                    result = test_case.results[metric_name]
-                    if hasattr(result, "score"):
-                        caso["puntuaciones"][metric_name] = result.score
-                    else:
-                        caso["puntuaciones"][metric_name] = None
-                else:
-                    caso["puntuaciones"][metric_name] = None
+        # Obtener puntuaciones individuales si están disponibles
+        if hasattr(test_case, "metrics"):
+            for metric_result in test_case.metrics:
+                metric_name = metric_result.__class__.__name__.replace("Metric", "").lower()
+                caso["puntuaciones"][metric_name] = metric_result.score
         
         resultados_json["casos"].append(caso)
     
@@ -557,28 +629,14 @@ def main():
     
     print(f"Evaluación completada. Resultados guardados en: {ruta_resultados}")
     
-    # Si hay resultados, mostrar puntuaciones agregadas
-    if evaluador.test_cases:
+    # Mostrar resultados de la evaluación
+    if "results" in resultados and hasattr(resultados["results"], "metrics"):
         print("\nResumen de puntuaciones:")
-        metric_names = resultados.get("metric_names", [
-            "answer_relevancy",
-            "faithfulness",
-            "contextual_relevancy",
-            "contextual_recall",
-            "contextual_precision"
-        ])
-        
-        for metric_name in metric_names:
-            scores = []
-            for test_case in evaluador.test_cases:
-                if hasattr(test_case, "results") and metric_name in test_case.results:
-                    result = test_case.results[metric_name]
-                    if hasattr(result, "score") and result.score is not None:
-                        scores.append(result.score)
-            
-            if scores:
-                avg_score = sum(scores) / len(scores)
-                print(f"  {metric_name}: {avg_score:.2f}")
+        for metric in resultados["results"].metrics:
+            metric_name = metric.__class__.__name__
+            metric_score = getattr(resultados["results"], f"{metric_name.replace('Metric', '').lower()}_score", None)
+            if metric_score is not None:
+                print(f"  {metric_name}: {metric_score:.2f}")
             else:
                 print(f"  {metric_name}: No disponible")
 
