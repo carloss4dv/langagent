@@ -10,6 +10,14 @@ import os
 import json
 import argparse
 from datetime import datetime
+import sys
+
+# Asegurarnos que podemos importar desde el directorio raíz
+current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+# Importar desde el módulo local
 from evaluation.evaluate import AgentEvaluator, guardar_resultados_deepeval
 
 # Casos de prueba basados en los cubos de datos del sistema

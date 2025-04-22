@@ -6,9 +6,15 @@ utilizando LangGraph, LLaMA3 y Chroma vector store.
 """
 import re
 import os
+import sys
 import argparse
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+# Asegurarnos que podemos importar desde el directorio actual
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
 from utils.document_loader import (
     load_documents_from_directory,

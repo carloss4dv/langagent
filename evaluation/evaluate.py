@@ -9,6 +9,7 @@ import os
 import argparse
 import json
 import time
+import sys
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from langchain_core.documents import Document
@@ -21,8 +22,15 @@ from deepeval.metrics import (
     ContextualPrecisionMetric
 )
 from deepeval.test_case import LLMTestCase
-from core.lang_chain_agent import LangChainAgent
 import deepeval
+
+# Asegurarnos que podemos importar desde el directorio raíz
+current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+# Importar LangChainAgent desde el módulo core
+from core.lang_chain_agent import LangChainAgent
 
 deepeval.logger.setLevel(deepeval.logging.INFO)
 

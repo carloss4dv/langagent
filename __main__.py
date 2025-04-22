@@ -42,22 +42,37 @@ def main():
     
     # Ejecutar el comando correspondiente
     if args.command == "run":
+        # Directamente llamamos a la función main en main.py
         from main import main as run_main
-        run_main_args = [
-            "--data_dir", args.data_dir,
-            "--chroma_dir", args.chroma_dir,
-            "--local_llm", args.local_llm,
-            "--local_llm2", args.local_llm2,
-            "--question", args.question
-        ]
-        # Filtrar argumentos None
-        filtered_args = [arg for i, arg in enumerate(run_main_args) if i % 2 == 0 or arg is not None]
+        run_main_args = []
+        if args.data_dir:
+            run_main_args.extend(["--data_dir", args.data_dir])
+        if args.chroma_dir:
+            run_main_args.extend(["--chroma_dir", args.chroma_dir])
+        if args.local_llm:
+            run_main_args.extend(["--local_llm", args.local_llm])
+        if args.local_llm2:
+            run_main_args.extend(["--local_llm2", args.local_llm2])
+        if args.question:
+            run_main_args.extend(["--question", args.question])
+        
         # Reimplementar sys.argv
-        sys.argv = ["main.py"] + filtered_args
+        sys.argv = ["main.py"] + run_main_args
         run_main()
         
     elif args.command == "evaluate":
+        # Llamar directamente a la función main en run_evaluation.py
+        import sys
+        import os
+        
+        # Importar directamente el script de evaluación
+        # Asegurarnos que el directorio actual está en el path
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        if current_dir not in sys.path:
+            sys.path.insert(0, current_dir)
+            
         from evaluation.run_evaluation import main as eval_main
+        
         eval_main_args = []
         if args.data_dir:
             eval_main_args.extend(["--data_dir", args.data_dir])
