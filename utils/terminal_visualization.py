@@ -84,14 +84,54 @@ def print_workflow_result(result: Dict[str, Any]):
     """
     print_title("Resultado del Flujo de Trabajo")
     
-    # Extraer la generación final
-    final_output = list(result.values())[0]
+    # Extraer la información relevante
+    pregunta = result.get('question', 'N/A')
     
-    print(f"Pregunta: {final_output.get('question', 'N/A')}")
-    print(f"Respuesta: {final_output.get('generation', 'N/A')}")
-    print(f"Intentos realizados: {final_output.get('retry_count', 0)}")
+    # Extraer la generación del formato actualizado
+    generacion = result.get('generation', 'N/A')
+    respuesta_texto = "No se pudo extraer la respuesta"
     
-    if final_output.get('retry_count', 0) >= 3:
+    # Procesar la generación que ahora contiene un formato específico
+    if isinstance(generacion, str) and 'content=' in generacion:
+        # Intentar extraer el contenido JSON de la respuesta
+        try:
+            # Buscar el contenido JSON en el formato content='{ "answer": "..." }'
+            content_start = generacion.find("content='") + 9
+            content_end = generacion.find("' additional_kwargs")
+            if content_start > 9 and content_end > 0:
+                content_str = generacion[content_start:content_end]
+                # Extraer el campo "answer" del JSON
+                if '"answer":' in content_str:
+                    json_start = content_str.find('{')
+                    json_end = content_str.rfind('}') + 1
+                    if json_start >= 0 and json_end > json_start:
+                        json_str = content_str[json_start:json_end]
+                        content_json = json.loads(json_str)
+                        respuesta_texto = content_json.get("answer", respuesta_texto)
+        except Exception as e:
+            print(f"Error al procesar la generación: {e}")
+    
+    print(f"Pregunta: {pregunta}")
+    print(f"Respuesta: {respuesta_texto}")
+    print(f"Intentos realizados: {result.get('retry_count', 0)}")
+    
+    # Mostrar información adicional relevante
+    if 'hallucination_score' in result:
+        print(f"Puntuación de alucinación: {result['hallucination_score'].get('score', 'N/A')}")
+    
+    if 'answer_score' in result:
+        print(f"Puntuación de respuesta: {result['answer_score'].get('score', 'N/A')}")
+    
+    if 'relevant_cubos' in result:
+        print(f"Cubos relevantes: {', '.join(result['relevant_cubos'])}")
+    
+    if 'ambito' in result:
+        print(f"Ámbito: {result['ambito']}")
+    
+    if 'is_consulta' in result:
+        print(f"Es consulta guardada: {'Sí' if result['is_consulta'] else 'No'}")
+    
+    if result.get('retry_count', 0) >= 3:
         print("Nota: Se alcanzó el máximo de intentos sin una respuesta satisfactoria.")
     
     print_separator()

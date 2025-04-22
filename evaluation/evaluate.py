@@ -80,14 +80,54 @@ class AgentEvaluator:
         # Extraer información de tokens si está disponible
         token_info = {}
         
-        if "usage_metadata" in response_metadata:
-            usage = response_metadata["usage_metadata"]
-            token_info["input_tokens"] = usage.get("input_tokens", 0)
-            token_info["output_tokens"] = usage.get("output_tokens", 0)
-            token_info["total_tokens"] = usage.get("total_tokens", 0)
-        elif "total_tokens" in response_metadata:
-            # Para modelos antiguos
-            token_info["total_tokens"] = response_metadata.get("total_tokens", 0)
+        # Si response_metadata es un string que contiene 'response_metadata'
+        if isinstance(response_metadata, str) and 'response_metadata' in response_metadata:
+            # Intentar extraer el JSON de los metadatos
+            try:
+                metadata_start = response_metadata.find("response_metadata={") + 19
+                metadata_end = response_metadata.find("} id=")
+                if metadata_start > 19 and metadata_end > 0:
+                    # Extraer el modelo del string
+                    if "'model':" in response_metadata:
+                        model_start = response_metadata.find("'model': '") + 10
+                        model_end = response_metadata.find("'", model_start)
+                        if model_start > 10 and model_end > 0:
+                            token_info["model"] = response_metadata[model_start:model_end]
+                
+                # Buscar usage_metadata
+                usage_start = response_metadata.find("usage_metadata={") + 16
+                usage_end = response_metadata.rfind("}")
+                if usage_start > 16 and usage_end > 0:
+                    # Extraer tokens de entrada, salida y total
+                    if "'input_tokens':" in response_metadata:
+                        input_tokens_start = response_metadata.find("'input_tokens': ") + 15
+                        input_tokens_end = response_metadata.find(",", input_tokens_start)
+                        if input_tokens_start > 15 and input_tokens_end > 0:
+                            token_info["input_tokens"] = int(response_metadata[input_tokens_start:input_tokens_end])
+                    
+                    if "'output_tokens':" in response_metadata:
+                        output_tokens_start = response_metadata.find("'output_tokens': ") + 16
+                        output_tokens_end = response_metadata.find(",", output_tokens_start)
+                        if output_tokens_start > 16 and output_tokens_end > 0:
+                            token_info["output_tokens"] = int(response_metadata[output_tokens_start:output_tokens_end])
+                    
+                    if "'total_tokens':" in response_metadata:
+                        total_tokens_start = response_metadata.find("'total_tokens': ") + 15
+                        total_tokens_end = response_metadata.find("}", total_tokens_start)
+                        if total_tokens_start > 15 and total_tokens_end > 0:
+                            token_info["total_tokens"] = int(response_metadata[total_tokens_start:total_tokens_end])
+            except Exception as e:
+                print(f"Error al procesar los metadatos de respuesta: {e}")
+        elif isinstance(response_metadata, dict):
+            # Para el formato original
+            if "usage_metadata" in response_metadata:
+                usage = response_metadata["usage_metadata"]
+                token_info["input_tokens"] = usage.get("input_tokens", 0)
+                token_info["output_tokens"] = usage.get("output_tokens", 0)
+                token_info["total_tokens"] = usage.get("total_tokens", 0)
+            elif "total_tokens" in response_metadata:
+                # Para modelos antiguos
+                token_info["total_tokens"] = response_metadata.get("total_tokens", 0)
         
         # Calcular costos aproximados (precios típicos por 1000 tokens)
         token_info["cost_estimate"] = {}
@@ -120,6 +160,25 @@ class AgentEvaluator:
         """
         # Si es un string directamente
         if isinstance(respuesta, str):
+            # Nuevo formato de generación con content='...'
+            if "content='" in respuesta:
+                try:
+                    # Buscar el contenido JSON en el formato content='{ "answer": "..." }'
+                    content_start = respuesta.find("content='") + 9
+                    content_end = respuesta.find("' additional_kwargs")
+                    if content_start > 9 and content_end > 0:
+                        content_str = respuesta[content_start:content_end]
+                        # Extraer el campo "answer" del JSON
+                        if '"answer":' in content_str:
+                            json_start = content_str.find('{')
+                            json_end = content_str.rfind('}') + 1
+                            if json_start >= 0 and json_end > json_start:
+                                json_str = content_str[json_start:json_end]
+                                content_json = json.loads(json_str)
+                                return content_json.get("answer", "No se pudo extraer la respuesta")
+                except Exception as e:
+                    print(f"Error al procesar la generación: {e}")
+                    return respuesta
             return respuesta
             
         # Si es un diccionario con campo content o answer
@@ -154,6 +213,7 @@ class AgentEvaluator:
         
         # Ejecutar el agente para obtener la respuesta
         resultado = self.agent.run(pregunta)
+        print(resultado)
         
         # Calcular tiempo de completado
         tiempo_completado = time.time() - tiempo_inicio
@@ -181,22 +241,35 @@ class AgentEvaluator:
         relevant_cubos = resultado.get("relevant_cubos", [])
         is_consulta = resultado.get("is_consulta", False)
         consulta_documents = resultado.get("consulta_documents", [])
-        hallucination_score = resultado.get("hallucination_score")
-        answer_score = resultado.get("answer_score")
+        
+        # Extraer puntuaciones si existen
+        hallucination_score = None
+        if "hallucination_score" in resultado and isinstance(resultado["hallucination_score"], dict):
+            hallucination_score = resultado["hallucination_score"].get("score")
+        
+        answer_score = None
+        if "answer_score" in resultado and isinstance(resultado["answer_score"], dict):
+            answer_score = resultado["answer_score"].get("score")
+        
         ambito = resultado.get("ambito")
         retrieval_details = resultado.get("retrieval_details", {})
         
         # Extraer metadatos de respuesta si existen
-        response_metadata = resultado.get("response_metadata", {})
+        response_metadata = resultado.get("generation", "")
         
         # Calcular información de tokens y costos
         token_info = self.calcular_token_cost(response_metadata)
+        
+        # Extraer modelo del metadata si está disponible
+        model_info = "unknown"
+        if token_info and "model" in token_info:
+            model_info = token_info["model"]
         
         # Agregar tiempo de completado e info de tokens como metadatos adicionales
         metadata = {
             "completion_time": tiempo_completado,
             "token_info": token_info,
-            "model_info": response_metadata.get("model", "unknown"),
+            "model_info": model_info,
             "hallucination_score": hallucination_score,
             "answer_score": answer_score,
             "relevant_cubos": relevant_cubos,
@@ -358,13 +431,25 @@ def guardar_resultados_deepeval(evaluador, resultados, ruta_salida=None):
         
         # Añadir metadatos si existen
         if hasattr(test_case, "metadata"):
+            # Procesar puntuaciones específicas para el formato de respuesta actualizado
+            hallucination_score = test_case.metadata.get("hallucination_score")
+            answer_score = test_case.metadata.get("answer_score")
+            
+            # Convertir string "yes"/"no" a booleano si es necesario
+            if isinstance(hallucination_score, str):
+                hallucination_score = hallucination_score.lower() == "yes"
+            if isinstance(answer_score, str):
+                answer_score = answer_score.lower() == "yes"
+            
             # Solo incluir algunos metadatos relevantes
             caso["metadata"] = {
                 "tiempo_completado": test_case.metadata.get("completion_time"),
                 "tokens_totales": test_case.metadata.get("token_info", {}).get("total_tokens"),
                 "modelo": test_case.metadata.get("model_info"),
                 "cubos_relevantes": test_case.metadata.get("relevant_cubos"),
-                "es_consulta": test_case.metadata.get("is_consulta")
+                "es_consulta": test_case.metadata.get("is_consulta"),
+                "puntuacion_alucinacion": hallucination_score,
+                "puntuacion_respuesta": answer_score
             }
         
         # Añadir puntuaciones individuales
