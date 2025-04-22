@@ -173,9 +173,18 @@ class AgentEvaluator:
                             json_start = content_str.find('{')
                             json_end = content_str.rfind('}') + 1
                             if json_start >= 0 and json_end > json_start:
+                                # Manejo para escapado doble de comillas
+                                content_str = content_str.replace('\\"', '"')
                                 json_str = content_str[json_start:json_end]
-                                content_json = json.loads(json_str)
-                                return content_json.get("answer", "No se pudo extraer la respuesta")
+                                try:
+                                    content_json = json.loads(json_str)
+                                    return content_json.get("answer", "No se pudo extraer la respuesta")
+                                except json.JSONDecodeError:
+                                    # Si falla, usar un enfoque más simple para extraer la respuesta
+                                    answer_start = json_str.find('"answer": "') + 11
+                                    answer_end = json_str.rfind('"')
+                                    if answer_start > 11 and answer_end > answer_start:
+                                        return json_str[answer_start:answer_end]
                 except Exception as e:
                     print(f"Error al procesar la generación: {e}")
                     return respuesta
@@ -260,24 +269,6 @@ class AgentEvaluator:
         # Calcular información de tokens y costos
         token_info = self.calcular_token_cost(response_metadata)
         
-        # Extraer modelo del metadata si está disponible
-        model_info = "unknown"
-        if token_info and "model" in token_info:
-            model_info = token_info["model"]
-        
-        # Agregar tiempo de completado e info de tokens como metadatos adicionales
-        metadata = {
-            "completion_time": tiempo_completado,
-            "token_info": token_info,
-            "model_info": model_info,
-            "hallucination_score": hallucination_score,
-            "answer_score": answer_score,
-            "relevant_cubos": relevant_cubos,
-            "ambito": ambito,
-            "is_consulta": is_consulta,
-            "retrieval_details": retrieval_details
-        }
-        
         # Si es una consulta, agregar los documentos de consulta al contexto
         if is_consulta and consulta_documents:
             context_docs = consulta_documents
@@ -304,14 +295,25 @@ class AgentEvaluator:
                 # En cualquier otro caso, convertir a string
                 formatted_context.append(str(doc))
         
-        # Crear y devolver el caso de prueba
+        # Crear y devolver el caso de prueba con los parámetros permitidos
         test_case = LLMTestCase(
             input=pregunta,
             actual_output=generation or "No se pudo extraer una respuesta",
             expected_output=respuesta_esperada,
             context=formatted_context,
-            metadata=metadata
+            token_cost=token_info.get("total_tokens", 0),
+            completion_time=tiempo_completado
         )
+        
+        # Guardar los metadatos adicionales como atributos del objeto para uso posterior
+        test_case.hallucination_score = hallucination_score
+        test_case.answer_score = answer_score
+        test_case.relevant_cubos = relevant_cubos
+        test_case.ambito = ambito
+        test_case.is_consulta = is_consulta
+        test_case.model_info = token_info.get("model", "unknown")
+        test_case.token_info = token_info
+        test_case.retrieval_details = retrieval_details
         
         self.test_cases.append(test_case)
         return test_case
@@ -429,28 +431,26 @@ def guardar_resultados_deepeval(evaluador, resultados, ruta_salida=None):
             "puntuaciones": {}
         }
         
-        # Añadir metadatos si existen
-        if hasattr(test_case, "metadata"):
-            # Procesar puntuaciones específicas para el formato de respuesta actualizado
-            hallucination_score = test_case.metadata.get("hallucination_score")
-            answer_score = test_case.metadata.get("answer_score")
+        # Procesar puntuaciones específicas para el formato de respuesta actualizado
+        hallucination_score = getattr(test_case, "hallucination_score", None)
+        answer_score = getattr(test_case, "answer_score", None)
+        
+        # Convertir string "yes"/"no" a booleano si es necesario
+        if isinstance(hallucination_score, str):
+            hallucination_score = hallucination_score.lower() == "yes"
+        if isinstance(answer_score, str):
+            answer_score = answer_score.lower() == "yes"
             
-            # Convertir string "yes"/"no" a booleano si es necesario
-            if isinstance(hallucination_score, str):
-                hallucination_score = hallucination_score.lower() == "yes"
-            if isinstance(answer_score, str):
-                answer_score = answer_score.lower() == "yes"
-            
-            # Solo incluir algunos metadatos relevantes
-            caso["metadata"] = {
-                "tiempo_completado": test_case.metadata.get("completion_time"),
-                "tokens_totales": test_case.metadata.get("token_info", {}).get("total_tokens"),
-                "modelo": test_case.metadata.get("model_info"),
-                "cubos_relevantes": test_case.metadata.get("relevant_cubos"),
-                "es_consulta": test_case.metadata.get("is_consulta"),
-                "puntuacion_alucinacion": hallucination_score,
-                "puntuacion_respuesta": answer_score
-            }
+        # Añadir metadatos relevantes
+        caso["metadata"] = {
+            "tiempo_completado": test_case.completion_time,
+            "tokens_totales": test_case.token_cost,
+            "modelo": getattr(test_case, "model_info", "unknown"),
+            "cubos_relevantes": getattr(test_case, "relevant_cubos", []),
+            "es_consulta": getattr(test_case, "is_consulta", False),
+            "puntuacion_alucinacion": hallucination_score,
+            "puntuacion_respuesta": answer_score
+        }
         
         # Añadir puntuaciones individuales
         if hasattr(test_case, "results"):

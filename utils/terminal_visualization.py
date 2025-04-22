@@ -105,9 +105,18 @@ def print_workflow_result(result: Dict[str, Any]):
                     json_start = content_str.find('{')
                     json_end = content_str.rfind('}') + 1
                     if json_start >= 0 and json_end > json_start:
+                        # Manejo para escapado doble de comillas
+                        content_str = content_str.replace('\\"', '"')
                         json_str = content_str[json_start:json_end]
-                        content_json = json.loads(json_str)
-                        respuesta_texto = content_json.get("answer", respuesta_texto)
+                        try:
+                            content_json = json.loads(json_str)
+                            respuesta_texto = content_json.get("answer", respuesta_texto)
+                        except json.JSONDecodeError:
+                            # Si falla, usar un enfoque más simple para extraer la respuesta
+                            answer_start = json_str.find('"answer": "') + 11
+                            answer_end = json_str.rfind('"')
+                            if answer_start > 11 and answer_end > answer_start:
+                                respuesta_texto = json_str[answer_start:answer_end]
         except Exception as e:
             print(f"Error al procesar la generación: {e}")
     
