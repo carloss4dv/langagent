@@ -211,11 +211,11 @@ class LangChainAgent:
         print_title(f"Consulta: {query}")
         
         # Ejecutar el workflow
-        result = self.app.invoke({"query": query})
+        result = self.app.invoke({"question": query})
         
         # Mostrar documentos recuperados
         if "documents" in result:
-            print_documents(result["documents"], "Documentos Recuperados")
+            print_documents(result["documents"])
         
         # Mostrar resultados
         print_workflow_result(result)

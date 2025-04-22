@@ -29,23 +29,50 @@ def print_title(title: str):
     print(f"  {title.upper()}  ")
     print_separator()
 
-def print_documents(documents: List[Document], max_docs: int = None):
+def print_documents(documents, title="Documentos Recuperados"):
     """
     Imprime documentos en la terminal.
     
     Args:
         documents (List[Document]): Lista de documentos a imprimir.
-        max_docs (int, optional): Número máximo de documentos a imprimir.
+        title (str): Título para la sección de documentos.
     """
-    if max_docs is not None:
+    if not documents:
+        print(f"\n{title}: No hay documentos para mostrar")
+        return
+    
+    print_title(title)
+    
+    # Limitar a 3 documentos para evitar sobrecargar la terminal
+    max_docs = 3
+    if len(documents) > max_docs:
+        print(f"Mostrando {max_docs} de {len(documents)} documentos:")
         documents = documents[:max_docs]
     
-    print_title("Documentos")
     for i, doc in enumerate(documents):
         print(f"Documento {i+1}:")
-        print(f"Fuente: {doc.metadata.get('source', 'Desconocida')}")
+        
+        # Intentar acceder a metadata de diferentes formas según el tipo de documento
+        if hasattr(doc, 'metadata'):
+            print(f"Fuente: {doc.metadata.get('source', 'Desconocida')}")
+        elif isinstance(doc, dict) and 'metadata' in doc:
+            print(f"Fuente: {doc['metadata'].get('source', 'Desconocida')}")
+        
+        # Extraer el contenido del documento
+        if hasattr(doc, 'page_content'):
+            content = doc.page_content
+        elif isinstance(doc, dict) and 'page_content' in doc:
+            content = doc['page_content']
+        elif isinstance(doc, dict) and 'text' in doc:
+            content = doc['text']
+        elif isinstance(doc, str):
+            content = doc
+        else:
+            content = str(doc)
+        
+        # Mostrar contenido truncado si es muy largo
         print("Contenido:")
-        print(doc.page_content[:500] + "..." if len(doc.page_content) > 500 else doc.page_content)
+        print(content[:500] + "..." if len(content) > 500 else content)
         print_separator(30)
 
 def print_workflow_result(result: Dict[str, Any]):
