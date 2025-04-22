@@ -12,23 +12,39 @@ import argparse
 from datetime import datetime
 from evaluate import AgentEvaluator, guardar_resultados_deepeval
 
-# Casos de prueba predefinidos (preguntas, respuestas esperadas opcionales)
+# Casos de prueba basados en los cubos de datos del sistema
 CASOS_PRUEBA = [
     {
-        "pregunta": "¿Cuál es la diferencia entre un cubo BIC y un cubo OCEANO?",
-        "respuesta_esperada": None  # Opcional
+        "pregunta": "¿Cómo se calcula la tasa de éxito académico?",
+        "respuesta_esperada": "La tasa de éxito es la relación porcentual entre el número total de créditos superados por los estudiantes en un estudio y el número total de créditos presentados a examen. Se cuentan los créditos presentados una sola vez en el curso académico aunque se haya presentado a más de una convocatoria. Se excluyen del cálculo los créditos de asignaturas cursadas por estudiantes en programas de intercambio, los créditos matriculados en asignaturas que no son las del plan del alumno y los créditos reconocidos, adaptados o convalidados."
     },
     {
-        "pregunta": "¿Qué es un cubo BIC?",
-        "respuesta_esperada": None
+        "pregunta": "¿Qué diferencia hay entre créditos evaluados y créditos superados?",
+        "respuesta_esperada": "Los créditos evaluados incluyen todos los créditos matriculados por los estudiantes que han sido calificados (presentado o no presentado) en actas, mientras que los créditos superados son específicamente los créditos de asignaturas cuyos resultados de examen han obtenido cualquiera de las siguientes calificaciones: Aprobado, Aprobado por compensación, Apto, Matrícula de Honor, Notable o Sobresaliente."
     },
     {
-        "pregunta": "¿Qué cubos están disponibles en el sistema?",
-        "respuesta_esperada": None
+        "pregunta": "¿Cuántos tipos de programas de movilidad existen para estudiantes de la Universidad de Zaragoza?",
+        "respuesta_esperada": "Existen varios programas de movilidad para estudiantes de la Universidad de Zaragoza, entre ellos: Erasmus, SICUE-SÉNECA, Movilidad en másteres (AGE), Movilidad UE-Suiza, Movilidad Transfronteriza, Movilidad Iberoamérica, UZ/Norteamérica, Oceanía y Asia, entre otros. Los programas se pueden clasificar como internacionales o nacionales (como SICUE)."
     },
     {
-        "pregunta": "¿Cómo puedo obtener información de ventas por región?",
-        "respuesta_esperada": None
+        "pregunta": "¿Cómo puedo saber si una universidad de destino pertenece a la alianza UNITA?",
+        "respuesta_esperada": "En los cubos de movilidad existe un atributo específico llamado 'Universidad de Destino UNITA (S/N)' que permite clasificar los datos en función de si la universidad de destino pertenece a la alianza de universidades europeas UNITA (S) o no (N). El primer curso académico en que están registradas universidades UNITA es 2020/21."
+    },
+    {
+        "pregunta": "¿Qué métricas permiten evaluar el rendimiento de los estudiantes?",
+        "respuesta_esperada": "Las principales métricas para evaluar el rendimiento de los estudiantes son: Tasa de Éxito (relación entre créditos superados y créditos presentados), Tasa de Rendimiento (relación entre créditos superados y créditos matriculados) y Tasa de Evaluación (relación entre créditos presentados y créditos matriculados). También se cuenta con medidas como la Media de Convocatorias Consumidas y la Nota Media de Admisión."
+    },
+    {
+        "pregunta": "¿Qué información se recoge sobre los estudiantes extranjeros que vienen a la Universidad de Zaragoza (Estudiantes IN)?",
+        "respuesta_esperada": "Sobre los estudiantes IN se recoge: el número total de estudiantes, la duración media de la estancia en meses, su tasa de rendimiento, datos personales (nacionalidad, rango de edad, sexo), su centro de acogida, el centro de las asignaturas que cursan, información sobre su expediente (créditos matriculados y superados), detalles de la movilidad (país y universidad de origen, programa de movilidad, si la universidad pertenece a UNITA) y datos sobre la titulación cursada."
+    },
+    {
+        "pregunta": "¿Cómo se contabilizan las renuncias a movilidad en el sistema?",
+        "respuesta_esperada": "Las renuncias a movilidad se contabilizan como el número total de solicitudes aceptadas que no se han hecho efectivas, ya sea por renuncia expresa o tácita. En la dimensión 'Movilidad' existe un atributo 'Renuncia (S/N)' que permite distinguir entre las solicitudes de movilidad aceptadas que no se han hecho efectivas (S) de las que sí se han hecho efectivas (N)."
+    },
+    {
+        "pregunta": "¿Qué tipos de movilidad existen para los investigadores?",
+        "respuesta_esperada": "Para los investigadores existen dos tipos principales de movilidad según su tipología: estancias y vinculaciones. La información se clasifica según la duración de la movilidad en semanas, las fechas de inicio y finalización, si han realizado prórroga (S/N), el tipo de entidad de origen (empresa, universidad o unidad de investigación) y otros datos como el grupo de investigación, macroárea, nacionalidad, instituto de investigación, etc."
     }
 ]
 

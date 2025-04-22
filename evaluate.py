@@ -22,6 +22,9 @@ from deepeval.metrics import (
 )
 from deepeval.test_case import LLMTestCase
 from langagent.lang_chain_agent import LangChainAgent
+import deepeval
+
+deepeval.logger.setLevel(deepeval.logging.INFO)
 
 class AgentEvaluator:
     """
