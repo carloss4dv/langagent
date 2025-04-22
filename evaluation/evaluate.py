@@ -55,15 +55,6 @@ class AgentEvaluator:
             local_llm2=local_llm2
         )
         
-        # Inicializar métricas de evaluación
-        self.metrics = {
-            "answer_relevancy": AnswerRelevancyMetric(threshold=0.7),
-            "faithfulness": FaithfulnessMetric(threshold=0.7),
-            "contextual_relevancy": ContextualRelevancyMetric(threshold=0.7),
-            "contextual_recall": ContextualRecallMetric(threshold=0.7),
-            "contextual_precision": ContextualPrecisionMetric(threshold=0.7)
-        }
-        
         self.test_cases = []
         self.raw_outputs = []  # Almacenar las salidas completas del agente
     
@@ -341,10 +332,18 @@ class AgentEvaluator:
         for pregunta, respuesta_esperada in zip(preguntas, respuestas_esperadas):
             self.evaluar_pregunta(pregunta, respuesta_esperada)
         
+        # Lista de nombres de métricas que utilizamos
+        metric_names = [
+            "answer_relevancy",
+            "faithfulness",
+            "contextual_relevancy",
+            "contextual_recall",
+            "contextual_precision"
+        ]
+        
         # Generar resultados
         return {
-            "metrics": list(self.metrics.values()),
-            "scores": {metric.name: [] for metric in self.metrics.values()},
+            "metric_names": metric_names,
             "test_cases": self.test_cases
         }
     
@@ -362,18 +361,48 @@ class AgentEvaluator:
         # Crear caso de prueba
         test_case = self.crear_caso_prueba(pregunta, respuesta_esperada)
         
-        # Evaluar con cada métrica
-        for metric_name, metric in self.metrics.items():
-            try:
-                # Ejecutar evaluación
-                result = evaluate(test_case, metric)
-                
-                # Añadir el resultado al test_case para referencia futura
-                if not hasattr(test_case, "results"):
-                    test_case.results = {}
-                test_case.results[metric_name] = result
-            except Exception as e:
-                print(f"Error evaluando métrica {metric_name}: {e}")
+        # Crear métricas individuales para esta evaluación
+        answer_relevancy = AnswerRelevancyMetric(threshold=0.7)
+        faithfulness = FaithfulnessMetric(threshold=0.7)
+        contextual_relevancy = ContextualRelevancyMetric(threshold=0.7)
+        contextual_recall = ContextualRecallMetric(threshold=0.7)
+        contextual_precision = ContextualPrecisionMetric(threshold=0.7)
+        
+        # Inicializar results para almacenar resultados
+        test_case.results = {}
+        
+        # Evaluar con cada métrica directamente
+        try:
+            result = evaluate(test_case, answer_relevancy)
+            test_case.results["answer_relevancy"] = result
+        except Exception as e:
+            print(f"Error evaluando métrica answer_relevancy: {e}")
+        
+        try:
+            result = evaluate(test_case, faithfulness)
+            test_case.results["faithfulness"] = result
+        except Exception as e:
+            print(f"Error evaluando métrica faithfulness: {e}")
+        
+        try:
+            result = evaluate(test_case, contextual_relevancy)
+            test_case.results["contextual_relevancy"] = result
+        except Exception as e:
+            print(f"Error evaluando métrica contextual_relevancy: {e}")
+        
+        try:
+            result = evaluate(test_case, contextual_recall)
+            test_case.results["contextual_recall"] = result
+        except Exception as e:
+            print(f"Error evaluando métrica contextual_recall: {e}")
+        
+        try:
+            result = evaluate(test_case, contextual_precision)
+            test_case.results["contextual_precision"] = result
+        except Exception as e:
+            print(f"Error evaluando métrica contextual_precision: {e}")
+        
+        return test_case
 
 def guardar_resultados_deepeval(evaluador, resultados, ruta_salida=None):
     """
@@ -397,25 +426,39 @@ def guardar_resultados_deepeval(evaluador, resultados, ruta_salida=None):
         os.makedirs("output_eval", exist_ok=True)
         archivo_resultados = os.path.join("output_eval", f"eval_results_{timestamp}.json")
     
+    # Obtener nombres de métricas
+    metric_names = resultados.get("metric_names", [
+        "answer_relevancy",
+        "faithfulness",
+        "contextual_relevancy",
+        "contextual_recall",
+        "contextual_precision"
+    ])
+    
     # Preparar resultados para serialización
     resultados_json = {
         "timestamp": timestamp,
         "nombre_evaluacion": f"Evaluación {timestamp}",
-        "metricas": [metric.name for metric in resultados["metrics"]],
+        "metricas": metric_names,
         "num_preguntas": len(evaluador.test_cases),
         "puntuaciones": {},
         "casos": []
     }
     
-    # Calcular puntuaciones agregadas
-    for metric in resultados["metrics"]:
-        metric_name = metric.name
-        scores = [score for score in evaluador.test_cases if hasattr(score, "results") and metric_name in score.results]
+    # Calcular puntuaciones agregadas para cada métrica
+    for metric_name in metric_names:
+        scores = []
+        for test_case in evaluador.test_cases:
+            if hasattr(test_case, "results") and metric_name in test_case.results:
+                result = test_case.results[metric_name]
+                if hasattr(result, "score") and result.score is not None:
+                    scores.append(result.score)
+        
         if scores:
             resultados_json["puntuaciones"][metric_name] = {
-                "promedio": sum(score.results[metric_name].score for score in scores if score.results[metric_name].score is not None) / len(scores),
-                "min": min(score.results[metric_name].score for score in scores if score.results[metric_name].score is not None),
-                "max": max(score.results[metric_name].score for score in scores if score.results[metric_name].score is not None)
+                "promedio": sum(scores) / len(scores),
+                "min": min(scores),
+                "max": max(scores)
             }
         else:
             resultados_json["puntuaciones"][metric_name] = {"promedio": None, "min": None, "max": None}
@@ -454,8 +497,15 @@ def guardar_resultados_deepeval(evaluador, resultados, ruta_salida=None):
         
         # Añadir puntuaciones individuales
         if hasattr(test_case, "results"):
-            for metric_name, result in test_case.results.items():
-                caso["puntuaciones"][metric_name] = result.score if result.score is not None else None
+            for metric_name in metric_names:
+                if metric_name in test_case.results:
+                    result = test_case.results[metric_name]
+                    if hasattr(result, "score"):
+                        caso["puntuaciones"][metric_name] = result.score
+                    else:
+                        caso["puntuaciones"][metric_name] = None
+                else:
+                    caso["puntuaciones"][metric_name] = None
         
         resultados_json["casos"].append(caso)
     
@@ -506,6 +556,31 @@ def main():
     ruta_resultados = guardar_resultados_deepeval(evaluador, resultados, args.salida)
     
     print(f"Evaluación completada. Resultados guardados en: {ruta_resultados}")
+    
+    # Si hay resultados, mostrar puntuaciones agregadas
+    if evaluador.test_cases:
+        print("\nResumen de puntuaciones:")
+        metric_names = resultados.get("metric_names", [
+            "answer_relevancy",
+            "faithfulness",
+            "contextual_relevancy",
+            "contextual_recall",
+            "contextual_precision"
+        ])
+        
+        for metric_name in metric_names:
+            scores = []
+            for test_case in evaluador.test_cases:
+                if hasattr(test_case, "results") and metric_name in test_case.results:
+                    result = test_case.results[metric_name]
+                    if hasattr(result, "score") and result.score is not None:
+                        scores.append(result.score)
+            
+            if scores:
+                avg_score = sum(scores) / len(scores)
+                print(f"  {metric_name}: {avg_score:.2f}")
+            else:
+                print(f"  {metric_name}: No disponible")
 
 if __name__ == "__main__":
     main() 
