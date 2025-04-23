@@ -37,15 +37,38 @@ class MilvusVectorStore(VectorStoreBase):
         Returns:
             Dict[str, Any]: Argumentos de conexión
         """
+        # Obtener parámetros de la configuración
+        milvus_uri = VECTORSTORE_CONFIG.get("milvus_uri", "http://localhost:19530")
+        milvus_token = VECTORSTORE_CONFIG.get("milvus_token", "")
+        milvus_secure = VECTORSTORE_CONFIG.get("milvus_secure", True)
+        
+        # Verificar si hay variables de entorno disponibles (tienen prioridad)
+        env_uri = os.getenv("ZILLIZ_CLOUD_URI")
+        env_token = os.getenv("ZILLIZ_CLOUD_TOKEN")
+        
+        if env_uri:
+            milvus_uri = env_uri
+            logger.info(f"Usando URI de Milvus desde variable de entorno: {milvus_uri}")
+        else:
+            logger.info(f"Usando URI de Milvus desde configuración: {milvus_uri}")
+            
+        if env_token:
+            milvus_token = env_token
+            logger.info("Usando token de autenticación desde variable de entorno")
+        elif milvus_token:
+            logger.info("Usando token de autenticación desde configuración")
+        
+        # Construir argumentos de conexión
         connection_args = {
-            "uri": VECTORSTORE_CONFIG.get("milvus_uri", "http://localhost:19530"),
-            "token": VECTORSTORE_CONFIG.get("milvus_token", ""),
-            "secure": VECTORSTORE_CONFIG.get("milvus_secure", True)
+            "uri": milvus_uri,
+            "secure": milvus_secure
         }
         
-        # Eliminar token si está vacío
-        if not connection_args["token"]:
-            del connection_args["token"]
+        # Añadir token solo si está presente
+        if milvus_token:
+            connection_args["token"] = milvus_token
+        
+        logger.info(f"Conectando a Milvus en: {milvus_uri} (Secure: {milvus_secure})")
         
         return connection_args
     
@@ -120,70 +143,84 @@ class MilvusVectorStore(VectorStoreBase):
         connection_args = self._get_connection_args()
         logger.info(f"Creando vectorstore Milvus con colección {collection_name}")
         
-        # Primero, crear la colección base con drop_old=True para asegurar una colección limpia
-        milvus_db = Milvus.from_documents(
-            documents=documents if not self.use_partitioning else documents[:1],  # Solo un documento para inicializar
-            embedding=embeddings,
-            collection_name=collection_name,
-            connection_args=connection_args,
-            drop_old=True,  # Forzar recreación
-        )
-        
-        # Si no usamos particionamiento, devolver la vectorstore
-        if not self.use_partitioning:
-            return milvus_db
-        
-        # Preparar documentos por partición
-        partitioned_docs = self._prepare_documents_for_partitioning(documents)
-        
-        # Crear particiones y añadir documentos
-        for partition_name, partition_docs in partitioned_docs.items():
-            if not partition_docs:
-                continue
-                
-            logger.info(f"Creando partición '{partition_name}' en colección '{collection_name}'")
-            
-            try:
-                # Intentar crear la partición
-                partition_name = self._normalize_partition_name(partition_name)
-                milvus_db.col.create_partition(partition_name=partition_name)
-                
-                # Añadir documentos a la partición
-                milvus_db.add_documents(documents=partition_docs, partition_name=partition_name)
-                
-                # Guardar el mapeo de particiones
-                if collection_name not in self.collection_mapping:
-                    self.collection_mapping[collection_name] = []
-                
-                self.collection_mapping[collection_name].append(partition_name)
-                
-            except Exception as e:
-                logger.error(f"Error al crear partición {partition_name}: {str(e)}")
-        
-        # Crear índice HNSW para mejorar el rendimiento
         try:
-            index_params = {
-                "metric_type": "COSINE",
-                "index_type": "HNSW",
-                "params": {
-                    "M": 16,
-                    "efConstruction": 200
-                }
-            }
-            
-            # Crear el índice en el campo de embeddings
-            milvus_db.col.create_index(
-                field_name="text_embedding", 
-                index_params=index_params
+            # Primero, crear la colección base con drop_old=True para asegurar una colección limpia
+            milvus_db = Milvus.from_documents(
+                documents=documents if not self.use_partitioning else documents[:1],  # Solo un documento para inicializar
+                embedding=embeddings,
+                collection_name=collection_name,
+                connection_args=connection_args,
+                drop_old=True,  # Forzar recreación
             )
             
-            # Cargar la colección en memoria para mejor rendimiento
-            milvus_db.col.load()
+            # Si no usamos particionamiento, devolver la vectorstore
+            if not self.use_partitioning:
+                logger.info(f"Vectorstore Milvus creada correctamente para colección {collection_name} sin particionamiento")
+                return milvus_db
+            
+            # Preparar documentos por partición
+            partitioned_docs = self._prepare_documents_for_partitioning(documents)
+            
+            # Crear particiones y añadir documentos
+            for partition_name, partition_docs in partitioned_docs.items():
+                if not partition_docs:
+                    continue
+                    
+                logger.info(f"Creando partición '{partition_name}' en colección '{collection_name}'")
+                
+                try:
+                    # Intentar crear la partición
+                    partition_name = self._normalize_partition_name(partition_name)
+                    milvus_db.col.create_partition(partition_name=partition_name)
+                    
+                    # Añadir documentos a la partición
+                    milvus_db.add_documents(documents=partition_docs, partition_name=partition_name)
+                    
+                    # Guardar el mapeo de particiones
+                    if collection_name not in self.collection_mapping:
+                        self.collection_mapping[collection_name] = []
+                    
+                    self.collection_mapping[collection_name].append(partition_name)
+                    
+                except Exception as e:
+                    logger.error(f"Error al crear partición {partition_name}: {str(e)}")
+            
+            # Crear índice HNSW para mejorar el rendimiento
+            try:
+                index_params = {
+                    "metric_type": "COSINE",
+                    "index_type": "HNSW",
+                    "params": {
+                        "M": 16,
+                        "efConstruction": 200
+                    }
+                }
+                
+                # Crear el índice en el campo de embeddings
+                milvus_db.col.create_index(
+                    field_name="text_embedding", 
+                    index_params=index_params
+                )
+                
+                # Cargar la colección en memoria para mejor rendimiento
+                milvus_db.col.load()
+                
+                logger.info(f"Índice creado correctamente para colección {collection_name}")
+                
+            except Exception as e:
+                logger.error(f"Error al crear índice en colección {collection_name}: {str(e)}")
+            
+            logger.info(f"Vectorstore Milvus creada correctamente para colección {collection_name}")
+            return milvus_db
             
         except Exception as e:
-            logger.error(f"Error al crear índice en colección {collection_name}: {str(e)}")
-        
-        return milvus_db
+            logger.error(f"Error al crear vectorstore Milvus para colección {collection_name}: {str(e)}")
+            # Proporcionar información detallada sobre el problema de conexión
+            if "connection" in str(e).lower():
+                logger.error(f"Problema de conexión a Milvus. Verifique que el servidor esté en ejecución en {connection_args['uri']} " +
+                             f"y que las credenciales sean correctas.")
+                logger.error("Asegúrese de configurar las variables de entorno ZILLIZ_CLOUD_URI y ZILLIZ_CLOUD_TOKEN correctamente.")
+            raise e
     
     def load_vectorstore(self, embeddings: Embeddings, collection_name: str, 
                        **kwargs) -> Milvus:
@@ -198,46 +235,36 @@ class MilvusVectorStore(VectorStoreBase):
             Milvus: Instancia de la vectorstore cargada
         """
         connection_args = self._get_connection_args()
-        logger.info(f"Cargando vectorstore Milvus con colección {collection_name}")
+        logger.info(f"Cargando vectorstore Milvus existente: {collection_name}")
         
         try:
-            # Cargar colección existente
             milvus_db = Milvus(
                 embedding_function=embeddings,
                 collection_name=collection_name,
                 connection_args=connection_args
             )
             
-            # Obtener y guardar las particiones existentes
-            if self.use_partitioning:
-                try:
-                    partitions = milvus_db.col.partitions
-                    partition_names = [p.name for p in partitions]
-                    
-                    # Excluir la partición _default
-                    partition_names = [p for p in partition_names if p != "_default"]
-                    
-                    self.collection_mapping[collection_name] = partition_names
-                    logger.info(f"Particiones encontradas en {collection_name}: {partition_names}")
-                    
-                except Exception as e:
-                    logger.error(f"Error al obtener particiones de {collection_name}: {str(e)}")
-            
-            # Cargar la colección en memoria para mejor rendimiento
-            milvus_db.col.load()
+            # Cargar metadatos de particiones si existen
+            try:
+                partitions = milvus_db.col.partitions
+                partition_names = [p.name for p in partitions]
+                
+                # Guardar en el mapeo de colecciones
+                self.collection_mapping[collection_name] = partition_names
+                
+                logger.info(f"Colección {collection_name} cargada con {len(partition_names)} particiones: {partition_names}")
+            except Exception as e:
+                logger.warning(f"No se pudieron obtener particiones para {collection_name}: {str(e)}")
             
             return milvus_db
-            
         except Exception as e:
             logger.error(f"Error al cargar colección {collection_name}: {str(e)}")
-            # Crear una colección vacía si no existe
-            return Milvus.from_documents(
-                documents=[],  # Colección vacía
-                embedding=embeddings,
-                collection_name=collection_name,
-                connection_args=connection_args,
-                drop_old=False
-            )
+            # Proporcionar información detallada sobre el problema de conexión
+            if "connection" in str(e).lower():
+                logger.error(f"Problema de conexión a Milvus. Verifique que el servidor esté en ejecución en {connection_args['uri']} " +
+                             f"y que las credenciales sean correctas.")
+                logger.error("Asegúrese de configurar las variables de entorno ZILLIZ_CLOUD_URI y ZILLIZ_CLOUD_TOKEN correctamente.")
+            raise e
     
     def _get_ambito_from_query(self, query: str) -> Optional[str]:
         """

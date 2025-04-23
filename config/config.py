@@ -29,12 +29,12 @@ VECTORSTORE_CONFIG = {
     "k_retrieval": 6,          # Número de documentos a recuperar
     "similarity_threshold": 0.7,  # Umbral mínimo de similitud para considerar un documento relevante
     "max_docs_total": 15,       # Aumentar el límite total de documentos
-    "vector_db_type": "chroma", # Tipo de base de datos vectorial (chroma o milvus)
+    "vector_db_type": "milvus", # Tipo de base de datos vectorial (chroma o milvus)
     
     # Configuración para Milvus/Zilliz Cloud
     "milvus_uri": os.getenv("ZILLIZ_CLOUD_URI", "http://localhost:19530"),
     "milvus_token": os.getenv("ZILLIZ_CLOUD_TOKEN", ""),
-    "milvus_secure": True,     # Usar conexión segura (para Zilliz Cloud)
+    "milvus_secure": os.getenv("ZILLIZ_CLOUD_SECURE", "True").lower() in ("true", "1", "t"),     # Usar conexión segura (para Zilliz Cloud)
     
     # Configuración de particionamiento para Milvus
     "use_partitioning": True,  # Usar particiones en Milvus
