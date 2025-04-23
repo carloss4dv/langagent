@@ -1,27 +1,31 @@
 """
-Módulo principal para la integración de llama-index con langagent.
-Este módulo proporciona la configuración y ejecución del agente con capacidades
-de RAG avanzado utilizando llama-index.
-"""
-import re
-import os
-import argparse
-import logging
-from typing import List, Dict, Any, Optional
+Módulo principal para la configuración y ejecución del agente con LlamaIndex.
 
-# Importaciones estándar
+Este script configura y ejecuta el agente de respuesta a preguntas
+utilizando LangGraph, LlamaIndex, y diversos tipos de vectorstores.
+"""
+
+import os
+import re
+import sys
+import json
+import logging
+import argparse
+from typing import Dict, List, Any, Optional
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
 
 # Importaciones de langagent para la carga de documentos y creación de modelos
 from langagent.utils.document_loader import (
     load_documents_from_directory,
     load_consultas_guardadas
 )
-from langagent.utils.vectorstore import (
+from langagent.vectorstore import (
     create_embeddings,
-    create_vectorstore, 
-    load_vectorstore
+    VectorStoreFactory
 )
 from langagent.models.llm import (
     create_llm, 
@@ -58,7 +62,8 @@ from langagent.config.config import (
 logger = logging.getLogger(__name__)
 
 def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm2=None, 
-                use_advanced_rag=False, advanced_techniques=None, consultas_dir=None):
+                use_advanced_rag=False, advanced_techniques=None, consultas_dir=None,
+                vector_db_type=None):
     """
     Configura el agente con todos sus componentes para RAG avanzado.
     
@@ -70,6 +75,7 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
         use_advanced_rag (bool): Si se deben usar técnicas avanzadas de RAG
         advanced_techniques (list): Lista de técnicas avanzadas específicas a utilizar
         consultas_dir (str, optional): Directorio con las consultas guardadas.
+        vector_db_type (str, optional): Tipo de vectorstore a utilizar ('chroma' o 'milvus').
         
     Returns:
         tuple: Workflow compilado y componentes del agente.
@@ -78,10 +84,11 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
     
     # Usar valores de configuración si no se proporcionan argumentos
     data_dir = data_dir or PATHS_CONFIG["default_data_dir"]
-    persist_directory = persist_directory or PATHS_CONFIG["default_chroma_dir"]
+    persist_directory = persist_directory or PATHS_CONFIG["default_vectorstore_dir"]
     local_llm = local_llm or LLM_CONFIG["default_model"]
     local_llm2 = local_llm2 or LLM_CONFIG.get("default_model2", local_llm)
     consultas_dir = consultas_dir or os.path.join(data_dir, "consultas_guardadas")
+    vector_db_type = vector_db_type or VECTORSTORE_CONFIG.get("vector_db_type", "chroma")
     
     # Verificar qué técnicas avanzadas usar
     advanced_techniques = advanced_techniques or []
@@ -92,6 +99,9 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
     # Crear embeddings
     print("Creando embeddings...")
     embeddings = create_embeddings()
+    
+    # Obtener la instancia de vectorstore adecuada
+    vectorstore_handler = VectorStoreFactory.get_vectorstore_instance(vector_db_type)
     
     # Cargar documentos
     print("Cargando documentos...")
@@ -158,16 +168,36 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
         # Dividir documentos en chunks
         doc_splits = text_splitter.split_documents(docs)
         
-        # Crear directorio para vectorstore de este cubo
-        cubo_persist_dir = os.path.join(persist_directory, f"Cubo{cubo_name}")
+        # Añadir metadatos a los documentos
+        for doc in doc_splits:
+            doc.metadata["cubo_source"] = cubo_name
+            # Intentar identificar el ámbito del cubo
+            from langagent.models.constants import CUBO_TO_AMBITO
+            if cubo_name in CUBO_TO_AMBITO:
+                doc.metadata["ambito"] = CUBO_TO_AMBITO[cubo_name]
         
-        # Crear o cargar vectorstore básica para este cubo
-        if not os.path.exists(cubo_persist_dir):
-            print(f"Creando nueva base de datos vectorial para {cubo_name}...")
-            db = create_vectorstore(doc_splits, embeddings, cubo_persist_dir)
-        else:
-            print(f"Cargando base de datos vectorial existente para {cubo_name}...")
-            db = load_vectorstore(cubo_persist_dir, embeddings)
+        # Nombre de la colección para el cubo
+        collection_name = f"Cubo{cubo_name}"
+        
+        try:
+            # Intentar cargar una vectorstore existente
+            print(f"Intentando cargar vectorstore existente para {cubo_name}...")
+            db = vectorstore_handler.load_vectorstore(
+                embeddings=embeddings,
+                collection_name=collection_name,
+                persist_directory=os.path.join(persist_directory, collection_name)
+            )
+            print(f"Vectorstore existente cargada para {cubo_name}")
+        except Exception as e:
+            # Si no existe, crear una nueva
+            print(f"Creando nueva vectorstore para {cubo_name}: {str(e)}")
+            db = vectorstore_handler.create_vectorstore(
+                documents=doc_splits,
+                embeddings=embeddings,
+                collection_name=collection_name,
+                persist_directory=os.path.join(persist_directory, collection_name)
+            )
+            print(f"Nueva vectorstore creada para {cubo_name}")
         
         # Guardar la vectorstore básica
         vectorstores[cubo_name] = db
@@ -178,20 +208,23 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
             retrievers[cubo_name] = create_dual_retriever(
                 documents=doc_splits,
                 embeddings=embeddings,
-                persist_directory=os.path.join(cubo_persist_dir, "dual")
+                persist_directory=os.path.join(persist_directory, f"{collection_name}_dual")
             )
         elif 'document_summary' in advanced_techniques:
             print(f"Creando document summary retriever para {cubo_name}...")
             retrievers[cubo_name] = create_document_summary_retriever(
                 documents=doc_splits,
                 embeddings=embeddings,
-                persist_directory=os.path.join(cubo_persist_dir, "summary"),
+                persist_directory=os.path.join(persist_directory, f"{collection_name}_summary"),
                 llm=llm2 if llm2 else llm
             )
         else:
-            # Para un retriever estándar, usamos create_retriever de vectorstore.py
-            from langagent.utils.vectorstore import create_retriever
-            retrievers[cubo_name] = create_retriever(db, k=VECTORSTORE_CONFIG["k_retrieval"])
+            # Para un retriever estándar, usamos el vectorstore_handler
+            retrievers[cubo_name] = vectorstore_handler.create_retriever(
+                vectorstore=db,
+                k=VECTORSTORE_CONFIG["k_retrieval"],
+                similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
+            )
     
     # Procesar consultas guardadas por ámbito
     for ambito, consultas in consultas_por_ambito.items():
@@ -200,192 +233,163 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
         # Dividir consultas en chunks
         consulta_splits = text_splitter.split_documents(consultas)
         
-        # Crear directorio para vectorstore de consultas de este ámbito
-        consultas_persist_dir = os.path.join(persist_directory, f"Consultas_{ambito}")
+        # Añadir metadatos sobre el ámbito a los documentos
+        for doc in consulta_splits:
+            doc.metadata["ambito"] = ambito
+            doc.metadata["is_consulta"] = True
+            
+        # Nombre de la colección para las consultas de este ámbito
+        collection_name = f"Consultas_{ambito}"
         
-        # Crear o cargar vectorstore para las consultas de este ámbito
-        if not os.path.exists(consultas_persist_dir):
-            print(f"Creando nueva base de datos vectorial para consultas de {ambito}...")
-            db = create_vectorstore(consulta_splits, embeddings, consultas_persist_dir)
-        else:
-            print(f"Cargando base de datos vectorial existente para consultas de {ambito}...")
-            db = load_vectorstore(consultas_persist_dir, embeddings)
+        try:
+            # Intentar cargar una vectorstore existente
+            print(f"Intentando cargar vectorstore existente para consultas de {ambito}...")
+            db = vectorstore_handler.load_vectorstore(
+                embeddings=embeddings,
+                collection_name=collection_name,
+                persist_directory=os.path.join(persist_directory, collection_name)
+            )
+            print(f"Vectorstore existente cargada para consultas de {ambito}")
+        except Exception as e:
+            # Si no existe, crear una nueva
+            print(f"Creando nueva vectorstore para consultas de {ambito}: {str(e)}")
+            db = vectorstore_handler.create_vectorstore(
+                documents=consulta_splits,
+                embeddings=embeddings,
+                collection_name=collection_name,
+                persist_directory=os.path.join(persist_directory, collection_name)
+            )
+            print(f"Nueva vectorstore creada para consultas de {ambito}")
         
         # Guardar la vectorstore de consultas
         consultas_vectorstores[ambito] = db
         
         # Crear retriever para las consultas de este ámbito
         retriever_key = f"consultas_{ambito}"
-        
-        # Aplicar técnicas avanzadas si están habilitadas
-        if 'dual_chunks' in advanced_techniques:
-            print(f"Creando dual retriever para consultas de {ambito}...")
-            retrievers[retriever_key] = create_dual_retriever(
-                documents=consulta_splits,
-                embeddings=embeddings,
-                persist_directory=os.path.join(consultas_persist_dir, "dual")
-            )
-        elif 'document_summary' in advanced_techniques:
-            print(f"Creando document summary retriever para consultas de {ambito}...")
-            retrievers[retriever_key] = create_document_summary_retriever(
-                documents=consulta_splits,
-                embeddings=embeddings,
-                persist_directory=os.path.join(consultas_persist_dir, "summary"),
-                llm=llm2 if llm2 else llm
-            )
-        else:
-            # Retriever estándar para consultas
-            retrievers[retriever_key] = create_retriever(db, k=VECTORSTORE_CONFIG["k_retrieval"])
+        retrievers[retriever_key] = vectorstore_handler.create_retriever(
+            vectorstore=db,
+            k=VECTORSTORE_CONFIG["k_retrieval"],
+            similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
+        )
     
-    # Si se solicita la técnica de router, combinar los retrievers
-    if 'router' in advanced_techniques and len(retrievers) > 1:
-        print("Creando router retriever...")
-        combined_retriever = create_router_retriever(
-            retrievers=retrievers,  # Ahora le pasamos el diccionario completo
+    # Añadir un router retriever si está habilitado
+    if 'router' in advanced_techniques and len(vectorstores) > 1:
+        print("Creando router retriever para enrutar entre diferentes cubos...")
+        router_retriever = create_router_retriever(
+            vectorstores=vectorstores,
             llm=llm2 if llm2 else llm
         )
-        # Reemplazar retrievers individuales con el combinado
-        retrievers = {"combined": combined_retriever}
+        # El router retriever se puede añadir como un retriever adicional
+        retrievers['router'] = router_retriever
     
-    # Optimizar embeddings si se solicita
+    # Optimizar embeddings si está habilitado
     if 'optimize_embeddings' in advanced_techniques:
         print("Optimizando embeddings...")
-        optimized_embeddings = optimize_embeddings(embeddings, 
-                                               documents=all_documents,
-                                               persist_directory=persist_directory)
-        # No necesitamos actualizar las vectorstores porque optimize_embeddings
-        # devuelve el modelo de embeddings optimizado, no las vectorstores
+        optimize_embeddings(
+            retrievers=retrievers,
+            llm=llm2 if llm2 else llm
+        )
     
-    # Crear cadenas
+    # Crear cadenas para rag y evaluación
     rag_chain = create_rag_chain(llm)
     retrieval_grader = create_retrieval_grader(llm2 if llm2 else llm)
     hallucination_grader = create_hallucination_grader(llm2 if llm2 else llm)
     answer_grader = create_answer_grader(llm2 if llm2 else llm)
     
-    # Crear un router de preguntas si hay múltiples cubos
-    question_router = None
-    if len(retrievers) > 1:
-        if 'router' in advanced_techniques:
-            # Si estamos usando la técnica de router de llama-index, usar el router retriever
-            question_router = create_router_retriever(retrievers, llm2 if llm2 else llm)
-        else:
-            # Si no, usar el router de preguntas estándar
-            question_router = create_question_router(llm2 if llm2 else llm)
+    # Crear un router de preguntas que determine qué cubo usar
+    question_router = create_question_router(llm2 if llm2 else llm)
     
-    # Crear workflow
-    print("Creando flujo de trabajo...")
+    # Crear workflow con los retrievers configurados
     workflow = create_workflow(
-        retrievers, 
-        rag_chain, 
-        retrieval_grader, 
-        hallucination_grader, 
-        answer_grader,
-        question_router
+        retrievers=retrievers, 
+        rag_chain=rag_chain, 
+        retrieval_grader=retrieval_grader, 
+        hallucination_grader=hallucination_grader, 
+        answer_grader=answer_grader,
+        question_router=question_router
     )
     
-    # Compilar workflow
+    # Compilar workflow 
     app = workflow.compile()
     
-    # Devolver aplicación compilada y componentes
-    return app, {
+    # Devolver el app junto con los componentes por si se necesitan en otros lugares
+    components = {
+        "embeddings": embeddings,
         "retrievers": retrievers,
         "vectorstores": vectorstores,
         "consultas_vectorstores": consultas_vectorstores,
+        "llm": llm,
+        "llm2": llm2,
         "rag_chain": rag_chain,
-        "retrieval_grader": retrieval_grader,
-        "hallucination_grader": hallucination_grader,
-        "answer_grader": answer_grader,
+        "workflow": workflow,
         "question_router": question_router
     }
+    
+    return app, components
 
 def run_agent(app, question):
     """
-    Ejecuta el agente con una pregunta.
+    Ejecuta el agente con una consulta del usuario.
     
     Args:
-        app: Workflow compilado.
-        question (str): Pregunta a responder.
+        app: Aplicación compilada.
+        question (str): Consulta del usuario.
         
     Returns:
-        dict: Resultado final del workflow.
+        Dict: Resultado de la ejecución del agente.
     """
-    print_title(f"Procesando pregunta: {question}")
+    print_title(f"Consulta: {question}")
     
-    # Ejecutar workflow
-    inputs = {"question": question}
-    state_transitions = []
+    # Ejecutar el workflow
+    result = app.invoke({"question": question})
     
-    for output in app.stream(inputs):
-        state_transitions.append(output)
-        for key, value in output.items():
-            print(f"Completado: {key}")
+    # Mostrar documentos recuperados
+    if "documents" in result:
+        print_documents(result["documents"])
     
-    # Imprimir pasos del workflow
-    print_workflow_steps(state_transitions)
+    # Mostrar resultados
+    print_workflow_result(result)
     
-    # Imprimir resultado final
-    final_output = state_transitions[-1]
-    print_workflow_result(final_output)
+    # Mostrar pasos del workflow si están disponibles
+    if "workflow_trace" in result:
+        print_workflow_steps(result["workflow_trace"])
     
-    return final_output
+    return result
 
 def main():
     """Función principal para ejecutar el agente desde línea de comandos."""
-    parser = argparse.ArgumentParser(description="Agente de respuesta a preguntas con LangGraph y llama-index")
+    parser = argparse.ArgumentParser(description="Agente de respuesta a preguntas con LlamaIndex")
     parser.add_argument("--data_dir", default=None, help="Directorio con documentos markdown")
-    parser.add_argument("--chroma_dir", default=None, help="Directorio para la base de datos vectorial")
+    parser.add_argument("--vectorstore_dir", default=None, help="Directorio para la base de datos vectorial")
+    parser.add_argument("--vector_db_type", default=None, choices=["chroma", "milvus"], help="Tipo de base de datos vectorial")
     parser.add_argument("--local_llm", default=None, help="Modelo LLM principal")
-    parser.add_argument("--local_llm2", default=None, help="Modelo LLM secundario (opcional)")
+    parser.add_argument("--local_llm2", default=None, help="Modelo LLM secundario")
     parser.add_argument("--question", help="Pregunta a responder")
-    parser.add_argument("--use_advanced_rag", action="store_true", help="Utilizar técnicas avanzadas de RAG")
-    parser.add_argument("--advanced_techniques", nargs="+", 
-                        choices=['dual_chunks', 'document_summary', 'router', 'optimize_embeddings'],
-                        help="Técnicas avanzadas específicas a utilizar")
+    parser.add_argument("--advanced_rag", action="store_true", help="Usar técnicas avanzadas de RAG")
+    parser.add_argument("--techniques", default=None, help="Lista de técnicas avanzadas separadas por comas")
     
     args = parser.parse_args()
     
-    try:
-        # Configurar agente
-        app, components = setup_agent(
-            data_dir=args.data_dir, 
-            persist_directory=args.chroma_dir, 
-            local_llm=args.local_llm, 
-            local_llm2=args.local_llm2,
-            use_advanced_rag=args.use_advanced_rag,
-            advanced_techniques=args.advanced_techniques
-        )
-        
-        # Si se proporciona una pregunta, ejecutar el agente
-        if args.question:
-            run_agent(app, args.question)
-        else:
-            # Modo interactivo
-            print_title("Modo interactivo")
-            print("Escribe 'salir' para terminar")
-            
-            while True:
-                try:
-                    question = input("\nPregunta: ")
-                    if question.lower() in ["salir", "exit", "quit"]:
-                        break
-                    
-                    if not question.strip():
-                        print("Por favor, introduce una pregunta válida.")
-                        continue
-                        
-                    run_agent(app, question)
-                except KeyboardInterrupt:
-                    print("\nOperación interrumpida por el usuario.")
-                    break
-                except Exception as e:
-                    print(f"\nError al procesar la pregunta: {str(e)}")
-                    print("Puedes intentar con otra pregunta o escribir 'salir' para terminar.")
-    except Exception as e:
-        print(f"Error al inicializar el agente: {str(e)}")
-        return 1
+    # Convertir la cadena de técnicas a una lista
+    techniques = args.techniques.split(",") if args.techniques else None
     
-    return 0
+    # Configurar el agente
+    app, _ = setup_agent(
+        data_dir=args.data_dir, 
+        persist_directory=args.vectorstore_dir,
+        local_llm=args.local_llm, 
+        local_llm2=args.local_llm2,
+        use_advanced_rag=args.advanced_rag,
+        advanced_techniques=techniques,
+        vector_db_type=args.vector_db_type
+    )
+    
+    # Ejecutar el agente con la pregunta proporcionada o una de ejemplo
+    question = args.question if args.question else "¿Cuál es la tasa de abandono en los grados de ingeniería?"
+    print(f"Ejecutando consulta: {question}")
+    result = run_agent(app, question)
+    
+    return result
 
 if __name__ == "__main__":
-    exit_code = main()
-    exit(exit_code)
+    main()

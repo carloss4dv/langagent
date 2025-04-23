@@ -1,18 +1,29 @@
 """
-Módulo para la configuración de embeddings y vectorstore.
+OBSOLETO: Este módulo está obsoleto y se mantiene solo por compatibilidad.
 
-Este módulo proporciona funciones para configurar embeddings y crear/cargar
-una base de datos vectorial (vectorstore) para la recuperación de información.
+Por favor, utiliza el módulo 'langagent.vectorstore' en su lugar que ofrece
+una implementación más flexible y con soporte para múltiples bases de datos vectoriales.
+
+Ejemplo:
+    from langagent.vectorstore import create_embeddings, VectorStoreFactory
+    
+    # Crear embeddings
+    embeddings = create_embeddings()
+    
+    # Crear vectorstore
+    vectorstore_handler = VectorStoreFactory.get_vectorstore_instance('chroma')
+    db = vectorstore_handler.create_vectorstore(...)
 """
 
+# Importar del nuevo módulo para mantener compatibilidad
+from langagent.vectorstore import create_embeddings
+from langagent.vectorstore import VectorStoreFactory
+
+# También importamos los módulos antiguos para compatibilidad
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from typing import List, Optional
 from langagent.config.config import VECTORSTORE_CONFIG
-from chromadb.utils.embedding_functions import chroma_langchain_embedding_function
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_core.embeddings import Embeddings
-from chromadb.api.types import EmbeddingFunction
 import logging
 import time
 
@@ -34,72 +45,59 @@ def create_embeddings(model_name: str = "intfloat/multilingual-e5-large-instruct
 
 def create_vectorstore(documents: List[Document], embeddings, persist_directory: str):
     """
-    Crea una base de datos vectorial a partir de documentos y la guarda en disco.
+    OBSOLETO: Usa vectorstore.ChromaVectorStore.create_vectorstore() en su lugar.
     
-    Args:o
-        documents (List[Document]): Lista de documentos a indexar.
-        embeddings: Modelo de embeddings a utilizar.
-        persist_directory (str): Directorio donde persistir la base de datos.
-        
-    Returns:
-        Chroma: Base de datos vectorial creada.
+    Crea una base de datos vectorial a partir de documentos y la guarda en disco.
     """
-    return Chroma.from_documents(
-        documents=documents, 
-        embedding=embeddings, 
+    logger.warning("Función obsoleta: create_vectorstore. Usa el nuevo módulo vectorstore en su lugar.")
+    handler = VectorStoreFactory.get_vectorstore_instance("chroma")
+    collection_name = persist_directory.split("/")[-1] if "/" in persist_directory else persist_directory
+    return handler.create_vectorstore(
+        documents=documents,
+        embeddings=embeddings,
+        collection_name=collection_name,
         persist_directory=persist_directory
     )
 
 def load_vectorstore(persist_directory: str, embeddings):
     """
-    Carga una base de datos vectorial desde disco.
+    OBSOLETO: Usa vectorstore.ChromaVectorStore.load_vectorstore() en su lugar.
     
-    Args:
-        persist_directory (str): Directorio donde está persistida la base de datos.
-        embeddings: Modelo de embeddings a utilizar.
-        
-    Returns:
-        Chroma: Base de datos vectorial cargada.
+    Carga una base de datos vectorial desde disco.
     """
-    return Chroma(persist_directory=persist_directory, embedding_function=embeddings)
+    logger.warning("Función obsoleta: load_vectorstore. Usa el nuevo módulo vectorstore en su lugar.")
+    handler = VectorStoreFactory.get_vectorstore_instance("chroma")
+    collection_name = persist_directory.split("/")[-1] if "/" in persist_directory else persist_directory
+    return handler.load_vectorstore(
+        embeddings=embeddings,
+        collection_name=collection_name,
+        persist_directory=persist_directory
+    )
 
 def create_retriever(vectorstore, k=None, similarity_threshold=0.7):
-    """Crea un retriever a partir de un vectorstore."""
-    if k is None:
-        k = VECTORSTORE_CONFIG["k_retrieval"]
+    """
+    OBSOLETO: Usa vectorstore.ChromaVectorStore.create_retriever() en su lugar.
     
-    retriever = vectorstore.as_retriever(
-        search_type="similarity_score_threshold",
-        search_kwargs={
-            "k": k,
-            "score_threshold": similarity_threshold
-        }
+    Crea un retriever a partir de un vectorstore.
+    """
+    logger.warning("Función obsoleta: create_retriever. Usa el nuevo módulo vectorstore en su lugar.")
+    handler = VectorStoreFactory.get_vectorstore_instance("chroma")
+    return handler.create_retriever(
+        vectorstore=vectorstore,
+        k=k,
+        similarity_threshold=similarity_threshold
     )
-    
-    # Añadir logging para seguimiento
-    logger.info(f"Retriever creado con k={k} y umbral de similitud={similarity_threshold}")
-    
-    return retriever
 
 def retrieve_documents(retriever, query, max_retries=3):
-    """Recupera documentos con manejo de errores y reintentos."""
-    for attempt in range(max_retries):
-        try:
-            docs = retriever.get_relevant_documents(query)
-            if not docs:
-                logger.warning(f"No se encontraron documentos relevantes para la consulta: {query}")
-                return []
-            
-            # Logging detallado de los documentos recuperados
-            for i, doc in enumerate(docs):
-                logger.debug(f"Documento {i+1}: Score={doc.metadata.get('score', 'N/A')}, "
-                           f"Fuente={doc.metadata.get('source', 'N/A')}")
-            
-            return docs
-            
-        except Exception as e:
-            logger.error(f"Error en intento {attempt + 1}: {str(e)}")
-            if attempt == max_retries - 1:
-                logger.error("Se agotaron los reintentos")
-                return []
-            time.sleep(1)  # Esperar antes de reintentar
+    """
+    OBSOLETO: Usa vectorstore.ChromaVectorStore.retrieve_documents() en su lugar.
+    
+    Recupera documentos con manejo de errores y reintentos.
+    """
+    logger.warning("Función obsoleta: retrieve_documents. Usa el nuevo módulo vectorstore en su lugar.")
+    handler = VectorStoreFactory.get_vectorstore_instance("chroma")
+    return handler.retrieve_documents(
+        retriever=retriever,
+        query=query,
+        max_retries=max_retries
+    )
