@@ -109,14 +109,21 @@ def print_workflow_result(result: Dict[str, Any]):
                         content_str = content_str.replace('\\"', '"')
                         json_str = content_str[json_start:json_end]
                         try:
-                            content_json = json.loads(json_str)
-                            respuesta_texto = content_json.get("answer", respuesta_texto)
+                            # Verificar que tenemos un JSON completo
+                            if json_str.strip().startswith('{') and json_str.strip().endswith('}'):
+                                content_json = json.loads(json_str)
+                                respuesta_texto = content_json.get("answer", respuesta_texto)
                         except json.JSONDecodeError:
-                            # Si falla, usar un enfoque más simple para extraer la respuesta
+                            # Si falla, usar un enfoque más robusto para extraer la respuesta
                             answer_start = json_str.find('"answer": "') + 11
-                            answer_end = json_str.rfind('"')
-                            if answer_start > 11 and answer_end > answer_start:
-                                respuesta_texto = json_str[answer_start:answer_end]
+                            if answer_start > 10:
+                                # Buscar el último cierre de comillas antes del cierre de llave
+                                json_remainder = json_str[answer_start:]
+                                last_brace = json_remainder.rfind('}')
+                                search_end = last_brace if last_brace > 0 else len(json_remainder)
+                                last_quote = json_remainder[:search_end].rfind('"')
+                                if last_quote > 0:
+                                    respuesta_texto = json_remainder[:last_quote]
         except Exception as e:
             print(f"Error al procesar la generación: {e}")
     

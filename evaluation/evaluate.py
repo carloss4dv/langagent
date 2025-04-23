@@ -194,15 +194,24 @@ class AgentEvaluator:
                         content_str = respuesta[content_start:content_end]
                         # Intentar parsear como JSON
                         try:
-                            content_json = json.loads(content_str)
-                            if "answer" in content_json:
-                                return content_json["answer"]
+                            # Asegurar que tenemos un JSON completo antes de parsear
+                            if content_str.strip().startswith('{') and content_str.strip().endswith('}'):
+                                content_json = json.loads(content_str)
+                                if "answer" in content_json:
+                                    return content_json["answer"]
                         except json.JSONDecodeError:
                             # Si falla el parsing, extraer manualmente
                             answer_start = content_str.find('"answer": "') + 10
-                            answer_end = content_str.rfind('"')
-                            if answer_start > 10 and answer_end > answer_start:
-                                return content_str[answer_start:answer_end]
+                            if answer_start > 9:
+                                # Buscar el último cierre de comillas, para evitar truncamiento en dos puntos
+                                content_remainder = content_str[answer_start:]
+                                # Buscar el último cierre de comillas antes del cierre de llave
+                                last_brace = content_remainder.rfind('}')
+                                search_end = last_brace if last_brace > 0 else len(content_remainder)
+                                last_quote = content_remainder[:search_end].rfind('"')
+                                if last_quote > 0:
+                                    return content_remainder[:last_quote]
+                                
                 except Exception as e:
                     print(f"Error al procesar formato de respuesta específico: {e}")
             
@@ -223,14 +232,21 @@ class AgentEvaluator:
                                 content_str = content_str.replace('\\"', '"')
                                 json_str = content_str[json_start:json_end]
                                 try:
-                                    content_json = json.loads(json_str)
-                                    return content_json.get("answer", "No se pudo extraer la respuesta")
+                                    # Asegurar que tenemos un JSON completo
+                                    if json_str.strip().startswith('{') and json_str.strip().endswith('}'):
+                                        content_json = json.loads(json_str)
+                                        return content_json.get("answer", "No se pudo extraer la respuesta")
                                 except json.JSONDecodeError:
-                                    # Si falla, usar un enfoque más simple para extraer la respuesta
+                                    # Si falla, usar un enfoque más robusto para extraer la respuesta
                                     answer_start = json_str.find('"answer": "') + 11
-                                    answer_end = json_str.rfind('"')
-                                    if answer_start > 11 and answer_end > answer_start:
-                                        return json_str[answer_start:answer_end]
+                                    if answer_start > 10:
+                                        # Buscar el último cierre de comillas antes del cierre de llave
+                                        json_remainder = json_str[answer_start:]
+                                        last_brace = json_remainder.rfind('}')
+                                        search_end = last_brace if last_brace > 0 else len(json_remainder)
+                                        last_quote = json_remainder[:search_end].rfind('"')
+                                        if last_quote > 0:
+                                            return json_remainder[:last_quote]
                 except Exception as e:
                     print(f"Error al procesar la generación: {e}")
                     return respuesta
@@ -247,7 +263,16 @@ class AgentEvaluator:
                         if "answer" in content_json:
                             return content_json["answer"]
                     except json.JSONDecodeError:
-                        pass
+                        # Si falla el parsing pero tiene estructura de JSON, extraer manualmente
+                        if '"answer":' in content:
+                            answer_start = content.find('"answer": "') + 11
+                            if answer_start > 10:
+                                content_remainder = content[answer_start:]
+                                last_brace = content_remainder.rfind('}')
+                                search_end = last_brace if last_brace > 0 else len(content_remainder)
+                                last_quote = content_remainder[:search_end].rfind('"')
+                                if last_quote > 0:
+                                    return content_remainder[:last_quote]
                 # A veces el content es otro diccionario con el campo answer
                 if isinstance(content, dict) and "answer" in content:
                     return content["answer"]
