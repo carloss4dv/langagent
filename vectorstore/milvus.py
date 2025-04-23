@@ -26,31 +26,48 @@ class MilvusFilterRetriever(BaseRetriever):
     """Retriever personalizado para Milvus que soporta filtrado por metadatos."""
     
     def __init__(self, vectorstore, search_kwargs=None, filter_threshold=0.7):
-        """Inicializa el retriever personalizado."""
-        # Guardar los argumentos como atributos de instancia
-        self._vectorstore = vectorstore
-        self._search_kwargs = search_kwargs or {}  # Asegurarse de que nunca sea None
-        self._filter_threshold = filter_threshold
+        """Inicializa el retriever personalizado.
+        
+        Args:
+            vectorstore: Instancia de Milvus vectorstore
+            search_kwargs: Parámetros de búsqueda
+            filter_threshold: Umbral de similitud para filtrado
+        """
+        self.vectorstore = vectorstore  # Usar self.vectorstore en lugar de self._vectorstore
+        self.search_kwargs = search_kwargs or {}  # Usar self.search_kwargs en lugar de self._search_kwargs
+        self.filter_threshold = filter_threshold
+        logger.info(f"MilvusFilterRetriever inicializado con: vectorstore={type(vectorstore).__name__}, "
+                   f"search_kwargs={self.search_kwargs}")
         super().__init__()
     
-    @property
-    def search_kwargs(self):
-        """Getter para search_kwargs"""
-        return self._search_kwargs
-    
     def _get_relevant_documents(self, query: str, *, run_manager=None):
-        """Recupera documentos sin filtrado de metadatos."""
+        """Recupera documentos sin filtrado de metadatos.
+        
+        Args:
+            query: Consulta de texto
+            run_manager: Gestor de ejecución (opcional)
+            
+        Returns:
+            List[Document]: Documentos recuperados
+        """
         try:
-            return self._vectorstore.similarity_search(query, **self._search_kwargs)
+            logger.info(f"Buscando documentos relevantes para: {query}")
+            return self.vectorstore.similarity_search(query, **self.search_kwargs)
         except Exception as e:
-            logger.error(f"Error en búsqueda de documentos: {e}")
+            logger.error(f"Error en búsqueda estándar: {e}")
             # Si falla con los parámetros proporcionados, intentar con parámetros mínimos
-            fallback_kwargs = {"k": self._search_kwargs.get("k", 6)}
-            return self._vectorstore.similarity_search(query, **fallback_kwargs)
+            fallback_kwargs = {"k": self.search_kwargs.get("k", 6)}
+            logger.info(f"Reintentando con parámetros básicos: {fallback_kwargs}")
+            try:
+                return self.vectorstore.similarity_search(query, **fallback_kwargs)
+            except Exception as e2:
+                logger.error(f"Error en búsqueda con parámetros básicos: {e2}")
+                # Último intento completamente básico
+                logger.info("Último intento de búsqueda sin parámetros")
+                return self.vectorstore.similarity_search(query)
     
     def search_documents(self, query: str, metadata_filters=None):
-        """
-        Realiza búsqueda con filtrado por metadatos.
+        """Realiza búsqueda con filtrado por metadatos.
         
         Args:
             query: Consulta de texto
@@ -59,10 +76,13 @@ class MilvusFilterRetriever(BaseRetriever):
         Returns:
             List[Document]: Documentos filtrados por metadatos
         """
+        logger.info(f"Búsqueda con filtros de metadatos: {metadata_filters}")
+        
         if not metadata_filters:
+            logger.info("No hay filtros de metadatos, usando búsqueda estándar")
             return self._get_relevant_documents(query)
         
-        # Preparar consulta con filtros
+        # Preparar expresión de filtro
         filter_expr = None
         
         # Convertir filtros de metadatos a expresión de filtro de Milvus
@@ -81,42 +101,52 @@ class MilvusFilterRetriever(BaseRetriever):
             
             if expressions:
                 filter_expr = " && ".join(expressions)
+                logger.info(f"Expresión de filtro generada: {filter_expr}")
         except Exception as e:
             logger.error(f"Error al crear expresión de filtro: {e}")
         
-        # Configurar parámetros de búsqueda - usar self._search_kwargs en lugar de dict(self._search_kwargs)
-        # para evitar el error de AttributeError: 'MilvusFilterRetriever' object has no attribute '_search_kwargs'
+        # Varios intentos de búsqueda con diferentes configuraciones
+        # Intento 1: Usar los parámetros configurados + filtro
         try:
-            search_params = self._search_kwargs.copy() if hasattr(self, '_search_kwargs') else {}
+            if not hasattr(self, 'vectorstore') or self.vectorstore is None:
+                raise AttributeError("Vectorstore no está configurada correctamente")
+                
+            search_params = self.search_kwargs.copy()
             if filter_expr:
-                search_params["filter"] = filter_expr  # Usar filter en lugar de expr
-            
-            # Realizar búsqueda con filtros
-            logger.info(f"Realizando búsqueda en Milvus con filtro: {filter_expr}")
-            return self._vectorstore.similarity_search(query, **search_params)
+                search_params["filter"] = filter_expr
+                
+            logger.info(f"Intento 1: Búsqueda con parámetros completos: {search_params}")
+            return self.vectorstore.similarity_search(query, **search_params)
         except Exception as e:
-            logger.error(f"Error en búsqueda con filtros: {e} - Parámetros: {search_params if 'search_params' in locals() else 'no disponibles'}")
-            # Si falla la búsqueda con filtros, intentar obtener _search_kwargs de manera alternativa
-            try:
-                # Intento alternativo usando el getter
-                search_params = self.search_kwargs.copy()
-                if filter_expr:
-                    search_params["filter"] = filter_expr
-                logger.info(f"Reintentando búsqueda con parámetros alternos: {search_params}")
-                return self._vectorstore.similarity_search(query, **search_params)
-            except Exception as e2:
-                logger.error(f"Error en segundo intento de búsqueda: {e2}")
-                # Si falla nuevamente, usar parámetros mínimos
-                basic_params = {"k": 6}
-                if filter_expr:
-                    basic_params["filter"] = filter_expr
-                logger.info(f"Último intento con parámetros básicos: {basic_params}")
-                try:
-                    return self._vectorstore.similarity_search(query, **basic_params)
-                except Exception as e3:
-                    logger.error(f"Error en tercer intento de búsqueda: {e3}")
-                    # Si todo falla, intentar sin filtros
-                    return self._get_relevant_documents(query)
+            logger.error(f"Error en intento 1: {e}")
+        
+        # Intento 2: Usar solo filtro con parámetros básicos
+        try:
+            basic_params = {"k": 6}
+            if filter_expr:
+                basic_params["filter"] = filter_expr
+                
+            logger.info(f"Intento 2: Búsqueda con parámetros básicos + filtro: {basic_params}")
+            return self.vectorstore.similarity_search(query, **basic_params)
+        except Exception as e:
+            logger.error(f"Error en intento 2: {e}")
+        
+        # Intento 3: Usar solo parámetros básicos sin filtro
+        try:
+            logger.info("Intento 3: Búsqueda con parámetros básicos sin filtro")
+            return self.vectorstore.similarity_search(query, k=6)
+        except Exception as e:
+            logger.error(f"Error en intento 3: {e}")
+            
+        # Intento 4: Búsqueda sin parámetros
+        try:
+            logger.info("Intento 4: Búsqueda sin parámetros")
+            return self.vectorstore.similarity_search(query)
+        except Exception as e:
+            logger.error(f"Error en intento 4: {e}")
+            logger.error("Todos los intentos de búsqueda fallaron")
+            # Devolver lista vacía si todo falla
+            return []
 
 class MilvusVectorStore(VectorStoreBase):
     """Implementación de VectorStoreBase para Milvus/Zilliz."""
@@ -238,515 +268,146 @@ class MilvusVectorStore(VectorStoreBase):
         Returns:
             Milvus: Instancia de la vectorstore creada
         """
+        from langchain.vectorstores import Milvus
+        
+        if not documents:
+            logger.error("No se pueden crear vectorstores sin documentos.")
+            return None
+        
+        # Recuperar los argumentos de conexión
         connection_args = self._get_connection_args()
-        logger.info(f"Creando vectorstore Milvus con colección {collection_name}")
         
-        # Verificar si debemos eliminar la colección existente
-        drop_old = kwargs.get('drop_old', True)
+        # Obtener opciones para la vectorstore
+        drop_old = kwargs.get("drop_old", True)
+        consistency_level = kwargs.get("consistency_level", "Session")
+        search_params = kwargs.get("search_params", {"metric_type": "COSINE"})
         
-        # Para modo de colección única, asegurarnos de usar todos los documentos
-        use_single_collection = VECTORSTORE_CONFIG.get("use_single_collection", True)
+        # Usar auto_id=True para que Milvus genere IDs automáticamente
+        auto_id = kwargs.get("auto_id", True)
         
-        # Intentar eliminar la colección si drop_old es True
-        if drop_old and use_single_collection:
+        # Si estamos utilizando particionamiento, procesar los documentos por partición
+        if self.use_partitioning:
+            # Agrupar documentos por partición
+            partitioned_docs = self._prepare_documents_for_partitioning(documents)
+            logger.info(f"Documentos agrupados en {len(partitioned_docs)} particiones")
+            
+            # Crear la colección principal (si no existe)
             try:
-                from pymilvus import connections, utility
+                # Primero crear la colección principal para todas las particiones
+                logger.info(f"Creando vectorstore principal para colección {collection_name}")
                 
-                # Conectar a Milvus
-                connections.connect(**connection_args)
+                # Usar un subconjunto de documentos para la colección principal
+                # Esto es necesario para establecer la estructura de la colección
+                sample_docs = []
+                if partitioned_docs:
+                    # Tomar una muestra de cada partición
+                    for partition, docs in partitioned_docs.items():
+                        if docs:
+                            sample_docs.append(docs[0])
+                else:
+                    # Si no hay particiones, usar el primer documento
+                    sample_docs = [documents[0]]
                 
-                # Verificar si la colección existe y eliminarla
-                if utility.has_collection(collection_name):
-                    logger.info(f"Eliminando colección existente {collection_name}")
-                    utility.drop_collection(collection_name)
-                    logger.info(f"Colección {collection_name} eliminada correctamente")
-            except Exception as e:
-                logger.error(f"Error al eliminar colección: {e}")
-                # Continuar de todos modos
-        
-        # Comprobar que los documentos tienen metadatos necesarios
-        for doc in documents:
-            if 'source' in doc.metadata:
-                file_path = doc.metadata.get('source', '')
-                file_name = os.path.basename(file_path)
-                
-                # Comprobar si falta el cubo_source
-                if 'cubo_source' not in doc.metadata:
-                    # Extraer cubo del nombre del archivo
-                    match = re.search(r'info_cubo_([^_]+)', file_name)
-                    if match:
-                        cubo_name = match.group(1)
-                        doc.metadata['cubo_source'] = cubo_name
-                        
-                        # También agregar ámbito si se conoce
-                        if cubo_name in CUBO_TO_AMBITO and 'ambito' not in doc.metadata:
-                            doc.metadata['ambito'] = CUBO_TO_AMBITO[cubo_name]
-        
-        try:
-            if use_single_collection:
-                # Verificar que todos los documentos tengan los metadatos necesarios
-                logger.info("Verificando metadatos de los documentos...")
-                docs_with_complete_metadata = []
-                
-                for idx, doc in enumerate(documents):
-                    # Asegurarse de que exista el campo metadata
-                    if not hasattr(doc, 'metadata') or doc.metadata is None:
-                        doc.metadata = {}
-                    
-                    # Extraer información de la fuente si existe
-                    if 'source' in doc.metadata:
-                        source = doc.metadata['source']
-                        # Extraer cubo_source si no existe
-                        if 'cubo_source' not in doc.metadata:
-                            match = re.search(r'info_cubo_([^_]+)', os.path.basename(source))
-                            if match:
-                                doc.metadata['cubo_source'] = match.group(1)
-                            else:
-                                doc.metadata['cubo_source'] = 'general'
-                        
-                        # Asignar ámbito basado en cubo_source si no existe
-                        if 'ambito' not in doc.metadata and 'cubo_source' in doc.metadata:
-                            cubo = doc.metadata['cubo_source']
-                            if cubo in CUBO_TO_AMBITO:
-                                doc.metadata['ambito'] = CUBO_TO_AMBITO[cubo]
-                            else:
-                                doc.metadata['ambito'] = 'general'
-                    
-                    # Si falta ambito y cubo_source, asignar valores predeterminados
-                    if 'cubo_source' not in doc.metadata:
-                        doc.metadata['cubo_source'] = 'general'
-                    if 'ambito' not in doc.metadata:
-                        doc.metadata['ambito'] = 'general'
-                    if 'is_consulta' not in doc.metadata:
-                        doc.metadata['is_consulta'] = False
-                    
-                    docs_with_complete_metadata.append(doc)
-                
-                # Usar los documentos con metadatos completos
-                logger.info(f"Creando colección unificada con {len(docs_with_complete_metadata)} documentos")
-                
-                # Enfoque híbrido: Crear esquema con API de bajo nivel, insertar con API de alto nivel
-                try:
-                    from pymilvus import connections, FieldSchema, CollectionSchema, DataType, Collection
-                    from pymilvus import utility
-                    
-                    # Conectar a Milvus
-                    connections.connect(**connection_args)
-                    
-                    # Si la colección ya existe, eliminarla si drop_old es True
-                    if utility.has_collection(collection_name):
-                        if drop_old:
-                            utility.drop_collection(collection_name)
-                            logger.info(f"Colección {collection_name} eliminada para recreación")
-                        else:
-                            logger.info(f"La colección {collection_name} ya existe, se usará la existente")
-                            
-                            # Crear una instancia de Milvus con la colección existente
-                            return Milvus(
-                                embedding_function=embeddings,
-                                collection_name=collection_name,
-                                connection_args=connection_args
-                            )
-                    
-                    # Definir el esquema con campos para metadatos
-                    fields = [
-                        FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=True),
-                        FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=1024),
-                        FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
-                        FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=65535),
-                        FieldSchema(name="cubo_source", dtype=DataType.VARCHAR, max_length=255),
-                        FieldSchema(name="ambito", dtype=DataType.VARCHAR, max_length=255),
-                        FieldSchema(name="is_consulta", dtype=DataType.BOOL)
-                    ]
-                    
-                    # Crear el esquema y la colección
-                    schema = CollectionSchema(fields)
-                    collection = Collection(name=collection_name, schema=schema)
-                    
-                    logger.info(f"Colección {collection_name} creada con esquema personalizado")
-                    
-                    # Forzar la creación/sobrescritura del índice para el campo vector
-                    logger.info("Creando índice HNSW personalizado para el campo vector...")
-                    
-                    # Intentar eliminar cualquier índice existente en el campo vector
-                    try:
-                        indexes = collection.indexes
-                        for idx in indexes:
-                            if idx.field_name == "vector":
-                                logger.info(f"Eliminando índice existente en vector...")
-                                collection.drop_index(field_name="vector")
-                                logger.info("Índice eliminado correctamente")
-                                break
-                    except Exception as e:
-                        logger.warning(f"No se pudo verificar o eliminar índices existentes: {e}")
-                    
-                    # Crear nuestro índice personalizado HNSW para vector
-                    try:
-                        index_params = {
-                            "metric_type": "COSINE",  # Usar COSINE para similitud de embeddings
-                            "index_type": "HNSW",
-                            "params": {
-                                "M": 16,              # Número de conexiones por nodo
-                                "efConstruction": 200  # Factor de exploración durante construcción
-                            }
-                        }
-                        collection.create_index(field_name="vector", index_params=index_params)
-                        logger.info("Índice HNSW personalizado para vector creado correctamente")
-                    except Exception as e:
-                        logger.error(f"Error al crear índice personalizado para vector: {e}")
-                        
-                        # Intentar con otro tipo de índice como alternativa
-                        try:
-                            logger.info("Intentando crear índice alternativo...")
-                            alt_index_params = {
-                                "metric_type": "COSINE",
-                                "index_type": "IVF_FLAT",
-                                "params": {
-                                    "nlist": 128
-                                }
-                            }
-                            collection.create_index(field_name="vector", index_params=alt_index_params)
-                            logger.info("Índice alternativo IVF_FLAT creado correctamente")
-                        except Exception as alt_e:
-                            logger.error(f"Error al crear índice alternativo: {alt_e}")
-                    
-                    # Crear índices para los campos de metadatos para mejorar el filtrado
-                    metadata_fields = ["cubo_source", "ambito"]
-                    for field in metadata_fields:
-                        has_field_index = False
-                        try:
-                            indexes = collection.indexes
-                            for idx in indexes:
-                                if idx.field_name == field:
-                                    has_field_index = True
-                                    logger.info(f"Ya existe un índice para el campo {field}")
-                                    break
-                        except Exception as e:
-                            logger.warning(f"No se pudo verificar índices existentes para {field}: {e}")
-                        
-                        if not has_field_index:
-                            try:
-                                logger.info(f"Creando índice para el campo {field}...")
-                                field_index_params = {
-                                    "index_type": "INVERTED",
-                                    "params": {},
-                                    "metric_type": "NONE"
-                                }
-                                collection.create_index(field_name=field, index_params=field_index_params)
-                                logger.info(f"Índice INVERTED para {field} creado correctamente")
-                            except Exception as e:
-                                logger.warning(f"No se pudo crear índice para {field}: {e}")
-                    
-                    # Ahora usar la API de alto nivel para insertar los documentos
-                    logger.info("Utilizando API de alto nivel para insertar documentos...")
-                    
-                    # Crear una instancia de Milvus con la colección ya creada
-                    milvus_db = Milvus(
-                        embedding_function=embeddings,
-                        collection_name=collection_name,
-                        connection_args=connection_args
-                    )
-                    
-                    # Preparar documentos por partición si se usa particionamiento
-                    if self.use_partitioning:
-                        logger.info(f"Usando particionamiento por {self.partition_by}")
-                        partitioned_docs = self._prepare_documents_for_partitioning(docs_with_complete_metadata)
-                        
-                        # Crear particiones y añadir documentos
-                        for partition_name, partition_docs in partitioned_docs.items():
-                            if not partition_docs:
-                                continue
-                                
-                            logger.info(f"Creando partición '{partition_name}' en colección '{collection_name}'")
-                            
-                            try:
-                                # Normalizar nombre de partición
-                                partition_name = self._normalize_partition_name(partition_name)
-                                
-                                # Verificar si la partición ya existe
-                                try:
-                                    partitions = milvus_db.col.partitions
-                                    partition_exists = False
-                                    for p in partitions:
-                                        if p.name == partition_name:
-                                            partition_exists = True
-                                            logger.info(f"La partición {partition_name} ya existe")
-                                            break
-                                    
-                                    if not partition_exists:
-                                        # Crear la partición
-                                        milvus_db.col.create_partition(partition_name=partition_name)
-                                        logger.info(f"Partición {partition_name} creada correctamente")
-                                except Exception as e:
-                                    logger.error(f"Error al verificar particiones existentes: {e}")
-                                    # Intentar crear de todas formas
-                                    try:
-                                        milvus_db.col.create_partition(partition_name=partition_name)
-                                    except Exception as create_error:
-                                        if "already exists" not in str(create_error).lower():
-                                            logger.error(f"Error al crear partición: {create_error}")
-                                            raise create_error
-                                
-                                # Añadir documentos a la partición
-                                logger.info(f"Insertando {len(partition_docs)} documentos en partición {partition_name}")
-                                
-                                # Extraer textos y metadatos para inserción
-                                texts = []
-                                metadatas = []
-                                for doc in partition_docs:
-                                    texts.append(doc.page_content)
-                                    metadatas.append(doc.metadata)
-                                
-                                # Insertar documentos en la partición
-                                if hasattr(milvus_db, 'add_texts') and callable(getattr(milvus_db, 'add_texts')):
-                                    milvus_db.add_texts(
-                                        texts=texts,
-                                        metadatas=metadatas,
-                                        partition_name=partition_name
-                                    )
-                                else:
-                                    # Fallback a add_documents
-                                    milvus_db.add_documents(
-                                        documents=partition_docs,
-                                        partition_name=partition_name
-                                    )
-                                
-                                # Guardar el mapeo de particiones
-                                if collection_name not in self.collection_mapping:
-                                    self.collection_mapping[collection_name] = []
-                                
-                                if partition_name not in self.collection_mapping[collection_name]:
-                                    self.collection_mapping[collection_name].append(partition_name)
-                                
-                            except Exception as e:
-                                logger.error(f"Error al procesar partición {partition_name}: {str(e)}")
-                    else:
-                        # Si no usamos particionamiento, insertar todos los documentos juntos
-                        logger.info(f"Insertando {len(docs_with_complete_metadata)} documentos en la colección...")
-                        milvus_db.add_documents(docs_with_complete_metadata)
-                    
-                    logger.info("Documentos insertados correctamente con API de alto nivel")
-                    
-                    # Cargar la colección en memoria para mejor rendimiento
-                    collection.load()
-                    
-                    logger.info(f"Vectorstore Milvus creada correctamente como colección única: {collection_name}")
-                    return milvus_db
-                    
-                except ImportError:
-                    logger.warning("No se pudo importar pymilvus. Usando la API de alto nivel.")
-                except Exception as e:
-                    logger.error(f"Error al crear colección con esquema personalizado: {e}")
-                    logger.warning("Continuando con la API de alto nivel...")
-                
-                # Fallback: Usar la API de alto nivel (que puede no preservar todos los metadatos)
-                logger.info("Usando API de alto nivel para crear la colección")
-                try:
-                    # Usar from_texts en lugar de from_documents para tener más control
-                    # Para evitar el error de auto_id, preparamos los datos manualmente
-                    texts = []
-                    metadatas = []
-                    for doc in docs_with_complete_metadata:
-                        texts.append(doc.page_content)
-                        metadatas.append(doc.metadata)
-                    
-                    milvus_db = Milvus.from_texts(
-                        texts=texts,
-                        embedding=embeddings,
-                        metadatas=metadatas,
-                        collection_name=collection_name,
-                        connection_args=connection_args,
-                        drop_old=drop_old  # Usar el valor proporcionado
-                    )
-                    
-                    logger.info(f"Colección {collection_name} creada exitosamente con la API de alto nivel")
-                except Exception as e:
-                    logger.error(f"Error al crear colección con API de alto nivel: {e}")
-                    
-                    # Si falla from_texts, intentar con from_documents como última opción
-                    logger.info("Intentando crear colección con from_documents como última opción")
-                    milvus_db = Milvus.from_documents(
-                        documents=docs_with_complete_metadata,
-                        embedding=embeddings,
-                        collection_name=collection_name,
-                        connection_args=connection_args,
-                        drop_old=drop_old  # Usar el valor proporcionado
-                    )
-                
-                # Crear índice HNSW para mejorar el rendimiento
-                try:
-                    logger.info("Creando índice HNSW para mejorar el rendimiento")
-                    index_params = {
-                        "metric_type": "COSINE",
-                        "index_type": "HNSW",
-                        "params": {
-                            "M": 16,
-                            "efConstruction": 200
-                        }
-                    }
-                    
-                    # Crear el índice en el campo de embeddings
-                    if hasattr(milvus_db, 'col') and milvus_db.col is not None:
-                        # Verificar si el campo existe
-                        field_names = [field.name for field in milvus_db.col.schema.fields]
-                        
-                        # Determinar el nombre correcto del campo de embeddings
-                        embedding_field = None
-                        for field in field_names:
-                            if field == "vector":
-                                embedding_field = "vector"
-                                break
-                            elif "embedding" in field.lower():
-                                embedding_field = field
-                                break
-                        
-                        if embedding_field:
-                            # Verificar si ya existe un índice
-                            has_index = False
-                            try:
-                                indexes = milvus_db.col.indexes
-                                for idx in indexes:
-                                    if idx.field_name == embedding_field:
-                                        has_index = True
-                                        logger.info(f"Ya existe un índice para el campo {embedding_field}")
-                                        break
-                            except Exception as e:
-                                logger.warning(f"No se pudo verificar índices existentes: {e}")
-                            
-                            if not has_index:
-                                try:
-                                    logger.info(f"Creando índice para campo {embedding_field}...")
-                                    milvus_db.col.create_index(
-                                        field_name=embedding_field, 
-                                        index_params=index_params
-                                    )
-                                    logger.info(f"Índice creado correctamente para campo {embedding_field}")
-                                except Exception as e:
-                                    logger.error(f"Error al crear índice para {embedding_field}: {e}")
-                            
-                            # Cargar la colección en memoria para mejor rendimiento
-                            milvus_db.col.load()
-                        else:
-                            logger.error("No se encontró un campo válido para embeddings")
-                except Exception as e:
-                    logger.error(f"Error al crear índice en colección {collection_name}: {str(e)}")
-                
-                logger.info(f"Vectorstore Milvus creada correctamente como colección única: {collection_name}")
-                return milvus_db
-                
-            # Para modo de múltiples colecciones con particionamiento
-            else:
-                # Primero, crear la colección base
-                milvus_db = Milvus.from_documents(
-                    documents=documents if not self.use_partitioning else documents[:1],  # Solo un documento para inicializar
+                vectorstore = Milvus.from_documents(
+                    documents=sample_docs,
                     embedding=embeddings,
                     collection_name=collection_name,
+                    drop_old=drop_old,
                     connection_args=connection_args,
-                    drop_old=drop_old,  # Usar el valor proporcionado
+                    consistency_level=consistency_level,
+                    search_params=search_params,
+                    auto_id=auto_id  # Añadir auto_id=True aquí
                 )
                 
-                # Si no usamos particionamiento, devolver la vectorstore
-                if not self.use_partitioning:
-                    logger.info(f"Vectorstore Milvus creada correctamente para colección {collection_name} sin particionamiento")
-                    return milvus_db
+                logger.info(f"Vectorstore principal creada con {len(sample_docs)} documentos de muestra")
                 
-                # Preparar documentos por partición
-                partitioned_docs = self._prepare_documents_for_partitioning(documents)
-                
-                # Crear particiones y añadir documentos
-                for partition_name, partition_docs in partitioned_docs.items():
+                # Crear particiones y añadir documentos a cada una
+                for partition_key, partition_docs in partitioned_docs.items():
                     if not partition_docs:
+                        logger.warning(f"No hay documentos para la partición {partition_key}, omitiendo")
                         continue
                         
-                    logger.info(f"Creando partición '{partition_name}' en colección '{collection_name}'")
-                    
                     try:
-                        # Intentar crear la partición
-                        partition_name = self._normalize_partition_name(partition_name)
-                        milvus_db.col.create_partition(partition_name=partition_name)
+                        # Crear la partición si no existe
+                        logger.info(f"Procesando partición {partition_key} con {len(partition_docs)} documentos")
+                        
+                        # Verificar si la partición ya existe
+                        has_partition = False
+                        if hasattr(vectorstore, "col") and vectorstore.col is not None:
+                            try:
+                                partitions = vectorstore.col.partitions
+                                has_partition = partition_key in [p.name for p in partitions]
+                            except Exception as e:
+                                logger.error(f"Error al verificar particiones existentes: {e}")
+                        
+                        # Crear la partición si no existe
+                        if not has_partition:
+                            logger.info(f"Creando partición: {partition_key}")
+                            try:
+                                if hasattr(vectorstore, "col") and vectorstore.col is not None:
+                                    vectorstore.col.create_partition(partition_key)
+                                    logger.info(f"Partición {partition_key} creada correctamente")
+                            except Exception as e:
+                                logger.error(f"Error al crear partición {partition_key}: {e}")
                         
                         # Añadir documentos a la partición
-                        milvus_db.add_documents(documents=partition_docs, partition_name=partition_name)
+                        logger.info(f"Añadiendo {len(partition_docs)} documentos a la partición {partition_key}")
                         
-                        # Guardar el mapeo de particiones
-                        if collection_name not in self.collection_mapping:
-                            self.collection_mapping[collection_name] = []
-                        
-                        self.collection_mapping[collection_name].append(partition_name)
-                        
+                        # Usar el método add_texts de la vectorstore para añadir documentos a la partición
+                        try:
+                            texts = [doc.page_content for doc in partition_docs]
+                            metadatas = [doc.metadata for doc in partition_docs]
+                            
+                            vectorstore.add_texts(
+                                texts=texts,
+                                metadatas=metadatas,
+                                partition_name=partition_key,
+                                auto_id=auto_id  # Añadir auto_id=True aquí también
+                            )
+                            
+                            logger.info(f"Documentos añadidos correctamente a la partición {partition_key}")
+                        except Exception as e:
+                            logger.error(f"Error al procesar partición {partition_key}: {e}")
                     except Exception as e:
-                        logger.error(f"Error al crear partición {partition_name}: {str(e)}")
+                        logger.error(f"Error al procesar partición {partition_key}: {e}")
                 
-                # Crear índice HNSW para mejorar el rendimiento
+                # Registrar las particiones que hemos creado
                 try:
-                    logger.info("Creando índice HNSW para mejorar el rendimiento")
-                    index_params = {
-                        "metric_type": "COSINE",
-                        "index_type": "HNSW",
-                        "params": {
-                            "M": 16,
-                            "efConstruction": 200
-                        }
-                    }
-                    
-                    # Crear el índice en el campo de embeddings
-                    if hasattr(milvus_db, 'col') and milvus_db.col is not None:
-                        # Verificar si el campo existe
-                        field_names = [field.name for field in milvus_db.col.schema.fields]
-                        
-                        # Determinar el nombre correcto del campo de embeddings
-                        embedding_field = None
-                        for field in field_names:
-                            if field == "vector":
-                                embedding_field = "vector"
-                                break
-                            elif "embedding" in field.lower():
-                                embedding_field = field
-                                break
-                        
-                        if embedding_field:
-                            # Verificar índices existentes
-                            has_index = False
-                            try:
-                                indexes = milvus_db.col.indexes
-                                for idx in indexes:
-                                    if idx.field_name == embedding_field:
-                                        has_index = True
-                                        logger.info(f"Ya existe un índice para {embedding_field}")
-                                        break
-                            except Exception as e:
-                                logger.warning(f"No se pudo verificar índices existentes: {e}")
-                            
-                            # Crear índice si no existe
-                            if not has_index:
-                                try:
-                                    logger.info(f"Creando índice para campo {embedding_field}...")
-                                    milvus_db.col.create_index(
-                                        field_name=embedding_field, 
-                                        index_params=index_params
-                                    )
-                                    logger.info(f"Índice creado para {embedding_field}")
-                                except Exception as e:
-                                    logger.error(f"Error al crear índice para {embedding_field}: {e}")
-                            
-                            # Cargar la colección en memoria para mejor rendimiento
-                            milvus_db.col.load()
-                        else:
-                            logger.error("No se pudo identificar el campo de embeddings")
+                    if hasattr(vectorstore, "col") and vectorstore.col is not None:
+                        partitions = vectorstore.col.partitions
+                        partition_names = [p.name for p in partitions]
+                        self.collection_mapping[collection_name] = partition_names
+                        logger.info(f"Particiones registradas para {collection_name}: {partition_names}")
                 except Exception as e:
-                    logger.error(f"Error al crear índice en colección {collection_name}: {str(e)}")
+                    logger.error(f"Error al registrar particiones: {e}")
                 
-                logger.info(f"Vectorstore Milvus creada correctamente para colección {collection_name}")
-                return milvus_db
+                return vectorstore
                 
-        except Exception as e:
-            logger.error(f"Error al crear vectorstore Milvus para colección {collection_name}: {str(e)}")
-            # Proporcionar información detallada sobre el problema de conexión
-            if "connection" in str(e).lower():
-                logger.error(f"Problema de conexión a Milvus. Verifique que el servidor esté en ejecución en {connection_args['uri']} " +
-                             f"y que las credenciales sean correctas.")
-                logger.error("Asegúrese de configurar las variables de entorno ZILLIZ_CLOUD_URI y ZILLIZ_CLOUD_TOKEN correctamente.")
-            raise e
+            except Exception as e:
+                logger.error(f"Error al crear la vectorstore principal: {e}")
+                return None
+                
+        else:
+            # Enfoque sin particionamiento
+            logger.info(f"Creando vectorstore sin particionamiento para colección {collection_name}")
+            try:
+                vectorstore = Milvus.from_documents(
+                    documents=documents,
+                    embedding=embeddings,
+                    collection_name=collection_name,
+                    drop_old=drop_old,
+                    connection_args=connection_args,
+                    consistency_level=consistency_level,
+                    search_params=search_params,
+                    auto_id=auto_id  # Añadir auto_id=True aquí
+                )
+                
+                logger.info(f"Vectorstore creada correctamente con {len(documents)} documentos")
+                return vectorstore
+                
+            except Exception as e:
+                logger.error(f"Error al crear la vectorstore: {e}")
+                return None
     
     def load_vectorstore(self, embeddings: Embeddings, collection_name: str, 
                        **kwargs) -> Milvus:

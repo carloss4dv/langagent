@@ -320,6 +320,24 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                         if cubo in retrievers and cubo not in state["relevant_cubos"]:
                             state["relevant_cubos"].append(cubo)
                     
+                    # Comprobar si tenemos cubos en la lista
+                    if not state["relevant_cubos"]:
+                        print(f"ADVERTENCIA: No se encontraron cubos disponibles para el ámbito '{normalized_scope}'")
+                        print(f"Cubos definidos en el ámbito: {cubos_ambito}")
+                        print(f"Cubos disponibles en retrievers: {list(retrievers.keys())}")
+                        
+                        # Verificar si hay alguna coincidencia parcial en los retrievers
+                        for retriever_key in retrievers.keys():
+                            for cubo in cubos_ambito:
+                                if cubo in retriever_key:
+                                    state["relevant_cubos"].append(retriever_key)
+                                    print(f"Añadida coincidencia parcial: {retriever_key}")
+                        
+                        # Si aún no hay cubos, usar la colección unificada si existe
+                        if not state["relevant_cubos"] and "unified" in retrievers:
+                            state["relevant_cubos"].append("unified")
+                            print("Usando colección unificada como fallback")
+                    
                     # Añadir retriever de consultas guardadas si aplica
                     if state["is_consulta"]:
                         consulta_retriever_key = f"consultas_{normalized_scope}"
