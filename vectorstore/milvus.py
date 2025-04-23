@@ -15,7 +15,7 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStore
-from langchain_milvus import Milvus
+from langchain_community.vectorstores import Milvus
 from langagent.vectorstore.base import VectorStoreBase
 from langagent.config.config import VECTORSTORE_CONFIG
 from langagent.models.constants import CUBO_TO_AMBITO, AMBITOS_CUBOS
@@ -33,8 +33,8 @@ class MilvusFilterRetriever(BaseRetriever):
             search_kwargs: Parámetros de búsqueda
             filter_threshold: Umbral de similitud para filtrado
         """
-        self.vectorstore = vectorstore  # Usar self.vectorstore en lugar de self._vectorstore
-        self.search_kwargs = search_kwargs or {}  # Usar self.search_kwargs en lugar de self._search_kwargs
+        self.vectorstore = vectorstore
+        self.search_kwargs = search_kwargs or {}
         self.filter_threshold = filter_threshold
         logger.info(f"MilvusFilterRetriever inicializado con: vectorstore={type(vectorstore).__name__}, "
                    f"search_kwargs={self.search_kwargs}")
@@ -268,7 +268,7 @@ class MilvusVectorStore(VectorStoreBase):
         Returns:
             Milvus: Instancia de la vectorstore creada
         """
-        from langchain.vectorstores import Milvus
+        from langchain_community.vectorstores import Milvus
         
         if not documents:
             logger.error("No se pueden crear vectorstores sin documentos.")
@@ -282,7 +282,7 @@ class MilvusVectorStore(VectorStoreBase):
         consistency_level = kwargs.get("consistency_level", "Session")
         search_params = kwargs.get("search_params", {"metric_type": "COSINE"})
         
-        # Usar auto_id=True para que Milvus genere IDs automáticamente
+        # Configuración de auto_id
         auto_id = kwargs.get("auto_id", True)
         
         # Si estamos utilizando particionamiento, procesar los documentos por partición
@@ -308,6 +308,7 @@ class MilvusVectorStore(VectorStoreBase):
                     # Si no hay particiones, usar el primer documento
                     sample_docs = [documents[0]]
                 
+                # Crear vectorstore sin pasar auto_id por ambos lados
                 vectorstore = Milvus.from_documents(
                     documents=sample_docs,
                     embedding=embeddings,
@@ -315,8 +316,7 @@ class MilvusVectorStore(VectorStoreBase):
                     drop_old=drop_old,
                     connection_args=connection_args,
                     consistency_level=consistency_level,
-                    search_params=search_params,
-                    auto_id=auto_id  # Añadir auto_id=True aquí
+                    search_params=search_params
                 )
                 
                 logger.info(f"Vectorstore principal creada con {len(sample_docs)} documentos de muestra")
@@ -358,11 +358,12 @@ class MilvusVectorStore(VectorStoreBase):
                             texts = [doc.page_content for doc in partition_docs]
                             metadatas = [doc.metadata for doc in partition_docs]
                             
+                            # Pasar auto_id solo aquí, no en la creación inicial de la vectorstore
                             vectorstore.add_texts(
                                 texts=texts,
                                 metadatas=metadatas,
                                 partition_name=partition_key,
-                                auto_id=auto_id  # Añadir auto_id=True aquí también
+                                auto_id=auto_id
                             )
                             
                             logger.info(f"Documentos añadidos correctamente a la partición {partition_key}")
@@ -391,6 +392,7 @@ class MilvusVectorStore(VectorStoreBase):
             # Enfoque sin particionamiento
             logger.info(f"Creando vectorstore sin particionamiento para colección {collection_name}")
             try:
+                # Crear vectorstore sin pasar auto_id como parámetro duplicado
                 vectorstore = Milvus.from_documents(
                     documents=documents,
                     embedding=embeddings,
@@ -398,8 +400,7 @@ class MilvusVectorStore(VectorStoreBase):
                     drop_old=drop_old,
                     connection_args=connection_args,
                     consistency_level=consistency_level,
-                    search_params=search_params,
-                    auto_id=auto_id  # Añadir auto_id=True aquí
+                    search_params=search_params
                 )
                 
                 logger.info(f"Vectorstore creada correctamente con {len(documents)} documentos")
@@ -421,6 +422,8 @@ class MilvusVectorStore(VectorStoreBase):
         Returns:
             Milvus: Instancia de la vectorstore cargada
         """
+        from langchain_community.vectorstores import Milvus
+        
         connection_args = self._get_connection_args()
         logger.info(f"Cargando vectorstore Milvus existente: {collection_name}")
         
