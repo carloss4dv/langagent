@@ -15,10 +15,10 @@ load_dotenv()
 # Configuración de LLM
 LLM_CONFIG = {
     "model_temperature": 0.15,  # Controla la aleatoriedad de las respuestas (0-1)
-    "max_tokens": 1024,        # Límite de tokens para las respuestas generadas
+    "max_tokens": 2048,        # Límite de tokens para las respuestas generadas
     "model_format": "json",    # Formato de salida (json, text, etc.)
     "default_model": "hf.co/unsloth/Mistral-Small-3.1-24B-Instruct-2503-GGUF",  # Modelo predeterminado para el LLM principal
-    "default_model2": "qwen2.5:3b", # Modelo predeterminado para el LLM secundario (routing)
+    "default_model2": "llama3.2:3b", # Modelo predeterminado para el LLM secundario (routing)
     "default_model3": "qwen2.5:1.5b" # Modelo predeterminado para el LLM tercero (eavluation)
 }
 

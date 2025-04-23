@@ -62,7 +62,7 @@ def configure_llamaindex_settings(embeddings, llm_principal, llm_evaluador=None,
     Settings.embed_model = llama_embeddings
     Settings.llm = llama_llm_principal  # LLM principal para generación
     Settings.node_parser = SentenceSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    Settings.num_output = 512
+    Settings.num_output = 2048  # Aumentar el límite de tokens de salida
     Settings.context_window = 3900
     
     logger.info("Configuración global de LlamaIndex completada")
