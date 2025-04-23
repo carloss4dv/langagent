@@ -27,21 +27,25 @@ class MilvusFilterRetriever(BaseRetriever):
     
     def __init__(self, vectorstore, search_kwargs=None, filter_threshold=0.7):
         """Inicializa el retriever personalizado."""
-        # Inicializar los atributos ANTES de llamar a super.__init__
-        self._vectorstore = vectorstore  # Usar _vectorstore en lugar de vectorstore
-        self.search_kwargs = search_kwargs or {}  # Inicializar como diccionario vacío si es None
-        self.filter_threshold = filter_threshold
-        # Llamar a super().__init__ después de inicializar los atributos
+        # Guardar los argumentos como atributos de instancia
+        self._vectorstore = vectorstore
+        self._search_kwargs = search_kwargs or {}  # Asegurarse de que nunca sea None
+        self._filter_threshold = filter_threshold
         super().__init__()
-        
+    
+    @property
+    def search_kwargs(self):
+        """Getter para search_kwargs"""
+        return self._search_kwargs
+    
     def _get_relevant_documents(self, query: str, *, run_manager=None):
         """Recupera documentos sin filtrado de metadatos."""
         try:
-            return self._vectorstore.similarity_search(query, **self.search_kwargs)
+            return self._vectorstore.similarity_search(query, **self._search_kwargs)
         except Exception as e:
             logger.error(f"Error en búsqueda de documentos: {e}")
             # Si falla con los parámetros proporcionados, intentar con parámetros mínimos
-            fallback_kwargs = {"k": self.search_kwargs.get("k", 6)}
+            fallback_kwargs = {"k": self._search_kwargs.get("k", 6)}
             return self._vectorstore.similarity_search(query, **fallback_kwargs)
     
     def search_documents(self, query: str, metadata_filters=None):
@@ -81,7 +85,7 @@ class MilvusFilterRetriever(BaseRetriever):
             logger.error(f"Error al crear expresión de filtro: {e}")
         
         # Configurar parámetros de búsqueda
-        search_params = dict(self.search_kwargs)
+        search_params = dict(self._search_kwargs)
         if filter_expr:
             search_params["filter"] = filter_expr  # Usar filter en lugar de expr
         
@@ -291,13 +295,15 @@ class MilvusVectorStore(VectorStoreBase):
                         doc.metadata['cubo_source'] = 'general'
                     if 'ambito' not in doc.metadata:
                         doc.metadata['ambito'] = 'general'
+                    if 'is_consulta' not in doc.metadata:
+                        doc.metadata['is_consulta'] = False
                     
                     docs_with_complete_metadata.append(doc)
                 
                 # Usar los documentos con metadatos completos
                 logger.info(f"Creando colección unificada con {len(docs_with_complete_metadata)} documentos")
                 
-                # Para Milvus/Zilliz Cloud, necesitamos usar su API de bajo nivel para definir esquema
+                # Enfoque híbrido: Crear esquema con API de bajo nivel, insertar con API de alto nivel
                 try:
                     from pymilvus import connections, FieldSchema, CollectionSchema, DataType, Collection
                     from pymilvus import utility
@@ -349,61 +355,23 @@ class MilvusVectorStore(VectorStoreBase):
                     }
                     collection.create_index(field_name="vector", index_params=index_params)
                     
-                    # Cargar la colección en memoria para insertar datos
-                    collection.load()
+                    # Ahora usar la API de alto nivel para insertar los documentos
+                    logger.info("Utilizando API de alto nivel para insertar documentos...")
                     
-                    # Procesar los documentos y prepararlos para inserción
-                    logger.info("Preparando datos para inserción...")
-                    texts = []
-                    metadatas = []
-                    for doc in docs_with_complete_metadata:
-                        texts.append(doc.page_content)
-                        meta = doc.metadata.copy()
-                        
-                        # Asegurar que los metadatos tienen los campos necesarios
-                        if "cubo_source" not in meta:
-                            meta["cubo_source"] = "general"
-                        if "ambito" not in meta:
-                            meta["ambito"] = "general"
-                        if "is_consulta" not in meta:
-                            meta["is_consulta"] = False
-                        
-                        metadatas.append(meta)
-                    
-                    # Generar embeddings para todos los textos
-                    logger.info("Generando embeddings...")
-                    embeddings_vectors = embeddings.embed_documents(texts)
-                    
-                    # Preparar datos para inserción en Milvus
-                    sources = [meta.get("source", "") for meta in metadatas]
-                    cubo_sources = [meta.get("cubo_source", "general") for meta in metadatas]
-                    ambitos = [meta.get("ambito", "general") for meta in metadatas]
-                    is_consultas = [meta.get("is_consulta", False) for meta in metadatas]
-                    
-                    # Crear diccionario con los datos para insertar (formato correcto para Milvus)
-                    entities = {
-                        "vector": embeddings_vectors,
-                        "text": texts,
-                        "source": sources,
-                        "cubo_source": cubo_sources,
-                        "ambito": ambitos,
-                        "is_consulta": is_consultas
-                    }
-                    
-                    # Insertar los datos en la colección
-                    logger.info(f"Insertando {len(texts)} documentos en la colección...")
-                    insert_result = collection.insert(entities)
-                    logger.info(f"Inserción completada: {insert_result}")
-                    
-                    # Esperar a que los datos se persistan
-                    collection.flush()
-                    
-                    # Crear una instancia de Milvus vectorstore con la colección
+                    # Crear una instancia de Milvus con la colección ya creada
                     milvus_db = Milvus(
                         embedding_function=embeddings,
                         collection_name=collection_name,
                         connection_args=connection_args
                     )
+                    
+                    # Insertar documentos usando la API de alto nivel
+                    logger.info(f"Insertando {len(docs_with_complete_metadata)} documentos en la colección...")
+                    milvus_db.add_documents(docs_with_complete_metadata)
+                    logger.info("Documentos insertados correctamente con API de alto nivel")
+                    
+                    # Cargar la colección en memoria para mejor rendimiento
+                    collection.load()
                     
                     logger.info(f"Vectorstore Milvus creada correctamente como colección única: {collection_name}")
                     return milvus_db
@@ -729,7 +697,6 @@ class MilvusVectorStore(VectorStoreBase):
             
             try:
                 # Crear y devolver el retriever personalizado
-                # Usar directamente la clase MilvusFilterRetriever definida en este archivo
                 retriever = MilvusFilterRetriever(vectorstore=vectorstore, search_kwargs=search_kwargs)
                 logger.info("Retriever personalizado creado correctamente")
                 return retriever
@@ -797,9 +764,10 @@ class MilvusVectorStore(VectorStoreBase):
         
         # Obtener search_kwargs de manera segura dependiendo del tipo de retriever
         search_params = {}
-        if hasattr(retriever, 'search_kwargs') and retriever.search_kwargs is not None:
+        if isinstance(retriever, MilvusFilterRetriever):
+            # Usar el método getter para obtener search_kwargs
             search_params = retriever.search_kwargs.copy()
-        elif isinstance(retriever, MilvusFilterRetriever):
+        elif hasattr(retriever, 'search_kwargs') and retriever.search_kwargs is not None:
             search_params = retriever.search_kwargs.copy()
         
         # Si tenemos un ámbito identificado y tenemos particiones, hacer búsqueda específica
