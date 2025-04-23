@@ -699,8 +699,6 @@ class MilvusVectorStore(VectorStoreBase):
             # Crear retriever con soporte para filtrado por metadatos
             logger.info(f"Creando retriever personalizado con filtrado para Milvus")
             
-            from langagent.vectorstore.milvus import MilvusFilterRetriever
-            
             # Crear los search_kwargs que funcionarán con la colección
             # Intentar recuperar el nombre del campo de vectores
             embedding_field = "vector"
@@ -732,9 +730,12 @@ class MilvusVectorStore(VectorStoreBase):
             
             try:
                 # Crear y devolver el retriever personalizado
-                return MilvusFilterRetriever(vectorstore=vectorstore, search_kwargs=search_kwargs)
+                # Usar directamente la clase MilvusFilterRetriever definida en este archivo
+                retriever = MilvusFilterRetriever(vectorstore=vectorstore, search_kwargs=search_kwargs)
+                logger.info("Retriever personalizado creado correctamente")
+                return retriever
             except Exception as e:
-                logger.error(f"Error al crear MilvusFilterRetriever: {e}")
+                logger.error(f"Error al crear MilvusFilterRetriever: {str(e)}")
                 logger.info("Creando retriever estándar como fallback")
                 
                 # Si falla, usar el método estándar
@@ -794,7 +795,13 @@ class MilvusVectorStore(VectorStoreBase):
         
         # Si usamos particionamiento, intentamos identificar las particiones relevantes
         ambito = self._get_ambito_from_query(query)
-        search_params = retriever.search_kwargs.copy() if hasattr(retriever, 'search_kwargs') else {}
+        
+        # Obtener search_kwargs de manera segura dependiendo del tipo de retriever
+        search_params = {}
+        if hasattr(retriever, 'search_kwargs') and retriever.search_kwargs is not None:
+            search_params = retriever.search_kwargs.copy()
+        elif isinstance(retriever, MilvusFilterRetriever):
+            search_params = retriever.search_kwargs.copy()
         
         # Si tenemos un ámbito identificado y tenemos particiones, hacer búsqueda específica
         if ambito and partition_names:
