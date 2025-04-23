@@ -145,11 +145,14 @@ PROMPTS = {
                 - Maintain the original language of the question in your response
                 - If the information is not in the context, state "I cannot answer based on the available SEGEDA data"
                 - Avoid inferences or assumptions beyond the provided Universidad de Zaragoza data
+                - NEVER use markdown formatting like **, *, or # in your answers
+                - AVOID using any special characters that might interfere with JSON parsing
 
-                IMPORTANT JSON FORMATTING:
-                - When generating JSON responses, always use "\\n" for line breaks, not "\n"
-                - Do not add actual line breaks in the JSON text content
-                - Ensure JSON structure remains valid by properly escaping all special characters
+                IMPORTANT FORMATTING:
+                - When generating responses, NEVER use actual line breaks within your text
+                - Do not use any formatting that might break JSON structure
+                - Keep your text clean and simple, avoiding any special formatting or characters
+                - Your response should be plain text without any special formatting
 
                 Question: {question}
                 Context: {context} [/INST]""",
@@ -185,10 +188,11 @@ PROMPTS = {
         4. If you can identify a specific cube based on the question content and SEGEDA metrics needed, select it
         5. Always maintain the official naming of cubes and scopes as used in the SEGEDA system
 
-        IMPORTANT JSON FORMATTING:
-        - When generating JSON responses, always use "\\n" for line breaks, not "\n"
-        - Do not include actual line breaks in the JSON text content
-        - Properly escape any special characters in JSON strings
+        IMPORTANT FORMATTING:
+        - When generating responses, NEVER use actual line breaks within your text
+        - Do not use any formatting that might break JSON structure
+        - Keep your response as a clean, simple JSON object
+        - Do not include any markdown formatting or special characters
 
         Available scopes and their cubes with their main metrics in SEGEDA:
 

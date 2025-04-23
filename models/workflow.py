@@ -820,20 +820,30 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         # Limpiar y formatear la respuesta
         formatted_generation = formatted_generation.strip()
         
-        # Normalizar los saltos de línea para JSON - asegurar que usamos \\n en lugar de \n
-        # Primero reemplazamos los saltos de línea escapados por un marcador temporal
-        formatted_generation = formatted_generation.replace('\\n', '[NEWLINE]')
+        # Detectar y corregir problemas comunes en la respuesta
+        # Eliminar marcadores markdown como ** que pueden causar problemas
+        formatted_generation = formatted_generation.replace('**', '')
         
-        # Reemplazar los saltos de línea reales por la secuencia \\n para JSON
-        formatted_generation = formatted_generation.replace('\n', '\\n')
+        # Manejar escapes que pueden estar incorrectamente formateados
+        formatted_generation = formatted_generation.replace('\\\\n', '[DOUBLE_NEWLINE]')
+        formatted_generation = formatted_generation.replace('\\n', '[SINGLE_NEWLINE]')
+        formatted_generation = formatted_generation.replace('\n', ' ')
         
         # Eliminar espacios múltiples
         formatted_generation = re.sub(r'\s+', ' ', formatted_generation)
         
-        # Restaurar los marcadores temporales
-        formatted_generation = formatted_generation.replace('[NEWLINE]', '\\n')
+        # Restaurar los marcadores de salto de línea de manera controlada
+        formatted_generation = formatted_generation.replace('[DOUBLE_NEWLINE]', '\\n')
+        formatted_generation = formatted_generation.replace('[SINGLE_NEWLINE]', '\\n')
         
-        # Crear un objeto JSON para la respuesta
+        # Manejar casos específicos donde el texto incluye caracteres como comillas o barras invertidas
+        formatted_generation = formatted_generation.replace('"', '\\"')
+        
+        # Limpiar cualquier carácter que pueda romper el JSON
+        formatted_generation = re.sub(r'[^\x20-\x7E]', '', formatted_generation)
+        
+        # Envolver la respuesta en un JSON simple
+        # Usar un formato directo para evitar problemas de parseo
         response_json = {"answer": formatted_generation}
         
         # Si la generación no es exitosa, incrementar contador de reintentos
