@@ -358,18 +358,46 @@ class MilvusVectorStore(VectorStoreBase):
             }
         )
         
+        # En lugar de intentar añadir atributos directamente al retriever,
+        # vamos a almacenar los metadatos en un diccionario asociado a este retriever
+        # en la instancia de MilvusVectorStore
+        
+        # Si no existe el diccionario, crearlo
+        if not hasattr(self, '_retriever_metadata'):
+            self._retriever_metadata = {}
+        
+        # Generar un ID único para este retriever
+        retriever_id = id(retriever)
+        
+        # Guardar los metadatos del retriever
+        self._retriever_metadata[retriever_id] = {
+            'vectorstore': vectorstore
+        }
+        
         # Verificar que vectorstore.col no sea None antes de acceder a sus atributos
         if hasattr(vectorstore, 'col') and vectorstore.col is not None:
-            # Añadir atributos adicionales al retriever
-            retriever.vectorstore = vectorstore
-            retriever.collection_name = vectorstore.col.name
-            retriever.partition_names = self.collection_mapping.get(vectorstore.col.name, [])
+            # Almacenar los metadatos de la colección
+            self._retriever_metadata[retriever_id]['collection_name'] = vectorstore.col.name
+            
+            # Obtener particiones si existen
+            try:
+                partitions = vectorstore.col.partitions
+                partition_names = [p.name for p in partitions]
+                self._retriever_metadata[retriever_id]['partition_names'] = partition_names
+                
+                # Actualizar el mapeo de colecciones
+                if vectorstore.col.name not in self.collection_mapping:
+                    self.collection_mapping[vectorstore.col.name] = partition_names
+                
+            except Exception as e:
+                logger.warning(f"No se pudieron obtener particiones: {str(e)}")
+                self._retriever_metadata[retriever_id]['partition_names'] = []
         else:
-            # Si col es None, añadir atributos básicos
-            retriever.vectorstore = vectorstore
-            # No asignar collection_name ni partition_names
             logger.warning("No se pudo acceder a los atributos de la colección, retriever funcionará en modo básico")
+            self._retriever_metadata[retriever_id]['collection_name'] = 'unknown'
+            self._retriever_metadata[retriever_id]['partition_names'] = []
         
+        # Devolver el retriever configurado
         return retriever
     
     def retrieve_documents(self, retriever: BaseRetriever, query: str, 
@@ -386,21 +414,33 @@ class MilvusVectorStore(VectorStoreBase):
         Returns:
             List[Document]: Lista de documentos recuperados
         """
-        if not self.use_partitioning or not hasattr(retriever, 'vectorstore'):
-            # Usar el método estándar si no hay particionamiento
+        # Verificar si tenemos metadatos para este retriever
+        retriever_id = id(retriever)
+        retriever_metadata = getattr(self, '_retriever_metadata', {}).get(retriever_id, {})
+        
+        # Si no tenemos metadatos o no estamos usando particionamiento, usar el método estándar
+        if not retriever_metadata or not self.use_partitioning:
+            return self._standard_retrieve(retriever, query, max_retries)
+        
+        # Obtener la vectorstore y otro metadatos desde el diccionario
+        vectorstore = retriever_metadata.get('vectorstore')
+        collection_name = retriever_metadata.get('collection_name')
+        partition_names = retriever_metadata.get('partition_names', [])
+        
+        # Si no tenemos vectorstore válida, usar el método estándar
+        if not vectorstore or not collection_name or collection_name == 'unknown':
             return self._standard_retrieve(retriever, query, max_retries)
         
         # Si usamos particionamiento, intentamos identificar las particiones relevantes
         ambito = self._get_ambito_from_query(query)
-        vectorstore = retriever.vectorstore
-        search_params = retriever.search_kwargs.copy()
+        search_params = retriever.search_kwargs.copy() if hasattr(retriever, 'search_kwargs') else {}
         
         # Si tenemos un ámbito identificado y tenemos particiones, hacer búsqueda específica
-        if ambito and hasattr(retriever, 'partition_names') and retriever.partition_names:
+        if ambito and partition_names:
             partition_name = self._normalize_partition_name(ambito)
             
             # Si la partición existe en esta colección
-            if partition_name in retriever.partition_names:
+            if partition_name in partition_names:
                 logger.info(f"Búsqueda en partición específica: {partition_name}")
                 search_params['partition_names'] = [partition_name]
                 
