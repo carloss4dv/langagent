@@ -24,7 +24,7 @@ def _get_prompt_template(llm, prompt_key: str):
     except KeyError:
         raise ValueError(f"No prompt found for model '{model_name}' and key '{prompt_key}'")
 
-def create_llm(model_name: str = None, temperature: float = None, format: str = None):
+def create_llm(model_name: str = None, temperature: float = None, format: str = None, max_tokens: int = None):
     """
     Crea un modelo de lenguaje basado en Ollama.
     
@@ -32,6 +32,7 @@ def create_llm(model_name: str = None, temperature: float = None, format: str = 
         model_name (str, optional): Nombre del modelo a utilizar.
         temperature (float, optional): Temperatura para la generación (0-1).
         format (str, optional): Formato de salida ('json' u otro).
+        max_tokens (int, optional): Número máximo de tokens para la generación.
         
     Returns:
         ChatOllama: Modelo de lenguaje configurado.
@@ -40,8 +41,14 @@ def create_llm(model_name: str = None, temperature: float = None, format: str = 
     model_name = model_name or LLM_CONFIG["default_model"]
     temperature = temperature if temperature is not None else LLM_CONFIG["model_temperature"]
     format = format or LLM_CONFIG["model_format"]
+    max_tokens = max_tokens if max_tokens is not None else LLM_CONFIG["max_tokens"]
     
-    return ChatOllama(model=model_name, format=format, temperature=temperature)
+    return ChatOllama(
+        model=model_name, 
+        format=format, 
+        temperature=temperature,
+        max_tokens=max_tokens
+    )
 
 def create_rag_chain(llm):
     """
