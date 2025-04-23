@@ -388,56 +388,52 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         # Obtener el tipo de vectorstore de la configuración
         from langagent.config.config import VECTORSTORE_CONFIG
         vector_db_type = VECTORSTORE_CONFIG.get("vector_db_type", "chroma")
-        is_milvus_single_collection = vector_db_type.lower() == "milvus" and VECTORSTORE_CONFIG.get("use_single_collection", True)
+        use_single_collection = VECTORSTORE_CONFIG.get("use_single_collection", True)
         
         all_docs = []
         retrieval_details = {}
         
-        if is_milvus_single_collection and "unified" in retrievers:
-            # Enfoque de colección única de Milvus con filtrado por metadatos
-            print("\n=== Usando colección única de Milvus con filtrado por metadatos ===")
+        if use_single_collection and "unified" in retrievers:
+            # Enfoque de colección única con filtrado por metadatos
+            print("\n=== Usando colección única con filtrado por metadatos ===")
             
-            # Si tenemos un ámbito identificado, usar filtro de metadatos
-            unified_retriever = retrievers["unified"]
+            # Crear filtros de metadatos basados en el ámbito y cubo identificados
             metadata_filters = {}
             
+            # Si tenemos un ámbito identificado, usarlo como filtro
             if ambito:
                 print(f"Filtrando por ámbito: {ambito}")
                 metadata_filters["ambito"] = ambito
                 
                 # También verificar si es una consulta guardada
                 if state.get("is_consulta", False):
-                    metadata_filters["is_consulta"] = True
+                    metadata_filters["is_consulta"] = "true"
             
-            # Recuperar documentos con filtros de metadatos si los hay
+            # Si tenemos cubos relevantes específicos, usarlos como filtro
+            relevant_cubos = state.get("relevant_cubos", [])
+            if relevant_cubos and len(relevant_cubos) == 1 and relevant_cubos[0] != "unified":
+                cubo = relevant_cubos[0]
+                if not cubo.startswith("consultas_"):  # Evitar duplicar filtros de consultas
+                    print(f"Filtrando por cubo: {cubo}")
+                    metadata_filters["cubo_source"] = cubo
+            
             try:
-                if metadata_filters:
-                    # Si el retriever soporta búsqueda con filtros
-                    if hasattr(unified_retriever, "search_documents") and callable(getattr(unified_retriever, "search_documents")):
-                        print(f"Usando búsqueda con filtros de metadatos: {metadata_filters}")
-                        docs = unified_retriever.search_documents(query=question, metadata_filters=metadata_filters)
-                    elif hasattr(unified_retriever, "get_relevant_documents") and callable(getattr(unified_retriever, "get_relevant_documents")):
-                        # Algunos retrievers soportan filtrado a través del parámetro 'filter'
-                        print(f"Usando filtro estándar: {metadata_filters}")
-                        docs = unified_retriever.get_relevant_documents(question, filter=metadata_filters)
-                    else:
-                        # Si el retriever no soporta filtrado, usar búsqueda normal
-                        print("Retriever no soporta filtrado, usando búsqueda estándar")
-                        docs = unified_retriever.invoke(question)
-                else:
-                    # Sin filtros
-                    print("No se utilizan filtros de metadatos")
-                    docs = unified_retriever.invoke(question)
+                # Obtener el retriever unificado
+                unified_retriever = retrievers["unified"]
+                
+                # Recuperar documentos aplicando los filtros de metadatos directamente
+                print(f"Aplicando filtros: {metadata_filters}")
+                docs = unified_retriever.invoke(question, filter=metadata_filters)
                 
                 print(f"Documentos recuperados: {len(docs)}")
                 
-                # Si no hay documentos, probar como fallback sin filtros
+                # Si no hay documentos, intentar sin filtros como fallback
                 if not docs and metadata_filters:
                     print("No se encontraron documentos con filtros. Intentando sin filtros...")
                     docs = unified_retriever.invoke(question)
                     print(f"Documentos recuperados sin filtros: {len(docs)}")
                 
-                # Filtrar documentos por relevancia
+                # Filtrar documentos por relevancia usando el evaluador
                 relevant_docs = []
                 for doc in docs:
                     # Evaluar relevancia del documento
@@ -446,7 +442,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                         "question": question
                     })
                     
-                    # Extraer score de la respuesta
+                    # Extraer score de la respuesta del evaluador
                     if isinstance(relevance, dict) and "score" in relevance:
                         is_relevant = relevance["score"].lower() == "yes"
                     else:
@@ -483,8 +479,8 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                 }
                 
         else:
-            # Enfoque tradicional con múltiples colecciones (Chroma)
-            # Si tenemos un ámbito identificado, usar todos sus cubos
+            # Enfoque con múltiples colecciones/retrievers
+            # Determinar los cubos a consultar
             if ambito and ambito in AMBITOS_CUBOS:
                 relevant_cubos = [
                     cubo for cubo in AMBITOS_CUBOS[ambito]["cubos"]
@@ -502,11 +498,24 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                 if cubo in retrievers:
                     try:
                         print(f"\nProcesando cubo: {cubo}")
-                        print(f"Retriever disponible: {cubo in retrievers}")
                         
                         retriever = retrievers[cubo]
                         print("Iniciando recuperación de documentos...")
-                        docs = retriever.invoke(question)
+                        
+                        # Crear filtros si es necesario (para Milvus)
+                        metadata_filters = {}
+                        if vector_db_type.lower() == "milvus":
+                            if cubo != "unified" and not cubo.startswith("consultas_"):
+                                metadata_filters["cubo_source"] = cubo
+                            if ambito:
+                                metadata_filters["ambito"] = ambito
+                        
+                        # Recuperar documentos, con filtros si es Milvus
+                        if metadata_filters and vector_db_type.lower() == "milvus":
+                            print(f"Aplicando filtros: {metadata_filters}")
+                            docs = retriever.invoke(question, filter=metadata_filters)
+                        else:
+                            docs = retriever.invoke(question)
                         
                         print(f"Documentos recuperados del cubo {cubo}: {len(docs)}")
                         
@@ -527,25 +536,28 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                                 is_relevant = True
                             
                             if is_relevant:
-                                # Añadir metadatos sobre el cubo y ámbito
-                                doc.metadata["cubo_source"] = cubo
-                                doc.metadata["ambito"] = CUBO_TO_AMBITO.get(cubo)
+                                # Añadir metadatos sobre el cubo y ámbito si no existen
+                                if "cubo_source" not in doc.metadata:
+                                    doc.metadata["cubo_source"] = cubo
+                                if "ambito" not in doc.metadata and ambito:
+                                    doc.metadata["ambito"] = ambito
                                 relevant_docs.append(doc)
                         
                         # Si no hay documentos relevantes, usar todos los documentos del cubo
                         if not relevant_docs and docs:
                             print(f"No se encontraron documentos relevantes en el cubo {cubo}. Usando todos los documentos recuperados.")
-                            relevant_docs = []
                             for doc in docs:
-                                # Añadir metadatos sobre el cubo y ámbito
-                                doc.metadata["cubo_source"] = cubo
-                                doc.metadata["ambito"] = CUBO_TO_AMBITO.get(cubo)
+                                # Añadir metadatos sobre el cubo y ámbito si no existen
+                                if "cubo_source" not in doc.metadata:
+                                    doc.metadata["cubo_source"] = cubo
+                                if "ambito" not in doc.metadata and ambito:
+                                    doc.metadata["ambito"] = ambito
                                 relevant_docs.append(doc)
                         
                         retrieval_details[cubo] = {
                             "count": len(docs),
                             "relevant_count": len(relevant_docs),
-                            "ambito": CUBO_TO_AMBITO.get(cubo),
+                            "ambito": ambito or CUBO_TO_AMBITO.get(cubo),
                             "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
                         }
                         

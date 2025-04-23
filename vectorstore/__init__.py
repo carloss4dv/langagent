@@ -7,7 +7,7 @@ bases de datos vectoriales, manteniendo una API común para su uso en la aplicac
 
 from langagent.vectorstore.base import VectorStoreBase, VectorStoreFactory
 from langagent.vectorstore.chroma import ChromaVectorStore
-from langagent.vectorstore.milvus import MilvusVectorStore, MilvusFilterRetriever
+from langagent.vectorstore.milvus import MilvusVectorStore
 from langagent.vectorstore.embeddings import create_embeddings
 
 __all__ = [
@@ -15,6 +15,5 @@ __all__ = [
     'VectorStoreFactory',
     'ChromaVectorStore',
     'MilvusVectorStore',
-    'MilvusFilterRetriever',
     'create_embeddings'
 ] 
