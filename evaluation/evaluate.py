@@ -39,19 +39,19 @@ class AgentEvaluator:
     Evaluador que utiliza deepeval para evaluar las respuestas del agente LangChain.
     """
     
-    def __init__(self, data_dir=None, chroma_base_dir=None, local_llm=None, local_llm2=None):
+    def __init__(self, data_dir=None, vectorstore_dir=None, local_llm=None, local_llm2=None):
         """
         Inicializa el evaluador con el agente LangChain.
         
         Args:
             data_dir (str, optional): Directorio con los documentos markdown.
-            chroma_base_dir (str, optional): Directorio base para las bases de datos vectoriales.
+            vectorstore_dir (str, optional): Directorio base para las bases de datos vectoriales.
             local_llm (str, optional): Nombre del modelo LLM principal.
             local_llm2 (str, optional): Nombre del segundo modelo LLM.
         """
         self.agent = LangChainAgent(
             data_dir=data_dir,
-            chroma_base_dir=chroma_base_dir,
+            vectorstore_dir=vectorstore_dir,
             local_llm=local_llm,
             local_llm2=local_llm2
         )
@@ -710,7 +710,7 @@ def main():
     # Crear evaluador
     evaluador = AgentEvaluator(
         data_dir=args.data_dir,
-        chroma_base_dir=args.chroma_dir,
+        vectorstore_dir=args.chroma_dir,
         local_llm=args.modelo,
         local_llm2=args.modelo2,
         local_llm3=args.modelo3

@@ -13,8 +13,8 @@ from langagent.utils.document_loader import (
     load_consultas_guardadas
 )
 from langagent.vectorstore import (
-    create_embeddings,
-    VectorStoreFactory
+    VectorStoreFactory,
+    create_embeddings
 )
 from langagent.models.llm import (
     create_llm, 

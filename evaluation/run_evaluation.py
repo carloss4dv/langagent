@@ -81,7 +81,7 @@ def main():
     # Crear evaluador
     evaluador = AgentEvaluator(
         data_dir=args.data_dir,
-        chroma_base_dir=args.chroma_dir,
+        vectorstore_dir=args.chroma_dir,
         local_llm=args.modelo,
         local_llm2=args.modelo2
     )

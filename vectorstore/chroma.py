@@ -141,24 +141,3 @@ class ChromaVectorStore(VectorStoreBase):
                     logger.error("Se agotaron los reintentos")
                     return []
                 time.sleep(1)  # Esperar antes de reintentar 
-    
-    def add_metadata_to_documents(self, documents: List[Document], cubo: str, ambito: Optional[str] = None) -> List[Document]:
-        """
-        Añade metadatos sobre el cubo y ámbito a los documentos.
-        
-        Args:
-            documents: Lista de documentos a procesar
-            cubo: Nombre del cubo
-            ambito: Nombre del ámbito (opcional)
-            
-        Returns:
-            List[Document]: Lista de documentos con metadatos añadidos
-        """
-        logger.info(f"Añadiendo metadatos a {len(documents)} documentos: cubo={cubo}, ambito={ambito}")
-        
-        for doc in documents:
-            doc.metadata["cubo_source"] = cubo
-            if ambito:
-                doc.metadata["ambito"] = ambito
-                
-        return documents 

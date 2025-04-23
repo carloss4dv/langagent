@@ -1,33 +1,26 @@
 """
-Langagent: Agente de respuesta a preguntas con LangGraph.
+Módulo de inicialización del paquete langagent.
 
-Este módulo expone las clases y funciones principales del
-agente de respuesta a preguntas basado en vectorstores y LangGraph.
+Este módulo inicializa el paquete langagent y proporciona acceso a sus componentes.
 """
 
-# Versión del paquete
-__version__ = "1.0.0"
+__version__ = "0.1.0"
 
-# Imports principales para el usuario
-from .core.lang_chain_agent import LangChainAgent
-from .models.workflow import create_workflow
-from .utils.document_loader import load_documents_from_directory
-from .vectorstore import (
-    create_embeddings,
-    VectorStoreFactory,
-    VectorStoreBase,
-    ChromaVectorStore,
-    MilvusVectorStore
-)
-
-# Exportar solo los elementos que queremos exponer en el API público
-__all__ = [
-    'LangChainAgent',
-    'create_workflow',
-    'load_documents_from_directory',
-    'create_embeddings',
-    'VectorStoreFactory',
-    'VectorStoreBase',
-    'ChromaVectorStore',
-    'MilvusVectorStore'
-]
+# Exportamos los módulos principales para facilitar su acceso desde fuera del paquete
+try:
+    # Intentamos importar de forma relativa para cuando se usa como módulo
+    from .core.lang_chain_agent import LangChainAgent
+    from .evaluation.evaluate import AgentEvaluator, guardar_resultados_deepeval
+except ImportError:
+    # Fallback a importación absoluta para cuando se ejecuta directamente
+    import sys
+    import os
+    
+    # Añadir el directorio actual al path
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    if current_dir not in sys.path:
+        sys.path.insert(0, current_dir)
+        
+    # Intentar importar de nuevo
+    from core.lang_chain_agent import LangChainAgent
+    from evaluation.evaluate import AgentEvaluator, guardar_resultados_deepeval
