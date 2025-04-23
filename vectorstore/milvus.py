@@ -137,7 +137,8 @@ class MilvusVectorStore(VectorStoreBase):
         # Construir argumentos de conexión
         connection_args = {
             "uri": milvus_uri,
-            "secure": milvus_secure
+            "secure": milvus_secure,
+            "timeout": 60  # Aumentar el timeout para operaciones largas
         }
         
         # Añadir token solo si está presente
@@ -343,17 +344,58 @@ class MilvusVectorStore(VectorStoreBase):
                     
                     logger.info(f"Colección {collection_name} creada con esquema personalizado")
                     
-                    # Crear un índice para el campo vector
-                    logger.info("Creando índice para el campo vector...")
-                    index_params = {
-                        "metric_type": "COSINE",
-                        "index_type": "HNSW",
-                        "params": {
-                            "M": 16,
-                            "efConstruction": 200
+                    # Crear un índice para el campo vector solo si no existe ya
+                    logger.info("Verificando si ya existe un índice...")
+                    has_vector_index = False
+                    try:
+                        indexes = collection.indexes
+                        for idx in indexes:
+                            if idx.field_name == "vector":
+                                has_vector_index = True
+                                logger.info("Ya existe un índice para el campo vector")
+                                break
+                    except Exception as e:
+                        logger.warning(f"No se pudo verificar índices existentes: {e}")
+                    
+                    if not has_vector_index:
+                        logger.info("Creando índice para el campo vector...")
+                        index_params = {
+                            "metric_type": "COSINE",
+                            "index_type": "HNSW",
+                            "params": {
+                                "M": 16,
+                                "efConstruction": 200
+                            }
                         }
-                    }
-                    collection.create_index(field_name="vector", index_params=index_params)
+                        collection.create_index(field_name="vector", index_params=index_params)
+                        logger.info("Índice HNSW para vector creado correctamente")
+                    
+                    # Crear índices para los campos de metadatos para mejorar el filtrado
+                    metadata_fields = ["cubo_source", "ambito"]
+                    for field in metadata_fields:
+                        has_field_index = False
+                        try:
+                            indexes = collection.indexes
+                            for idx in indexes:
+                                if idx.field_name == field:
+                                    has_field_index = True
+                                    logger.info(f"Ya existe un índice para el campo {field}")
+                                    break
+                        except Exception as e:
+                            logger.warning(f"No se pudo verificar índices existentes para {field}: {e}")
+                        
+                        if not has_field_index:
+                            try:
+                                logger.info(f"Creando índice para el campo {field}...")
+                                field_index_params = {
+                                    "index_type": "INVERTED",
+                                    "params": {},
+                                    "metric_type": "NONE"
+                                }
+                                collection.create_index(field_name=field, index_params=field_index_params)
+                                logger.info(f"Índice INVERTED para {field} creado correctamente")
+                            except Exception as e:
+                                logger.warning(f"No se pudo crear índice para {field}: {e}")
                     
                     # Ahora usar la API de alto nivel para insertar los documentos
                     logger.info("Utilizando API de alto nivel para insertar documentos...")
@@ -384,13 +426,37 @@ class MilvusVectorStore(VectorStoreBase):
                 
                 # Fallback: Usar la API de alto nivel (que puede no preservar todos los metadatos)
                 logger.info("Usando API de alto nivel para crear la colección")
-                milvus_db = Milvus.from_documents(
-                    documents=docs_with_complete_metadata,
-                    embedding=embeddings,
-                    collection_name=collection_name,
-                    connection_args=connection_args,
-                    drop_old=drop_old  # Usar el valor proporcionado
-                )
+                try:
+                    # Usar from_texts en lugar de from_documents para tener más control
+                    # Para evitar el error de auto_id, preparamos los datos manualmente
+                    texts = []
+                    metadatas = []
+                    for doc in docs_with_complete_metadata:
+                        texts.append(doc.page_content)
+                        metadatas.append(doc.metadata)
+                    
+                    milvus_db = Milvus.from_texts(
+                        texts=texts,
+                        embedding=embeddings,
+                        metadatas=metadatas,
+                        collection_name=collection_name,
+                        connection_args=connection_args,
+                        drop_old=drop_old  # Usar el valor proporcionado
+                    )
+                    
+                    logger.info(f"Colección {collection_name} creada exitosamente con la API de alto nivel")
+                except Exception as e:
+                    logger.error(f"Error al crear colección con API de alto nivel: {e}")
+                    
+                    # Si falla from_texts, intentar con from_documents como última opción
+                    logger.info("Intentando crear colección con from_documents como última opción")
+                    milvus_db = Milvus.from_documents(
+                        documents=docs_with_complete_metadata,
+                        embedding=embeddings,
+                        collection_name=collection_name,
+                        connection_args=connection_args,
+                        drop_old=drop_old  # Usar el valor proporcionado
+                    )
                 
                 # Crear índice HNSW para mejorar el rendimiento
                 try:
@@ -406,40 +472,28 @@ class MilvusVectorStore(VectorStoreBase):
                     
                     # Crear el índice en el campo de embeddings
                     if hasattr(milvus_db, 'col') and milvus_db.col is not None:
-                        # Verificar si el campo existe
-                        field_names = [field.name for field in milvus_db.col.schema.fields]
+                        # Verificar índices existentes
+                        existing_indexes = {}
+                        try:
+                            indexes = milvus_db.col.indexes
+                            for idx in indexes:
+                                existing_indexes[idx.field_name] = idx
+                                logger.info(f"Índice existente encontrado para campo: {idx.field_name}")
+                        except Exception as e:
+                            logger.warning(f"No se pudo verificar índices existentes: {e}")
                         
-                        if "vector" in field_names:
+                        # Solo crear el índice si no existe
+                        if "text_embedding" not in existing_indexes:
                             milvus_db.col.create_index(
-                                field_name="vector", 
+                                field_name="text_embedding", 
                                 index_params=index_params
                             )
-                            
-                            # Cargar la colección en memoria para mejor rendimiento
-                            milvus_db.col.load()
-                            
                             logger.info(f"Índice creado correctamente para colección {collection_name}")
                         else:
-                            # Buscar campo de embeddings alternativo
-                            embedding_field = None
-                            for field in field_names:
-                                if "embedding" in field.lower() or "vector" in field.lower():
-                                    embedding_field = field
-                                    break
-                            
-                            if embedding_field:
-                                logger.info(f"Usando campo alternativo para embeddings: {embedding_field}")
-                                milvus_db.col.create_index(
-                                    field_name=embedding_field, 
-                                    index_params=index_params
-                                )
-                                
-                                # Cargar la colección en memoria para mejor rendimiento
-                                milvus_db.col.load()
-                                
-                                logger.info(f"Índice creado correctamente para colección {collection_name}")
-                            else:
-                                logger.error("No se encontró un campo válido para embeddings")
+                            logger.info("Ya existe un índice para text_embedding, omitiendo creación")
+                        
+                        # Cargar la colección en memoria para mejor rendimiento
+                        milvus_db.col.load()
                 except Exception as e:
                     logger.error(f"Error al crear índice en colección {collection_name}: {str(e)}")
                 
@@ -491,6 +545,7 @@ class MilvusVectorStore(VectorStoreBase):
                 
                 # Crear índice HNSW para mejorar el rendimiento
                 try:
+                    logger.info("Creando índice HNSW para mejorar el rendimiento")
                     index_params = {
                         "metric_type": "COSINE",
                         "index_type": "HNSW",
@@ -502,21 +557,34 @@ class MilvusVectorStore(VectorStoreBase):
                     
                     # Crear el índice en el campo de embeddings
                     if hasattr(milvus_db, 'col') and milvus_db.col is not None:
-                        milvus_db.col.create_index(
-                            field_name="text_embedding", 
-                            index_params=index_params
-                        )
+                        # Verificar índices existentes
+                        existing_indexes = {}
+                        try:
+                            indexes = milvus_db.col.indexes
+                            for idx in indexes:
+                                existing_indexes[idx.field_name] = idx
+                                logger.info(f"Índice existente encontrado para campo: {idx.field_name}")
+                        except Exception as e:
+                            logger.warning(f"No se pudo verificar índices existentes: {e}")
+                        
+                        # Solo crear el índice si no existe
+                        if "text_embedding" not in existing_indexes:
+                            milvus_db.col.create_index(
+                                field_name="text_embedding", 
+                                index_params=index_params
+                            )
+                            logger.info(f"Índice creado correctamente para colección {collection_name}")
+                        else:
+                            logger.info("Ya existe un índice para text_embedding, omitiendo creación")
                         
                         # Cargar la colección en memoria para mejor rendimiento
                         milvus_db.col.load()
-                        
-                        logger.info(f"Índice creado correctamente para colección {collection_name}")
                 except Exception as e:
                     logger.error(f"Error al crear índice en colección {collection_name}: {str(e)}")
                 
                 logger.info(f"Vectorstore Milvus creada correctamente para colección {collection_name}")
                 return milvus_db
-            
+                
         except Exception as e:
             logger.error(f"Error al crear vectorstore Milvus para colección {collection_name}: {str(e)}")
             # Proporcionar información detallada sobre el problema de conexión
@@ -683,7 +751,7 @@ class MilvusVectorStore(VectorStoreBase):
             
             # Configurar parámetros de búsqueda que funcionarán
             search_kwargs = {
-                "k": k, 
+                "k": k,
                 "score_threshold": similarity_threshold
             }
             
@@ -851,7 +919,7 @@ class MilvusVectorStore(VectorStoreBase):
             doc.metadata['score'] = score
             processed_docs.append(doc)
         
-        return processed_docs
+        return processed_docs 
     
     def add_documents_to_collection(self, vectorstore: Milvus, documents: List[Document]) -> bool:
         """
