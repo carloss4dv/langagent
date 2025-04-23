@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 def create_embeddings(model_name: str = "intfloat/multilingual-e5-large-instruct"):
     """
-    Crea un modelo de embeddings.
+    Crea un modelo de embedding.
     
     Args:
         model_name (str): Nombre del modelo de embeddings a utilizar.
