@@ -84,18 +84,39 @@ class MilvusFilterRetriever(BaseRetriever):
         except Exception as e:
             logger.error(f"Error al crear expresión de filtro: {e}")
         
-        # Configurar parámetros de búsqueda
-        search_params = dict(self._search_kwargs)
-        if filter_expr:
-            search_params["filter"] = filter_expr  # Usar filter en lugar de expr
-        
-        # Realizar búsqueda con filtros
+        # Configurar parámetros de búsqueda - usar self._search_kwargs en lugar de dict(self._search_kwargs)
+        # para evitar el error de AttributeError: 'MilvusFilterRetriever' object has no attribute '_search_kwargs'
         try:
+            search_params = self._search_kwargs.copy() if hasattr(self, '_search_kwargs') else {}
+            if filter_expr:
+                search_params["filter"] = filter_expr  # Usar filter en lugar de expr
+            
+            # Realizar búsqueda con filtros
+            logger.info(f"Realizando búsqueda en Milvus con filtro: {filter_expr}")
             return self._vectorstore.similarity_search(query, **search_params)
         except Exception as e:
-            logger.error(f"Error en búsqueda con filtros: {e}")
-            # Si falla la búsqueda con filtros, intentar sin filtros
-            return self._get_relevant_documents(query)
+            logger.error(f"Error en búsqueda con filtros: {e} - Parámetros: {search_params if 'search_params' in locals() else 'no disponibles'}")
+            # Si falla la búsqueda con filtros, intentar obtener _search_kwargs de manera alternativa
+            try:
+                # Intento alternativo usando el getter
+                search_params = self.search_kwargs.copy()
+                if filter_expr:
+                    search_params["filter"] = filter_expr
+                logger.info(f"Reintentando búsqueda con parámetros alternos: {search_params}")
+                return self._vectorstore.similarity_search(query, **search_params)
+            except Exception as e2:
+                logger.error(f"Error en segundo intento de búsqueda: {e2}")
+                # Si falla nuevamente, usar parámetros mínimos
+                basic_params = {"k": 6}
+                if filter_expr:
+                    basic_params["filter"] = filter_expr
+                logger.info(f"Último intento con parámetros básicos: {basic_params}")
+                try:
+                    return self._vectorstore.similarity_search(query, **basic_params)
+                except Exception as e3:
+                    logger.error(f"Error en tercer intento de búsqueda: {e3}")
+                    # Si todo falla, intentar sin filtros
+                    return self._get_relevant_documents(query)
 
 class MilvusVectorStore(VectorStoreBase):
     """Implementación de VectorStoreBase para Milvus/Zilliz."""
