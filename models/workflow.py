@@ -248,46 +248,36 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                 print(f"Router confidence: {confidence}")
                 print(f"Is query: {is_query}")
                 
-                # Traducir nombres de inglés a español si es necesario
-                # Convertir a minúsculas para hacer la búsqueda de mapeo insensible a mayúsculas
+                # Nombres en inglés recibidos del router
                 cube_name_lower = cube_name.lower() if cube_name else ""
                 scope_lower = scope.lower() if scope else ""
                 
-                # Traducir nombre del cubo
-                es_cube_name = ""
-                for en_name, es_name in CUBO_EN_ES.items():
-                    if en_name.lower() == cube_name_lower:
-                        es_cube_name = es_name
-                        print(f"Traducido cubo: {cube_name} -> {es_cube_name}")
-                        break
-                    # Si no se encuentra traducción directa, verificar con normalize_name
-                    elif normalize_name(en_name) == normalize_name(cube_name):
-                        es_cube_name = es_name
-                        print(f"Traducido cubo (normalizado): {cube_name} -> {es_cube_name}")
-                        break
+                # YA NO TRADUCIMOS DE INGLÉS A ESPAÑOL, SINO QUE USAMOS LOS NOMBRES EN ESPAÑOL
+                # DIRECTAMENTE. Si los nombres vienen en inglés, necesitamos traducirlos a español.
                 
-                # Si no se encontró traducción, mantener el nombre original
-                if not es_cube_name and cube_name:
-                    es_cube_name = cube_name
-                    print(f"No se encontró traducción para el cubo: {cube_name}")
+                # Simplemente usamos los nombres originales, ya que están en español
+                es_cube_name = cube_name
+                es_scope = scope
                 
-                # Traducir nombre del ámbito
-                es_scope = ""
-                for en_name, es_name in AMBITO_EN_ES.items():
-                    if en_name.lower() == scope_lower:
-                        es_scope = es_name
-                        print(f"Traducido ámbito: {scope} -> {es_scope}")
-                        break
-                    # Si no se encuentra traducción directa, verificar con normalize_name
-                    elif normalize_name(en_name) == normalize_name(scope):
-                        es_scope = es_name
-                        print(f"Traducido ámbito (normalizado): {scope} -> {es_scope}")
-                        break
+                # Si el nombre del cubo no está en los retrievers pero es un nombre en inglés conocido,
+                # intentamos traducirlo al español
+                if es_cube_name and normalize_name(es_cube_name) not in retrievers:
+                    for en_name, es_name in CUBO_EN_ES.items():
+                        # Comprobamos si el nombre en inglés coincide con alguno de nuestras traducciones
+                        if normalize_name(en_name) == normalize_name(es_cube_name):
+                            es_cube_name = es_name
+                            print(f"Traducido cubo (inglés->español): {cube_name} -> {es_cube_name}")
+                            break
                 
-                # Si no se encontró traducción, mantener el nombre original
-                if not es_scope and scope:
-                    es_scope = scope
-                    print(f"No se encontró traducción para el ámbito: {scope}")
+                # Si el ámbito no está en AMBITOS_CUBOS pero es un nombre en inglés conocido,
+                # intentamos traducirlo al español
+                if es_scope and normalize_name(es_scope) not in AMBITOS_CUBOS:
+                    for en_name, es_name in AMBITO_EN_ES.items():
+                        # Solo consideramos las traducciones de inglés a español (no viceversa)
+                        if es_name in AMBITOS_CUBOS and normalize_name(en_name) == normalize_name(es_scope):
+                            es_scope = es_name
+                            print(f"Traducido ámbito (inglés->español): {scope} -> {es_scope}")
+                            break
                 
                 # Normalizar nombres para la búsqueda en retrievers
                 normalized_cube = normalize_name(es_cube_name)
