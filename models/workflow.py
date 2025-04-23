@@ -252,32 +252,37 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                 cube_name_lower = cube_name.lower() if cube_name else ""
                 scope_lower = scope.lower() if scope else ""
                 
-                # YA NO TRADUCIMOS DE INGLÉS A ESPAÑOL, SINO QUE USAMOS LOS NOMBRES EN ESPAÑOL
-                # DIRECTAMENTE. Si los nombres vienen en inglés, necesitamos traducirlos a español.
-                
                 # Simplemente usamos los nombres originales, ya que están en español
                 es_cube_name = cube_name
                 es_scope = scope
                 
-                # Si el nombre del cubo no está en los retrievers pero es un nombre en inglés conocido,
-                # intentamos traducirlo al español
-                if es_cube_name and normalize_name(es_cube_name) not in retrievers:
-                    for en_name, es_name in CUBO_EN_ES.items():
-                        # Comprobamos si el nombre en inglés coincide con alguno de nuestras traducciones
-                        if normalize_name(en_name) == normalize_name(es_cube_name):
-                            es_cube_name = es_name
+                # SOLO intentamos traducir cuando realmente tenemos nombres en inglés
+                # Para cubos: comprobamos si el cubo está en las claves de inglés a español, pero NO en las claves español a inglés
+                if es_cube_name:
+                    # Comprobar si es un nombre en inglés conocido: está en CUBO_EN_ES pero no como clave española
+                    nombre_normalizado = normalize_name(es_cube_name)
+                    
+                    # Verificar si el nombre está como clave inglesa pero no como clave española
+                    es_nombre_ingles = False
+                    for en_name in list(CUBO_EN_ES.keys())[:25]:  # Solo las claves inglés->español (primera mitad)
+                        if normalize_name(en_name) == nombre_normalizado:
+                            es_nombre_ingles = True
+                            es_cube_name = CUBO_EN_ES[en_name]
                             print(f"Traducido cubo (inglés->español): {cube_name} -> {es_cube_name}")
                             break
                 
-                # Si el ámbito no está en AMBITOS_CUBOS pero es un nombre en inglés conocido,
-                # intentamos traducirlo al español
-                if es_scope and normalize_name(es_scope) not in AMBITOS_CUBOS:
-                    for en_name, es_name in AMBITO_EN_ES.items():
-                        # Solo consideramos las traducciones de inglés a español (no viceversa)
-                        if es_name in AMBITOS_CUBOS and normalize_name(en_name) == normalize_name(es_scope):
-                            es_scope = es_name
-                            print(f"Traducido ámbito (inglés->español): {scope} -> {es_scope}")
-                            break
+                # Para ámbitos: similar, comprobamos si está en las claves de inglés a español, pero NO es un ámbito en español conocido
+                if es_scope:
+                    # Comprobar si es un nombre en inglés conocido: está en AMBITO_EN_ES pero no como clave española
+                    nombre_normalizado = normalize_name(es_scope)
+                    
+                    # Verificar si el nombre está en las claves inglesas pero no es un ámbito válido en español
+                    if nombre_normalizado not in AMBITOS_CUBOS:
+                        for en_name in list(AMBITO_EN_ES.keys())[:8]:  # Solo las claves inglés->español (primera mitad)
+                            if normalize_name(en_name) == nombre_normalizado:
+                                es_scope = AMBITO_EN_ES[en_name]
+                                print(f"Traducido ámbito (inglés->español): {scope} -> {es_scope}")
+                                break
                 
                 # Normalizar nombres para la búsqueda en retrievers
                 normalized_cube = normalize_name(es_cube_name)
