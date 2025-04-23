@@ -120,22 +120,49 @@ class AgentEvaluator:
             elif "total_tokens" in response_metadata:
                 # Para modelos antiguos
                 token_info["total_tokens"] = response_metadata.get("total_tokens", 0)
+            # Extraer modelo
+            if "model" in response_metadata:
+                token_info["model"] = response_metadata.get("model", "unknown")
         
         # Calcular costos aproximados (precios típicos por 1000 tokens)
         token_info["cost_estimate"] = {}
         
+        # Determinar los precios según el modelo
+        modelo = token_info.get("model", "").lower()
+        
+        # Precios predeterminados (GPT-3.5-turbo)
+        precio_entrada = 0.0005  # $ por 1000 tokens de entrada
+        precio_salida = 0.0015   # $ por 1000 tokens de salida
+        
+        # Ajustar precios según el modelo
+        if "mistral" in modelo:
+            precio_entrada = 0.0002  # $ por 1000 tokens de entrada para Mistral
+            precio_salida = 0.0006   # $ por 1000 tokens de salida para Mistral
+        elif "gpt-4" in modelo:
+            precio_entrada = 0.03    # $ por 1000 tokens de entrada para GPT-4
+            precio_salida = 0.06     # $ por 1000 tokens de salida para GPT-4
+        elif "claude-3" in modelo or "claude3" in modelo:
+            if "haiku" in modelo:
+                precio_entrada = 0.00025  # $ por 1000 tokens de entrada para Claude 3 Haiku
+                precio_salida = 0.00125   # $ por 1000 tokens de salida para Claude 3 Haiku
+            elif "sonnet" in modelo:
+                precio_entrada = 0.003   # $ por 1000 tokens de entrada para Claude 3 Sonnet
+                precio_salida = 0.015    # $ por 1000 tokens de salida para Claude 3 Sonnet
+            elif "opus" in modelo:
+                precio_entrada = 0.015   # $ por 1000 tokens de entrada para Claude 3 Opus
+                precio_salida = 0.075    # $ por 1000 tokens de salida para Claude 3 Opus
+            else:
+                precio_entrada = 0.003   # $ por 1000 tokens de entrada para Claude por defecto
+                precio_salida = 0.015    # $ por 1000 tokens de salida para Claude por defecto
+        
         # Si tenemos información detallada de tokens
         if "input_tokens" in token_info and "output_tokens" in token_info:
-            # Precios aproximados para modelos tipo GPT-3.5
-            precio_entrada = 0.0005  # $ por 1000 tokens de entrada
-            precio_salida = 0.0015   # $ por 1000 tokens de salida
-            
             token_info["cost_estimate"]["input_cost"] = (token_info["input_tokens"] / 1000) * precio_entrada
             token_info["cost_estimate"]["output_cost"] = (token_info["output_tokens"] / 1000) * precio_salida
             token_info["cost_estimate"]["total_cost"] = token_info["cost_estimate"]["input_cost"] + token_info["cost_estimate"]["output_cost"]
         elif "total_tokens" in token_info:
             # Estimación básica si solo tenemos tokens totales
-            precio_promedio = 0.001  # $ por 1000 tokens
+            precio_promedio = (precio_entrada + precio_salida) / 2
             token_info["cost_estimate"]["total_cost"] = (token_info["total_tokens"] / 1000) * precio_promedio
         
         return token_info
@@ -152,7 +179,30 @@ class AgentEvaluator:
         """
         # Si es un string directamente
         if isinstance(respuesta, str):
-            # Nuevo formato de generación con content='...'
+            # Formato específico mostrado en el ejemplo del usuario
+            # content='{ "answer": "I cannot answer based on the available data" }'
+            if "content='" in respuesta and '"answer":' in respuesta:
+                try:
+                    # Extraer el contenido JSON
+                    content_start = respuesta.find("content='") + 9
+                    content_end = respuesta.find("'", content_start)
+                    if content_start > 9 and content_end > content_start:
+                        content_str = respuesta[content_start:content_end]
+                        # Intentar parsear como JSON
+                        try:
+                            content_json = json.loads(content_str)
+                            if "answer" in content_json:
+                                return content_json["answer"]
+                        except json.JSONDecodeError:
+                            # Si falla el parsing, extraer manualmente
+                            answer_start = content_str.find('"answer": "') + 10
+                            answer_end = content_str.rfind('"')
+                            if answer_start > 10 and answer_end > answer_start:
+                                return content_str[answer_start:answer_end]
+                except Exception as e:
+                    print(f"Error al procesar formato de respuesta específico: {e}")
+            
+            # Formato antiguo de generación con content
             if "content='" in respuesta:
                 try:
                     # Buscar el contenido JSON en el formato content='{ "answer": "..." }'
@@ -186,6 +236,14 @@ class AgentEvaluator:
         if isinstance(respuesta, dict):
             if "content" in respuesta:
                 content = respuesta["content"]
+                # Verificar si content es un string JSON
+                if isinstance(content, str) and content.startswith('{') and content.endswith('}'):
+                    try:
+                        content_json = json.loads(content)
+                        if "answer" in content_json:
+                            return content_json["answer"]
+                    except json.JSONDecodeError:
+                        pass
                 # A veces el content es otro diccionario con el campo answer
                 if isinstance(content, dict) and "answer" in content:
                     return content["answer"]
@@ -228,10 +286,35 @@ class AgentEvaluator:
         
         # Extraer los componentes necesarios para el caso de prueba
         generation = None
+        response_metadata = None
         
-        # Intentar extraer el texto de la respuesta de diferentes formatos posibles
+        # Extraer metadatos de respuesta si existen antes de procesar la generación
+        if "response_metadata" in resultado:
+            response_metadata = resultado["response_metadata"]
+        
+        # Verificar si generation es un string con formato especial
         if "generation" in resultado:
-            generation = self.extraer_texto_respuesta(resultado["generation"])
+            gen = resultado["generation"]
+            # Formato específico con response_metadata y usage_metadata
+            if isinstance(gen, str) and "response_metadata=" in gen:
+                try:
+                    # Extraer el texto de la respuesta
+                    generation = self.extraer_texto_respuesta(gen)
+                    
+                    # Extraer los metadatos de respuesta
+                    metadata_start = gen.find("response_metadata={") 
+                    if metadata_start > 0:
+                        # Cortar el string para obtener solo la parte de los metadatos
+                        metadata_str = gen[metadata_start:]
+                        response_metadata = metadata_str
+                except Exception as e:
+                    print(f"Error al procesar metadatos del formato especial: {e}")
+            else:
+                # Formato normal
+                generation = self.extraer_texto_respuesta(gen)
+                # Si no hay response_metadata, intentar extraerlo de generation
+                if not response_metadata and isinstance(gen, dict):
+                    response_metadata = gen.get("response_metadata")
         
         # Si no encontramos la generación, buscar en otros campos comunes
         if not generation and "response" in resultado:
@@ -254,9 +337,6 @@ class AgentEvaluator:
         
         ambito = resultado.get("ambito")
         retrieval_details = resultado.get("retrieval_details", {})
-        
-        # Extraer metadatos de respuesta si existen
-        response_metadata = resultado.get("generation", "")
         
         # Calcular información de tokens y costos
         token_info = self.calcular_token_cost(response_metadata)

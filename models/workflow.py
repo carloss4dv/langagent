@@ -384,6 +384,16 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                             doc.metadata["ambito"] = CUBO_TO_AMBITO.get(cubo)
                             relevant_docs.append(doc)
                     
+                    # Si no hay documentos relevantes, usar todos los documentos del cubo
+                    if not relevant_docs and docs:
+                        print(f"No se encontraron documentos relevantes en el cubo {cubo}. Usando todos los documentos recuperados.")
+                        relevant_docs = []
+                        for doc in docs:
+                            # Añadir metadatos sobre el cubo y ámbito
+                            doc.metadata["cubo_source"] = cubo
+                            doc.metadata["ambito"] = CUBO_TO_AMBITO.get(cubo)
+                            relevant_docs.append(doc)
+                    
                     retrieval_details[cubo] = {
                         "count": len(docs),
                         "relevant_count": len(relevant_docs),

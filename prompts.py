@@ -119,7 +119,7 @@ PROMPTS = {
                 1. Be based exclusively on the provided information
                 2. Specifically cite relevant metrics or dimensions
                 3. Maintain technical precision when referring to specific terms
-                4. Be concise and direct (maximum 5 sentences)
+                4. Be concise and direct (maximum 7 sentences)
 
                 RULES:
                 - If the information is not in the context, state "I cannot answer based on the available data"
