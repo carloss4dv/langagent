@@ -74,6 +74,40 @@ class MilvusVectorStore(VectorStoreBase):
         
         return connection_args
     
+    def _verify_metadata_fields(self, documents: List[Document]) -> List[Document]:
+        """
+        Verifica y asegura que todos los documentos tienen los campos de metadatos requeridos.
+        
+        Args:
+            documents: Lista de documentos a verificar
+            
+        Returns:
+            List[Document]: Documentos con metadatos verificados
+        """
+        for doc in documents:
+            # Verificar que el documento tiene un objeto de metadatos
+            if 'metadata' not in doc.__dict__ or doc.metadata is None:
+                doc.metadata = {}
+            
+            # Asegurar que tiene el campo ambito
+            if 'ambito' not in doc.metadata or not doc.metadata['ambito']:
+                # Intentar obtener el ámbito a partir del cubo_source
+                if 'cubo_source' in doc.metadata and doc.metadata['cubo_source'] in CUBO_TO_AMBITO:
+                    doc.metadata['ambito'] = CUBO_TO_AMBITO[doc.metadata['cubo_source']]
+                else:
+                    # Si no se puede determinar, usar un valor predeterminado
+                    doc.metadata['ambito'] = "general"
+            
+            # Asegurar que tiene el campo cubo_source
+            if 'cubo_source' not in doc.metadata or not doc.metadata['cubo_source']:
+                doc.metadata['cubo_source'] = "general"
+                
+            # Convertir valores booleanos a string para evitar problemas con Milvus
+            if 'is_consulta' in doc.metadata and isinstance(doc.metadata['is_consulta'], bool):
+                doc.metadata['is_consulta'] = str(doc.metadata['is_consulta']).lower()
+        
+        return documents
+    
     def create_vectorstore(self, documents: List[Document], embeddings: Embeddings, 
                          collection_name: str, **kwargs) -> Milvus:
         """
@@ -91,6 +125,9 @@ class MilvusVectorStore(VectorStoreBase):
         if not documents:
             logger.error("No se pueden crear vectorstores sin documentos.")
             return None
+            
+        # Verificar y asegurar que los documentos tienen los metadatos requeridos
+        documents = self._verify_metadata_fields(documents)
         
         # Recuperar los argumentos de conexión
         connection_args = self._get_connection_args()
@@ -101,7 +138,8 @@ class MilvusVectorStore(VectorStoreBase):
         
         # Determinar si queremos usar búsqueda híbrida
         use_hybrid_search = kwargs.get("use_hybrid_search", self.use_hybrid_search)
-        partition_key_field = kwargs.get("partition_key_field", self.partition_key_field)
+        use_partition_key = VECTORSTORE_CONFIG.get("use_partitioning", False)
+        partition_key_field = kwargs.get("partition_key_field", self.partition_key_field) if use_partition_key else None
         
         try:
             logger.info(f"Creando vectorstore para colección {collection_name}")
@@ -116,7 +154,7 @@ class MilvusVectorStore(VectorStoreBase):
             }
             
             # Si queremos usar particionamiento por ámbito o cubo
-            if partition_key_field:
+            if partition_key_field and use_partition_key:
                 logger.info(f"Configurando particionamiento por campo: {partition_key_field}")
                 vs_kwargs["partition_key_field"] = partition_key_field
             
@@ -137,6 +175,24 @@ class MilvusVectorStore(VectorStoreBase):
             
         except Exception as e:
             logger.error(f"Error al crear la vectorstore: {e}")
+            
+            # Intentar sin partition_key_field si el error es sobre ese campo
+            if "PartitionKeyException" in str(e) and "partition key field" in str(e) and partition_key_field:
+                logger.warning("Error con campo de partición. Intentando sin particionamiento...")
+                # Eliminar partition_key_field y reintentar
+                if "partition_key_field" in vs_kwargs:
+                    del vs_kwargs["partition_key_field"]
+                
+                try:
+                    vectorstore = Milvus.from_documents(
+                        documents=documents,
+                        **vs_kwargs
+                    )
+                    logger.info(f"Vectorstore creada correctamente sin particionamiento con {len(documents)} documentos")
+                    return vectorstore
+                except Exception as e2:
+                    logger.error(f"Error en segundo intento sin particionamiento: {e2}")
+            
             return None
     
     def load_vectorstore(self, embeddings: Embeddings, collection_name: str, 
@@ -180,17 +236,18 @@ class MilvusVectorStore(VectorStoreBase):
                 
                 # Crear una colección nueva con un documento de ejemplo para inicializar
                 logger.info(f"Creando nueva colección {collection_name}")
-                empty_doc = Document(page_content="Documento de inicialización", metadata={"source": "init"})
+                empty_doc = Document(
+                    page_content="Documento de inicialización", 
+                    metadata={"source": "init", "ambito": "general", "cubo_source": "general"}
+                )
                 
                 # Usar los mismos argumentos pero con from_documents
-                return Milvus.from_documents(
+                return self.create_vectorstore(
                     documents=[empty_doc],
-                    embedding=embeddings,
+                    embeddings=embeddings,
                     collection_name=collection_name,
-                    connection_args=connection_args,
                     drop_old=False,
-                    builtin_function=BM25BuiltInFunction() if use_hybrid_search else None,
-                    vector_field=["dense", "sparse"] if use_hybrid_search else None
+                    **kwargs
                 )
             
             return milvus_db
@@ -201,16 +258,17 @@ class MilvusVectorStore(VectorStoreBase):
             # Crear una colección nueva con un documento de ejemplo para inicializar
             try:
                 logger.info(f"Intentando crear nueva colección {collection_name}")
-                empty_doc = Document(page_content="Documento de inicialización", metadata={"source": "init"})
+                empty_doc = Document(
+                    page_content="Documento de inicialización", 
+                    metadata={"source": "init", "ambito": "general", "cubo_source": "general"}
+                )
                 
-                return Milvus.from_documents(
+                return self.create_vectorstore(
                     documents=[empty_doc],
-                    embedding=embeddings,
+                    embeddings=embeddings,
                     collection_name=collection_name,
-                    connection_args=connection_args,
                     drop_old=False,
-                    builtin_function=BM25BuiltInFunction() if use_hybrid_search else None,
-                    vector_field=["dense", "sparse"] if use_hybrid_search else None
+                    **kwargs
                 )
                 
             except Exception as create_error:
@@ -236,6 +294,30 @@ class MilvusVectorStore(VectorStoreBase):
         Returns:
             BaseRetriever: Retriever configurado para Milvus
         """
+        # Verificar que la vectorstore no es None
+        if vectorstore is None:
+            logger.error("No se puede crear un retriever con una vectorstore None")
+            # Crear una vectorstore dummy para evitar errores
+            try:
+                logger.info("Creando una vectorstore dummy para evitar errores")
+                empty_doc = Document(
+                    page_content="Documento de inicialización dummy", 
+                    metadata={"source": "init", "ambito": "general", "cubo_source": "general"}
+                )
+                dummy_collection_name = "dummy_collection_" + str(int(time.time()))
+                vectorstore = self.create_vectorstore(
+                    documents=[empty_doc],
+                    embeddings=kwargs.get("embeddings"),
+                    collection_name=dummy_collection_name
+                )
+                
+                if vectorstore is None:
+                    logger.error("No se pudo crear vectorstore dummy. Devolviendo None.")
+                    return None
+            except Exception as e:
+                logger.error(f"Error al crear vectorstore dummy: {e}")
+                return None
+        
         # Obtener parámetros de búsqueda desde la configuración o parámetros
         k = k or VECTORSTORE_CONFIG.get("k_retrieval", 4)
         
@@ -273,8 +355,13 @@ class MilvusVectorStore(VectorStoreBase):
             return retriever
         except Exception as e:
             logger.error(f"Error al crear retriever: {e}")
-            # Fallback simple
-            return vectorstore.as_retriever()
+            # Intentar con parámetros mínimos como fallback
+            try:
+                logger.info("Intentando crear retriever con parámetros mínimos")
+                return vectorstore.as_retriever()
+            except Exception as e2:
+                logger.error(f"Error al crear retriever con parámetros mínimos: {e2}")
+                return None
     
     def retrieve_documents(self, retriever: BaseRetriever, query: str, 
                          metadata_filters: Optional[Dict[str, Any]] = None,
@@ -293,8 +380,18 @@ class MilvusVectorStore(VectorStoreBase):
         """
         logger.info(f"Recuperando documentos para query: {query}")
         
+        # Verificar que el retriever no es None
+        if retriever is None:
+            logger.error("No se puede recuperar documentos con un retriever None")
+            return []
+        
         if metadata_filters:
             logger.info(f"Aplicando filtros de metadatos: {metadata_filters}")
+            
+            # Convertir valores booleanos a string para evitar problemas con Milvus
+            for key, value in metadata_filters.items():
+                if isinstance(value, bool):
+                    metadata_filters[key] = str(value).lower()
             
             # Construir expresión de filtrado para Milvus
             filter_expr = self._build_filter_expression(metadata_filters)
@@ -395,6 +492,9 @@ class MilvusVectorStore(VectorStoreBase):
             logger.warning("No hay documentos para añadir a la colección")
             return False
             
+        # Verificar y asegurar que los documentos tienen los metadatos requeridos
+        documents = self._verify_metadata_fields(documents)
+        
         try:
             # Para colecciones grandes, dividir en lotes
             batch_size = 1000

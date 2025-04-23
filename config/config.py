@@ -37,14 +37,17 @@ VECTORSTORE_CONFIG = {
     "milvus_secure": os.getenv("ZILLIZ_CLOUD_SECURE", "True").lower() in ("true", "1", "t"),     # Usar conexión segura (para Zilliz Cloud)
     
     # Configuración de particionamiento para Milvus
-    "use_partitioning": True,  # Usar particiones en Milvus
-    "partition_by": "ambito",  # Partición por ámbito o por cubo
+    "use_partitioning": False,  # Desactivar particiones, usar filtrado en su lugar
+    "partition_key_field": "ambito",  # Campo para particionamiento (si se activa)
     
     # Configuración para enfoque de colección única
-    "use_single_collection": True,  # Usar una sola colección para todos los documentos (para Milvus/Zilliz)
+    "use_single_collection": True,  # Usar una sola colección para todos los documentos
     "unified_collection_name": "UnifiedKnowledgeBase",  # Nombre de la colección unificada
     "always_update_collection": True,  # Si se deben actualizar documentos en colección existente
     "filter_by_metadata": True,  # Habilitar filtrado por metadatos en consultas
+    
+    # Configuración de búsqueda híbrida
+    "use_hybrid_search": True,  # Activar búsqueda híbrida (vectorial + texto completo)
 }
 
 # Configuración de API
