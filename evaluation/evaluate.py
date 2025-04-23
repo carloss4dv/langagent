@@ -700,6 +700,7 @@ def main():
     parser.add_argument("--chroma_dir", help="Directorio de bases vectoriales Chroma")
     parser.add_argument("--modelo", help="Nombre del modelo LLM principal")
     parser.add_argument("--modelo2", help="Nombre del segundo modelo LLM")
+    parser.add_argument("--modelo3", help="Nombre del tercer modelo LLM")
     parser.add_argument("--salida", help="Ruta para guardar resultados")
     parser.add_argument("--verbose", action="store_true", help="Mostrar información detallada")
     parser.add_argument("--casos", help="Archivo JSON con casos de prueba")
@@ -711,7 +712,8 @@ def main():
         data_dir=args.data_dir,
         chroma_base_dir=args.chroma_dir,
         local_llm=args.modelo,
-        local_llm2=args.modelo2
+        local_llm2=args.modelo2,
+        local_llm3=args.modelo3
     )
     
     # Cargar casos de prueba

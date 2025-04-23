@@ -12,11 +12,9 @@ from langagent.utils.document_loader import (
     load_documents_from_directory,
     load_consultas_guardadas
 )
-from langagent.utils.vectorstore import (
-    create_embeddings, 
-    create_vectorstore, 
-    load_vectorstore, 
-    create_retriever
+from langagent.vectorstore import (
+    create_embeddings,
+    VectorStoreFactory
 )
 from langagent.models.llm import (
     create_llm, 
@@ -40,23 +38,31 @@ from langagent.config.config import (
 )
 
 class LangChainAgent:
-    def __init__(self, data_dir=None, chroma_base_dir=None, local_llm=None, local_llm2=None, consultas_dir=None):
+    def __init__(self, data_dir=None, vectorstore_dir=None, vector_db_type=None, local_llm=None, local_llm2=None, local_llm3=None, consultas_dir=None):
         """
         Inicializa el agente con todos sus componentes, creando una vectorstore separada
         para cada cubo identificado en los documentos.
         
         Args:
             data_dir (str, optional): Directorio con los documentos markdown.
-            chroma_base_dir (str, optional): Directorio base para las bases de datos vectoriales.
+            vectorstore_dir (str, optional): Directorio base para las bases de datos vectoriales.
+            vector_db_type (str, optional): Tipo de vectorstore a utilizar ('chroma' o 'milvus').
             local_llm (str, optional): Nombre del modelo LLM principal.
             local_llm2 (str, optional): Nombre del segundo modelo LLM.
+            local_llm3 (str, optional): Nombre del tercer modelo LLM.
             consultas_dir (str, optional): Directorio con las consultas guardadas.
         """
         self.data_dir = data_dir or PATHS_CONFIG["default_data_dir"]
-        self.chroma_base_dir = chroma_base_dir or PATHS_CONFIG["default_chroma_dir"]
+        self.vectorstore_dir = vectorstore_dir or PATHS_CONFIG["default_vectorstore_dir"]
+        self.vector_db_type = vector_db_type or VECTORSTORE_CONFIG.get("vector_db_type", "chroma")
         self.local_llm = local_llm or LLM_CONFIG["default_model"]
         self.local_llm2 = local_llm2 or LLM_CONFIG["default_model2"]
+        self.local_llm3 = local_llm3 or LLM_CONFIG["default_model3"]
         self.consultas_dir = consultas_dir or os.path.join(os.path.dirname(self.data_dir), "consultas_guardadas")
+        
+        # Para compatibilidad con código existente
+        if self.vector_db_type == "chroma":
+            self.chroma_base_dir = PATHS_CONFIG.get("default_chroma_dir", "./chroma")
         
         self.embeddings = None
         self.retrievers = {}
@@ -71,6 +77,9 @@ class LangChainAgent:
         self.question_router = None
         self.workflow = None
         self.app = None
+        
+        # Obtener la instancia de vectorstore
+        self.vectorstore_handler = VectorStoreFactory.get_vectorstore_instance(self.vector_db_type)
         
         self.setup_agent()
 
@@ -128,22 +137,46 @@ class LangChainAgent:
             # Dividir documentos en chunks
             doc_splits = text_splitter.split_documents(docs)
             
-            # Crear directorio para vectorstore de este cubo
-            cubo_chroma_dir = os.path.join(self.chroma_base_dir, f"Cubo{cubo_name}")
+            # Añadir metadatos sobre el cubo a los documentos
+            for doc in doc_splits:
+                doc.metadata["cubo_source"] = cubo_name
+                # Intentar identificar el ámbito del cubo
+                from langagent.models.constants import CUBO_TO_AMBITO
+                if cubo_name in CUBO_TO_AMBITO:
+                    doc.metadata["ambito"] = CUBO_TO_AMBITO[cubo_name]
             
-            # Crear o cargar vectorstore para este cubo
-            if not os.path.exists(cubo_chroma_dir):
-                print(f"Creando nueva base de datos vectorial para {cubo_name}...")
-                db = create_vectorstore(doc_splits, self.embeddings, cubo_chroma_dir)
-            else:
-                print(f"Cargando base de datos vectorial existente para {cubo_name}...")
-                db = load_vectorstore(cubo_chroma_dir, self.embeddings)
+            # Nombre de la colección para el cubo
+            collection_name = f"Cubo{cubo_name}"
+            
+            try:
+                # Intentar cargar una vectorstore existente
+                print(f"Intentando cargar vectorstore existente para {cubo_name}...")
+                db = self.vectorstore_handler.load_vectorstore(
+                    embeddings=self.embeddings,
+                    collection_name=collection_name,
+                    persist_directory=os.path.join(self.vectorstore_dir, collection_name)
+                )
+                print(f"Vectorstore existente cargada para {cubo_name}")
+            except Exception as e:
+                # Si no existe, crear una nueva
+                print(f"Creando nueva vectorstore para {cubo_name}...")
+                db = self.vectorstore_handler.create_vectorstore(
+                    documents=doc_splits,
+                    embeddings=self.embeddings,
+                    collection_name=collection_name,
+                    persist_directory=os.path.join(self.vectorstore_dir, collection_name)
+                )
+                print(f"Nueva vectorstore creada para {cubo_name}")
             
             # Guardar la vectorstore
             self.vectorstores[cubo_name] = db
             
             # Crear retriever para este cubo
-            self.retrievers[cubo_name] = create_retriever(db, k=VECTORSTORE_CONFIG["k_retrieval"])
+            self.retrievers[cubo_name] = self.vectorstore_handler.create_retriever(
+                vectorstore=db,
+                k=VECTORSTORE_CONFIG["k_retrieval"],
+                similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
+            )
         
         # Procesar consultas guardadas por ámbito
         for ambito, consultas in consultas_por_ambito.items():
@@ -152,34 +185,56 @@ class LangChainAgent:
             # Dividir consultas en chunks
             consulta_splits = text_splitter.split_documents(consultas)
             
-            # Crear directorio para vectorstore de consultas de este ámbito
-            consultas_chroma_dir = os.path.join(self.chroma_base_dir, f"Consultas_{ambito}")
+            # Añadir metadatos sobre el ámbito a los documentos
+            for doc in consulta_splits:
+                doc.metadata["ambito"] = ambito
+                doc.metadata["is_consulta"] = True
             
-            # Crear o cargar vectorstore para las consultas de este ámbito
-            if not os.path.exists(consultas_chroma_dir):
-                print(f"Creando nueva base de datos vectorial para consultas de {ambito}...")
-                db = create_vectorstore(consulta_splits, self.embeddings, consultas_chroma_dir)
-            else:
-                print(f"Cargando base de datos vectorial existente para consultas de {ambito}...")
-                db = load_vectorstore(consultas_chroma_dir, self.embeddings)
+            # Nombre de la colección para las consultas de este ámbito
+            collection_name = f"Consultas_{ambito}"
+            
+            try:
+                # Intentar cargar una vectorstore existente
+                print(f"Intentando cargar vectorstore existente para consultas de {ambito}...")
+                db = self.vectorstore_handler.load_vectorstore(
+                    embeddings=self.embeddings,
+                    collection_name=collection_name,
+                    persist_directory=os.path.join(self.vectorstore_dir, collection_name)
+                )
+                print(f"Vectorstore existente cargada para consultas de {ambito}")
+            except Exception as e:
+                # Si no existe, crear una nueva
+                print(f"Creando nueva vectorstore para consultas de {ambito}...")
+                db = self.vectorstore_handler.create_vectorstore(
+                    documents=consulta_splits,
+                    embeddings=self.embeddings,
+                    collection_name=collection_name,
+                    persist_directory=os.path.join(self.vectorstore_dir, collection_name)
+                )
+                print(f"Nueva vectorstore creada para consultas de {ambito}")
             
             # Guardar la vectorstore de consultas
             self.consultas_vectorstores[ambito] = db
             
             # Crear retriever para las consultas de este ámbito y agregarlo a los retrievers
             retriever_key = f"consultas_{ambito}"
-            self.retrievers[retriever_key] = create_retriever(db, k=VECTORSTORE_CONFIG["k_retrieval"])
+            self.retrievers[retriever_key] = self.vectorstore_handler.create_retriever(
+                vectorstore=db,
+                k=VECTORSTORE_CONFIG["k_retrieval"],
+                similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
+            )
         
         # Crear LLMs
         print("Configurando modelos de lenguaje...")
         self.llm = create_llm(model_name=self.local_llm)
         self.llm2 = create_llm(model_name=self.local_llm2)
+        self.llm3 = create_llm(model_name=self.local_llm3)
         
         # Crear cadenas
         self.rag_chain = create_rag_chain(self.llm)
         self.retrieval_grader = create_retrieval_grader(self.llm2)
-        self.hallucination_grader = create_hallucination_grader(self.llm2)
-        self.answer_grader = create_answer_grader(self.llm2)
+        self.hallucination_grader = create_hallucination_grader(self.llm3)
+        self.answer_grader = create_answer_grader(self.llm3)
         
         # Crear un router de preguntas que determine qué cubo usar y si es una consulta
         self.question_router = create_question_router(self.llm2)

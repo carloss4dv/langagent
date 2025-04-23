@@ -216,7 +216,7 @@ PROMPTS = {
         [/INST]"""
     },
     
-    "qwen2.5:7b": {
+    "qwen": {
         "rag": """<|im_start|>system
         You are an assistant for question-answering tasks. Use context to answer. 
         If unsure, say "I don't know". Be concise (3 sentences max).<|im_end|>

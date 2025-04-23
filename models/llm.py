@@ -14,7 +14,11 @@ from langagent.config.config import LLM_CONFIG
 
 def _get_prompt_template(llm, prompt_key: str):
     """Helper para obtener plantillas del modelo correcto."""
-    model_name = llm.model if "llama" not in llm.model else "llama"
+    model_name = llm.model
+    if "llama" in llm.model:
+        model_name = "llama"
+    elif "qwen" in llm.model:
+        model_name = "qwen"
     try:
         return PROMPTS[model_name][prompt_key]
     except KeyError:
