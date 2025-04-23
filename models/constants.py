@@ -102,3 +102,83 @@ AMBITO_KEYWORDS = {
         "plantilla", "rrhh", "pdi", "pas", "ptgas"
     ]
 } 
+
+# Mapeo entre nombres en inglés y español para ámbitos
+AMBITO_EN_ES = {
+    # Inglés -> Español
+    "academic": "academico",
+    "admission": "admision",
+    "teaching": "docencia",
+    "doctorate": "doctorado",
+    "specific_degrees": "estudios_propios",
+    "rd": "idi",
+    "mobility": "movilidad",
+    "hr": "rrhh",
+    
+    # Español -> Inglés
+    "academico": "academic",
+    "admision": "admission",
+    "docencia": "teaching",
+    "doctorado": "doctorate",
+    "estudios_propios": "specific_degrees",
+    "idi": "rd",
+    "movilidad": "mobility",
+    "rrhh": "hr"
+}
+
+# Mapeo entre nombres en inglés y español para cubos
+CUBO_EN_ES = {
+    # Inglés -> Español
+    "cohort": "cohorte",
+    "graduates": "egresados",
+    "enrollment": "matricula",
+    "performance": "rendimiento",
+    "admission": "admision",
+    "available_places": "oferta_plazas",
+    "course_teaching": "docenciaAsignatura",
+    "faculty_teaching": "docenciaPDI",
+    "doctorate_rd": "doctorado",
+    "specific_programs_enrollment": "matricula_estudios_propios",
+    "research_groups": "grupos",
+    "bibliometric_indices": "indicesBibliometricos",
+    "incoming_mobility": "movilidad_entrada",
+    "scientific_production": "produccion_cientifica",
+    "research_projects": "proyectos_contratos",
+    "rd_human_resources": "recursos_humanos_idi",
+    "grant_applications": "solicitud_convocatoria",
+    "bilateral_agreements": "acuerdos_bilaterales",
+    "incoming_students": "estudiantesIN",
+    "outgoing_students": "estudiantesOUT",
+    "outgoing_mobility_applications": "solicitudes_movilidad_out",
+    "positions": "cargo",
+    "teaching_staff": "pdi",
+    "admin_staff": "ptgas",
+    "job_positions": "puesto",
+    
+    # Español -> Inglés
+    "cohorte": "cohort",
+    "egresados": "graduates",
+    "matricula": "enrollment",
+    "rendimiento": "performance",
+    "admision": "admission",
+    "oferta_plazas": "available_places",
+    "docenciaAsignatura": "course_teaching",
+    "docenciaPDI": "faculty_teaching",
+    "doctorado": "doctorate_rd",
+    "matricula_estudios_propios": "specific_programs_enrollment",
+    "grupos": "research_groups",
+    "indicesBibliometricos": "bibliometric_indices",
+    "movilidad_entrada": "incoming_mobility",
+    "produccion_cientifica": "scientific_production",
+    "proyectos_contratos": "research_projects",
+    "recursos_humanos_idi": "rd_human_resources",
+    "solicitud_convocatoria": "grant_applications",
+    "acuerdos_bilaterales": "bilateral_agreements",
+    "estudiantesIN": "incoming_students",
+    "estudiantesOUT": "outgoing_students",
+    "solicitudes_movilidad_out": "outgoing_mobility_applications",
+    "cargo": "positions",
+    "pdi": "teaching_staff",
+    "ptgas": "admin_staff",
+    "puesto": "job_positions"
+} 

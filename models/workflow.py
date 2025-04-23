@@ -14,7 +14,10 @@ import json
 import re
 
 from langagent.config.config import WORKFLOW_CONFIG, VECTORSTORE_CONFIG
-from langagent.models.constants import AMBITOS_CUBOS, CUBO_TO_AMBITO, AMBITO_KEYWORDS
+from langagent.models.constants import (
+    AMBITOS_CUBOS, CUBO_TO_AMBITO, AMBITO_KEYWORDS, 
+    AMBITO_EN_ES, CUBO_EN_ES
+)
 
 class GraphState(TypedDict):
     """
@@ -245,25 +248,50 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                 print(f"Router confidence: {confidence}")
                 print(f"Is query: {is_query}")
                 
-                # Normalizar nombres
-                normalized_cube = normalize_name(cube_name)
-                normalized_scope = normalize_name(scope)
+                # Traducir nombres de inglés a español si es necesario
+                # Convertir a minúsculas para hacer la búsqueda de mapeo insensible a mayúsculas
+                cube_name_lower = cube_name.lower() if cube_name else ""
+                scope_lower = scope.lower() if scope else ""
                 
-                # Mapeo de ámbitos normalizados a sus claves internas
-                scope_mapping = {
-                    "academico": "academico",
-                    "admission": "admision",
-                    "admission": "admision",
-                    "teaching": "docencia",
-                    "doctorate": "doctorado",
-                    "specificdegrees": "estudios_propios",
-                    "rd": "idi",
-                    "mobility": "movilidad",
-                    "hr": "rrhh"
-                }
+                # Traducir nombre del cubo
+                es_cube_name = ""
+                for en_name, es_name in CUBO_EN_ES.items():
+                    if en_name.lower() == cube_name_lower:
+                        es_cube_name = es_name
+                        print(f"Traducido cubo: {cube_name} -> {es_cube_name}")
+                        break
+                    # Si no se encuentra traducción directa, verificar con normalize_name
+                    elif normalize_name(en_name) == normalize_name(cube_name):
+                        es_cube_name = es_name
+                        print(f"Traducido cubo (normalizado): {cube_name} -> {es_cube_name}")
+                        break
                 
-                # Obtener el ámbito normalizado
-                normalized_scope = scope_mapping.get(normalized_scope, normalized_scope)
+                # Si no se encontró traducción, mantener el nombre original
+                if not es_cube_name and cube_name:
+                    es_cube_name = cube_name
+                    print(f"No se encontró traducción para el cubo: {cube_name}")
+                
+                # Traducir nombre del ámbito
+                es_scope = ""
+                for en_name, es_name in AMBITO_EN_ES.items():
+                    if en_name.lower() == scope_lower:
+                        es_scope = es_name
+                        print(f"Traducido ámbito: {scope} -> {es_scope}")
+                        break
+                    # Si no se encuentra traducción directa, verificar con normalize_name
+                    elif normalize_name(en_name) == normalize_name(scope):
+                        es_scope = es_name
+                        print(f"Traducido ámbito (normalizado): {scope} -> {es_scope}")
+                        break
+                
+                # Si no se encontró traducción, mantener el nombre original
+                if not es_scope and scope:
+                    es_scope = scope
+                    print(f"No se encontró traducción para el ámbito: {scope}")
+                
+                # Normalizar nombres para la búsqueda en retrievers
+                normalized_cube = normalize_name(es_cube_name)
+                normalized_scope = normalize_name(es_scope)
                 
                 # Marcar si es una consulta guardada basado en las palabras clave o el router
                 state["is_consulta"] = es_consulta or is_query
@@ -286,6 +314,12 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                     # Inicializar con el cubo específico si existe
                     state["relevant_cubos"] = [normalized_cube] if normalized_cube in retrievers else []
                     
+                    # Añadir todos los cubos del ámbito
+                    cubos_ambito = AMBITOS_CUBOS[normalized_scope]["cubos"]
+                    for cubo in cubos_ambito:
+                        if cubo in retrievers and cubo not in state["relevant_cubos"]:
+                            state["relevant_cubos"].append(cubo)
+                    
                     # Añadir retriever de consultas guardadas si aplica
                     if state["is_consulta"]:
                         consulta_retriever_key = f"consultas_{normalized_scope}"
@@ -294,7 +328,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                             print(f"Adding saved query retriever for scope: {normalized_scope}")
                     
                     state["ambito"] = normalized_scope
-                    print(f"Using scope {normalized_scope} with cube {normalized_cube}")
+                    print(f"Using scope {normalized_scope} with cubes: {state['relevant_cubos']}")
                 else:
                     # Fallback to using all available cubes
                     state["relevant_cubos"] = list(retrievers.keys()) if isinstance(retrievers, dict) else []
