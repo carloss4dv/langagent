@@ -108,133 +108,235 @@ class LangChainAgent:
             chunk_overlap=VECTORSTORE_CONFIG["chunk_overlap"]
         )
         
-        # Diccionario para agrupar los documentos por cubo
-        cubo_documents = {}
+        # Verificar si estamos usando Milvus con colección única
+        use_single_collection = (
+            self.vector_db_type.lower() == "milvus" and 
+            VECTORSTORE_CONFIG.get("use_single_collection", True)
+        )
         
-        # Extraer y agrupar por nombre de cubo
-        for doc in all_documents:
-            # Extraer el nombre del cubo del nombre del archivo o metadatos
-            file_path = doc.metadata.get('source', '')
-            file_name = os.path.basename(file_path)
+        if use_single_collection:
+            print("Usando Milvus con enfoque de colección única...")
             
-            # Buscar el patrón info_cubo_X_vY.md y extraer X como nombre del cubo
-            match = re.search(r'info_cubo_([^_]+)_v\d+\.md', file_name)
-            if match:
-                cubo_name = match.group(1)
-                if cubo_name not in cubo_documents:
-                    cubo_documents[cubo_name] = []
-                cubo_documents[cubo_name].append(doc)
-            else:
-                # Si no sigue el patrón, usar un grupo por defecto
-                if "general" not in cubo_documents:
-                    cubo_documents["general"] = []
-                cubo_documents["general"].append(doc)
-        
-        # Procesar cada cubo y crear su vectorstore
-        for cubo_name, docs in cubo_documents.items():
-            print(f"Procesando documentos para el cubo: {cubo_name}")
+            # Diccionario para almacenar todos los documentos procesados
+            all_processed_docs = []
             
-            # Dividir documentos en chunks
-            doc_splits = text_splitter.split_documents(docs)
-            
-            # Añadir metadatos sobre el cubo a los documentos
-            for doc in doc_splits:
+            # Procesar documentos por cubo y añadir metadatos
+            for doc in all_documents:
+                # Extraer el nombre del cubo del nombre del archivo o metadatos
+                file_path = doc.metadata.get('source', '')
+                file_name = os.path.basename(file_path)
+                
+                # Buscar el patrón info_cubo_X_vY.md y extraer X como nombre del cubo
+                match = re.search(r'info_cubo_([^_]+)_v\d+\.md', file_name)
+                cubo_name = match.group(1) if match else "general"
+                
+                # Añadir metadatos sobre el cubo a los documentos
                 doc.metadata["cubo_source"] = cubo_name
+                
                 # Intentar identificar el ámbito del cubo
                 from langagent.models.constants import CUBO_TO_AMBITO
                 if cubo_name in CUBO_TO_AMBITO:
                     doc.metadata["ambito"] = CUBO_TO_AMBITO[cubo_name]
+                
+                all_processed_docs.append(doc)
             
-            # Nombre de la colección para el cubo
-            collection_name = f"Cubo{cubo_name}"
+            # Dividir todos los documentos en chunks
+            doc_splits = text_splitter.split_documents(all_processed_docs)
+            
+            # Procesar consultas guardadas y añadirlas al conjunto de documentos
+            for ambito, consultas in consultas_por_ambito.items():
+                consulta_splits = text_splitter.split_documents(consultas)
+                for doc in consulta_splits:
+                    doc.metadata["ambito"] = ambito
+                    doc.metadata["is_consulta"] = True
+                doc_splits.extend(consulta_splits)
+            
+            # Nombre para la colección única de Milvus
+            unified_collection_name = VECTORSTORE_CONFIG.get("unified_collection_name", "UnifiedKnowledgeBase")
             
             try:
-                # Intentar cargar una vectorstore existente
-                print(f"Intentando cargar vectorstore existente para {cubo_name}...")
+                # Intentar cargar la colección unificada existente
+                print(f"Intentando cargar vectorstore unificada: {unified_collection_name}...")
                 db = self.vectorstore_handler.load_vectorstore(
                     embeddings=self.embeddings,
-                    collection_name=collection_name,
-                    persist_directory=os.path.join(self.vectorstore_dir, collection_name)
+                    collection_name=unified_collection_name
                 )
-                print(f"Vectorstore existente cargada para {cubo_name}")
+                print(f"Vectorstore unificada cargada correctamente")
+                
+                # Verificar si se requiere actualización de documentos
+                should_update = VECTORSTORE_CONFIG.get("always_update_collection", False)
+                if should_update:
+                    print("Actualizando colección unificada con documentos nuevos...")
+                    
+                    # Si el vectorstore tiene un método para actualizar documentos, usarlo
+                    if hasattr(db, "add_documents") and callable(getattr(db, "add_documents")):
+                        db.add_documents(doc_splits)
+                    
+                    # O si tiene método from_documents, intentar agregar
+                    elif hasattr(self.vectorstore_handler, "add_documents_to_collection"):
+                        self.vectorstore_handler.add_documents_to_collection(
+                            vectorstore=db,
+                            documents=doc_splits
+                        )
+                    
+                    print("Colección unificada actualizada correctamente")
+                
             except Exception as e:
-                # Si no existe, crear una nueva
-                print(f"Creando nueva vectorstore para {cubo_name}...")
+                # Si no existe, crear la colección unificada
+                print(f"Creando nueva vectorstore unificada: {unified_collection_name}...")
                 db = self.vectorstore_handler.create_vectorstore(
                     documents=doc_splits,
                     embeddings=self.embeddings,
-                    collection_name=collection_name,
-                    persist_directory=os.path.join(self.vectorstore_dir, collection_name)
+                    collection_name=unified_collection_name
                 )
-                print(f"Nueva vectorstore creada para {cubo_name}")
+                print(f"Nueva vectorstore unificada creada correctamente")
             
-            # Guardar la vectorstore
-            self.vectorstores[cubo_name] = db
+            # Guardar la vectorstore y crear un retriever unificado
+            self.vectorstores["unified"] = db
             
-            # Crear retriever para este cubo
             try:
-                self.retrievers[cubo_name] = self.vectorstore_handler.create_retriever(
+                # Crear retriever para la colección unificada
+                self.retrievers["unified"] = self.vectorstore_handler.create_retriever(
                     vectorstore=db,
                     k=VECTORSTORE_CONFIG["k_retrieval"],
                     similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
                 )
-                print(f"Retriever creado correctamente para el cubo: {cubo_name}")
+                print(f"Retriever unificado creado correctamente")
             except Exception as e:
-                print(f"Error al crear retriever para el cubo {cubo_name}: {str(e)}")
-                print("Continuando con el siguiente cubo...")
-                # No añadir este retriever si falla la creación para evitar errores posteriores
-        
-        # Procesar consultas guardadas por ámbito
-        for ambito, consultas in consultas_por_ambito.items():
-            print(f"Procesando consultas guardadas para el ámbito: {ambito}")
+                print(f"Error al crear retriever unificado: {str(e)}")
+                print("La aplicación puede tener un comportamiento inesperado")
             
-            # Dividir consultas en chunks
-            consulta_splits = text_splitter.split_documents(consultas)
+        else:
+            # Enfoque tradicional: múltiples colecciones (compatible con Chroma)
+            print("Usando enfoque tradicional con múltiples colecciones...")
             
-            # Añadir metadatos sobre el ámbito a los documentos
-            for doc in consulta_splits:
-                doc.metadata["ambito"] = ambito
-                doc.metadata["is_consulta"] = True
+            # Diccionario para agrupar los documentos por cubo
+            cubo_documents = {}
             
-            # Nombre de la colección para las consultas de este ámbito
-            collection_name = f"Consultas_{ambito}"
+            # Extraer y agrupar por nombre de cubo
+            for doc in all_documents:
+                # Extraer el nombre del cubo del nombre del archivo o metadatos
+                file_path = doc.metadata.get('source', '')
+                file_name = os.path.basename(file_path)
+                
+                # Buscar el patrón info_cubo_X_vY.md y extraer X como nombre del cubo
+                match = re.search(r'info_cubo_([^_]+)_v\d+\.md', file_name)
+                if match:
+                    cubo_name = match.group(1)
+                    if cubo_name not in cubo_documents:
+                        cubo_documents[cubo_name] = []
+                    cubo_documents[cubo_name].append(doc)
+                else:
+                    # Si no sigue el patrón, usar un grupo por defecto
+                    if "general" not in cubo_documents:
+                        cubo_documents["general"] = []
+                    cubo_documents["general"].append(doc)
             
-            try:
-                # Intentar cargar una vectorstore existente
-                print(f"Intentando cargar vectorstore existente para consultas de {ambito}...")
-                db = self.vectorstore_handler.load_vectorstore(
-                    embeddings=self.embeddings,
-                    collection_name=collection_name,
-                    persist_directory=os.path.join(self.vectorstore_dir, collection_name)
-                )
-                print(f"Vectorstore existente cargada para consultas de {ambito}")
-            except Exception as e:
-                # Si no existe, crear una nueva
-                print(f"Creando nueva vectorstore para consultas de {ambito}...")
-                db = self.vectorstore_handler.create_vectorstore(
-                    documents=consulta_splits,
-                    embeddings=self.embeddings,
-                    collection_name=collection_name,
-                    persist_directory=os.path.join(self.vectorstore_dir, collection_name)
-                )
-                print(f"Nueva vectorstore creada para consultas de {ambito}")
+            # Procesar cada cubo y crear su vectorstore
+            for cubo_name, docs in cubo_documents.items():
+                print(f"Procesando documentos para el cubo: {cubo_name}")
+                
+                # Dividir documentos en chunks
+                doc_splits = text_splitter.split_documents(docs)
+                
+                # Añadir metadatos sobre el cubo a los documentos
+                for doc in doc_splits:
+                    doc.metadata["cubo_source"] = cubo_name
+                    # Intentar identificar el ámbito del cubo
+                    from langagent.models.constants import CUBO_TO_AMBITO
+                    if cubo_name in CUBO_TO_AMBITO:
+                        doc.metadata["ambito"] = CUBO_TO_AMBITO[cubo_name]
+                
+                # Nombre de la colección para el cubo
+                collection_name = f"Cubo{cubo_name}"
+                
+                try:
+                    # Intentar cargar una vectorstore existente
+                    print(f"Intentando cargar vectorstore existente para {cubo_name}...")
+                    db = self.vectorstore_handler.load_vectorstore(
+                        embeddings=self.embeddings,
+                        collection_name=collection_name,
+                        persist_directory=os.path.join(self.vectorstore_dir, collection_name)
+                    )
+                    print(f"Vectorstore existente cargada para {cubo_name}")
+                except Exception as e:
+                    # Si no existe, crear una nueva
+                    print(f"Creando nueva vectorstore para {cubo_name}...")
+                    db = self.vectorstore_handler.create_vectorstore(
+                        documents=doc_splits,
+                        embeddings=self.embeddings,
+                        collection_name=collection_name,
+                        persist_directory=os.path.join(self.vectorstore_dir, collection_name)
+                    )
+                    print(f"Nueva vectorstore creada para {cubo_name}")
+                
+                # Guardar la vectorstore
+                self.vectorstores[cubo_name] = db
+                
+                # Crear retriever para este cubo
+                try:
+                    self.retrievers[cubo_name] = self.vectorstore_handler.create_retriever(
+                        vectorstore=db,
+                        k=VECTORSTORE_CONFIG["k_retrieval"],
+                        similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
+                    )
+                    print(f"Retriever creado correctamente para el cubo: {cubo_name}")
+                except Exception as e:
+                    print(f"Error al crear retriever para el cubo {cubo_name}: {str(e)}")
+                    print("Continuando con el siguiente cubo...")
+                    # No añadir este retriever si falla la creación para evitar errores posteriores
             
-            # Guardar la vectorstore de consultas
-            self.consultas_vectorstores[ambito] = db
-            
-            # Crear retriever para las consultas de este ámbito y agregarlo a los retrievers
-            retriever_key = f"consultas_{ambito}"
-            try:
-                self.retrievers[retriever_key] = self.vectorstore_handler.create_retriever(
-                    vectorstore=db,
-                    k=VECTORSTORE_CONFIG["k_retrieval"],
-                    similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
-                )
-                print(f"Retriever creado correctamente para consultas de: {ambito}")
-            except Exception as e:
-                print(f"Error al crear retriever para consultas de {ambito}: {str(e)}")
-                print("Continuando con el siguiente ámbito...")
-                # No añadir este retriever si falla la creación para evitar errores posteriores
+            # Procesar consultas guardadas por ámbito
+            for ambito, consultas in consultas_por_ambito.items():
+                print(f"Procesando consultas guardadas para el ámbito: {ambito}")
+                
+                # Dividir consultas en chunks
+                consulta_splits = text_splitter.split_documents(consultas)
+                
+                # Añadir metadatos sobre el ámbito a los documentos
+                for doc in consulta_splits:
+                    doc.metadata["ambito"] = ambito
+                    doc.metadata["is_consulta"] = True
+                
+                # Nombre de la colección para las consultas de este ámbito
+                collection_name = f"Consultas_{ambito}"
+                
+                try:
+                    # Intentar cargar una vectorstore existente
+                    print(f"Intentando cargar vectorstore existente para consultas de {ambito}...")
+                    db = self.vectorstore_handler.load_vectorstore(
+                        embeddings=self.embeddings,
+                        collection_name=collection_name,
+                        persist_directory=os.path.join(self.vectorstore_dir, collection_name)
+                    )
+                    print(f"Vectorstore existente cargada para consultas de {ambito}")
+                except Exception as e:
+                    # Si no existe, crear una nueva
+                    print(f"Creando nueva vectorstore para consultas de {ambito}...")
+                    db = self.vectorstore_handler.create_vectorstore(
+                        documents=consulta_splits,
+                        embeddings=self.embeddings,
+                        collection_name=collection_name,
+                        persist_directory=os.path.join(self.vectorstore_dir, collection_name)
+                    )
+                    print(f"Nueva vectorstore creada para consultas de {ambito}")
+                
+                # Guardar la vectorstore de consultas
+                self.consultas_vectorstores[ambito] = db
+                
+                # Crear retriever para las consultas de este ámbito y agregarlo a los retrievers
+                retriever_key = f"consultas_{ambito}"
+                try:
+                    self.retrievers[retriever_key] = self.vectorstore_handler.create_retriever(
+                        vectorstore=db,
+                        k=VECTORSTORE_CONFIG["k_retrieval"],
+                        similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
+                    )
+                    print(f"Retriever creado correctamente para consultas de: {ambito}")
+                except Exception as e:
+                    print(f"Error al crear retriever para consultas de {ambito}: {str(e)}")
+                    print("Continuando con el siguiente ámbito...")
+                    # No añadir este retriever si falla la creación para evitar errores posteriores
         
         # Crear LLMs
         print("Configurando modelos de lenguaje...")
@@ -281,8 +383,8 @@ class LangChainAgent:
                 print(f"Error al crear retriever predeterminado: {str(e)}")
                 print("¡ADVERTENCIA! La aplicación puede fallar debido a la falta de retrievers disponibles")
         
-        # Modificar create_workflow para manejar múltiples retrievers
-        print("Creando flujo de trabajo con múltiples vectorstores...")
+        # Crear flujo de trabajo
+        print("Creando flujo de trabajo...")
         self.workflow = create_workflow(
             self.retrievers, 
             self.rag_chain, 

@@ -331,74 +331,121 @@ class MilvusVectorStore(VectorStoreBase):
     def create_retriever(self, vectorstore: Milvus, k: Optional[int] = None, 
                       similarity_threshold: float = 0.7, **kwargs) -> BaseRetriever:
         """
-        Crea un retriever a partir de una vectorstore Milvus.
+        Crea un retriever para una vectorstore Milvus.
+        Configura el retriever para permitir búsquedas filtradas por metadatos.
         
         Args:
-            vectorstore: Instancia de Milvus
+            vectorstore: Instancia de Milvus vectorstore
             k: Número de documentos a recuperar
-            similarity_threshold: Umbral de similitud para la recuperación
+            similarity_threshold: Umbral mínimo de similitud
             
         Returns:
-            BaseRetriever: Retriever configurado
+            BaseRetriever: Retriever configurado para Milvus
         """
-        if k is None:
-            k = VECTORSTORE_CONFIG.get("k_retrieval", 6)
-        
-        if similarity_threshold is None:
-            similarity_threshold = VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
-        
-        logger.info(f"Creando retriever Milvus con k={k} y umbral={similarity_threshold}")
-        
-        # Guardar las opciones como atributos del retriever para usarlas luego
-        retriever = vectorstore.as_retriever(
-            search_type="similarity_score_threshold",
-            search_kwargs={
-                "k": k,
-                "score_threshold": similarity_threshold
+        # Obtener parámetros de búsqueda desde la configuración o parámetros
+        k = k or VECTORSTORE_CONFIG.get("k_retrieval", 4)
+        search_params = {
+            "params": {
+                "metric_type": "COSINE",
+                "offset": 0,
+                "ignore_growing": False,  # Considerar también documentos en cola
+                "params": {"nprobe": 10}  # Cantidad de clusters a consultar
             }
-        )
-        
-        # En lugar de intentar añadir atributos directamente al retriever,
-        # vamos a almacenar los metadatos en un diccionario asociado a este retriever
-        # en la instancia de MilvusVectorStore
-        
-        # Si no existe el diccionario, crearlo
-        if not hasattr(self, '_retriever_metadata'):
-            self._retriever_metadata = {}
-        
-        # Generar un ID único para este retriever
-        retriever_id = id(retriever)
-        
-        # Guardar los metadatos del retriever
-        self._retriever_metadata[retriever_id] = {
-            'vectorstore': vectorstore
         }
         
-        # Verificar que vectorstore.col no sea None antes de acceder a sus atributos
-        if hasattr(vectorstore, 'col') and vectorstore.col is not None:
-            # Almacenar los metadatos de la colección
-            self._retriever_metadata[retriever_id]['collection_name'] = vectorstore.col.name
-            
-            # Obtener particiones si existen
-            try:
-                partitions = vectorstore.col.partitions
-                partition_names = [p.name for p in partitions]
-                self._retriever_metadata[retriever_id]['partition_names'] = partition_names
-                
-                # Actualizar el mapeo de colecciones
-                if vectorstore.col.name not in self.collection_mapping:
-                    self.collection_mapping[vectorstore.col.name] = partition_names
-                
-            except Exception as e:
-                logger.warning(f"No se pudieron obtener particiones: {str(e)}")
-                self._retriever_metadata[retriever_id]['partition_names'] = []
-        else:
-            logger.warning("No se pudo acceder a los atributos de la colección, retriever funcionará en modo básico")
-            self._retriever_metadata[retriever_id]['collection_name'] = 'unknown'
-            self._retriever_metadata[retriever_id]['partition_names'] = []
+        # Determinar si usamos una colección única con filtrado por metadatos
+        use_single_collection = VECTORSTORE_CONFIG.get("use_single_collection", True)
+        filter_by_metadata = VECTORSTORE_CONFIG.get("filter_by_metadata", True)
         
-        # Devolver el retriever configurado
-        return retriever
+        # Crear un wrapper personalizado para el retriever de Milvus si es necesario
+        if use_single_collection and filter_by_metadata:
+            # Crear un retriever con soporte para filtrado por metadatos
+            from langchain_core.retrievers import BaseRetriever
+            
+            class MilvusFilterRetriever(BaseRetriever):
+                """Retriever personalizado para Milvus que soporta filtrado por metadatos."""
+                
+                def __init__(self, vectorstore, search_kwargs=None, filter_threshold=similarity_threshold):
+                    """Inicializa el retriever personalizado."""
+                    self.vectorstore = vectorstore
+                    self.search_kwargs = search_kwargs or {}
+                    self.filter_threshold = filter_threshold
+                    
+                def _get_relevant_documents(self, query: str, *, run_manager=None):
+                    """Recupera documentos sin filtrado de metadatos."""
+                    return self.vectorstore.similarity_search(query, **self.search_kwargs)
+                
+                def search_documents(self, query: str, metadata_filters=None):
+                    """
+                    Realiza búsqueda con filtrado por metadatos.
+                    
+                    Args:
+                        query: Consulta de texto
+                        metadata_filters: Diccionario con filtros de metadatos
+                        
+                    Returns:
+                        List[Document]: Documentos filtrados por metadatos
+                    """
+                    if not metadata_filters:
+                        return self._get_relevant_documents(query)
+                    
+                    # Preparar consulta con filtros
+                    filter_expr = None
+                    
+                    # Convertir filtros de metadatos a expresión de filtro de Milvus
+                    try:
+                        expressions = []
+                        for key, value in metadata_filters.items():
+                            # Convertir a string para asegurar compatibilidad
+                            if isinstance(value, bool):
+                                # Los booleanos se manejan de forma especial
+                                value_str = str(value).lower()
+                                expressions.append(f'{key} == "{value_str}"')
+                            else:
+                                # Otros tipos se convierten a string
+                                value_str = str(value)
+                                expressions.append(f'{key} == "{value_str}"')
+                        
+                        if expressions:
+                            filter_expr = " && ".join(expressions)
+                    except Exception as e:
+                        logger.error(f"Error al crear expresión de filtro: {e}")
+                    
+                    # Configurar parámetros de búsqueda
+                    search_params = dict(self.search_kwargs)
+                    if filter_expr:
+                        search_params["expr"] = filter_expr
+                    
+                    # Realizar búsqueda con filtros
+                    try:
+                        return self.vectorstore.similarity_search(query, **search_params)
+                    except Exception as e:
+                        logger.error(f"Error en búsqueda con filtros: {e}")
+                        # Si falla la búsqueda con filtros, intentar sin filtros
+                        return self._get_relevant_documents(query)
+            
+            # Configurar parámetros de búsqueda
+            search_kwargs = {"k": k, "search_params": search_params, "score_threshold": similarity_threshold}
+            
+            # Crear y devolver el retriever personalizado
+            logger.info(f"Creando retriever personalizado con filtrado para Milvus")
+            return MilvusFilterRetriever(vectorstore=vectorstore, search_kwargs=search_kwargs)
+        
+        else:
+            # Enfoque estándar: crear un retriever normal
+            logger.info(f"Creando retriever estándar para Milvus")
+            
+            # Si es una vectorstore de Milvus, crear un retriever específico
+            retriever = vectorstore.as_retriever(
+                search_type="similarity",
+                search_kwargs={
+                    "k": k,
+                    "score_threshold": similarity_threshold,
+                    "search_params": search_params
+                }
+            )
+            
+            return retriever
     
     def retrieve_documents(self, retriever: BaseRetriever, query: str, 
                          max_retries: int = 3) -> List[Document]:

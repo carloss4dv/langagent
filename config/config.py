@@ -39,6 +39,12 @@ VECTORSTORE_CONFIG = {
     # Configuración de particionamiento para Milvus
     "use_partitioning": True,  # Usar particiones en Milvus
     "partition_by": "ambito",  # Partición por ámbito o por cubo
+    
+    # Configuración para enfoque de colección única
+    "use_single_collection": True,  # Usar una sola colección para todos los documentos (para Milvus/Zilliz)
+    "unified_collection_name": "UnifiedKnowledgeBase",  # Nombre de la colección unificada
+    "always_update_collection": False,  # Si se deben actualizar documentos en colección existente
+    "filter_by_metadata": True,  # Habilitar filtrado por metadatos en consultas
 }
 
 # Configuración de API

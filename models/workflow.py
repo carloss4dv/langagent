@@ -333,88 +333,171 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         retry_count = state.get("retry_count", 0)
         ambito = state.get("ambito")
         
-        # Si tenemos un ámbito identificado, usar todos sus cubos
-        if ambito and ambito in AMBITOS_CUBOS:
-            relevant_cubos = [
-                cubo for cubo in AMBITOS_CUBOS[ambito]["cubos"]
-                if cubo in retrievers
-            ]
-            print(f"\nUsando cubos del ámbito {AMBITOS_CUBOS[ambito]['nombre']}:")
-            print(f"Cubos disponibles: {relevant_cubos}")
-        else:
-            relevant_cubos = state.get("relevant_cubos", list(retrievers.keys()))
-            print(f"\nUsando cubos relevantes identificados:")
-            print(f"Cubos disponibles: {relevant_cubos}")
+        # Obtener el tipo de vectorstore de la configuración
+        from langagent.config.config import VECTORSTORE_CONFIG
+        vector_db_type = VECTORSTORE_CONFIG.get("vector_db_type", "chroma")
+        is_milvus_single_collection = vector_db_type.lower() == "milvus" and VECTORSTORE_CONFIG.get("use_single_collection", True)
         
         all_docs = []
         retrieval_details = {}
         
-        # Recuperar documentos de cada cubo relevante
-        for cubo in relevant_cubos:
-            if cubo in retrievers:
-                try:
-                    print(f"\nProcesando cubo: {cubo}")
-                    print(f"Retriever disponible: {cubo in retrievers}")
+        if is_milvus_single_collection and "unified" in retrievers:
+            # Enfoque de colección única de Milvus con filtrado por metadatos
+            print("\n=== Usando colección única de Milvus con filtrado por metadatos ===")
+            
+            # Si tenemos un ámbito identificado, usar filtro de metadatos
+            unified_retriever = retrievers["unified"]
+            metadata_filters = {}
+            
+            if ambito:
+                print(f"Filtrando por ámbito: {ambito}")
+                metadata_filters["ambito"] = ambito
+                
+                # También verificar si es una consulta guardada
+                if state.get("is_consulta", False):
+                    metadata_filters["is_consulta"] = True
+            
+            # Recuperar documentos con filtros de metadatos si los hay
+            try:
+                if metadata_filters:
+                    # Si el retriever soporta búsqueda con filtros
+                    if hasattr(unified_retriever, "search_documents") and callable(getattr(unified_retriever, "search_documents")):
+                        docs = unified_retriever.search_documents(query=question, metadata_filters=metadata_filters)
+                    elif hasattr(unified_retriever, "get_relevant_documents") and callable(getattr(unified_retriever, "get_relevant_documents")):
+                        docs = unified_retriever.get_relevant_documents(question, filter=metadata_filters)
+                    else:
+                        docs = unified_retriever.invoke(question)
+                else:
+                    docs = unified_retriever.invoke(question)
+                
+                print(f"Documentos recuperados: {len(docs)}")
+                
+                # Filtrar documentos por relevancia
+                relevant_docs = []
+                for doc in docs:
+                    # Evaluar relevancia del documento
+                    relevance = retrieval_grader.invoke({
+                        "document": doc.page_content,
+                        "question": question
+                    })
                     
-                    retriever = retrievers[cubo]
-                    print("Iniciando recuperación de documentos...")
-                    docs = retriever.invoke(question)
+                    # Extraer score de la respuesta
+                    if isinstance(relevance, dict) and "score" in relevance:
+                        is_relevant = relevance["score"].lower() == "yes"
+                    else:
+                        # Por defecto, considerar el documento como relevante
+                        is_relevant = True
                     
-                    print(f"Documentos recuperados del cubo {cubo}: {len(docs)}")
-                    
-                    # Filtrar documentos por relevancia usando el retrieval_grader
-                    relevant_docs = []
-                    for doc in docs:
-                        # Evaluar relevancia del documento
-                        relevance = retrieval_grader.invoke({
-                            "document": doc.page_content,
-                            "question": question
-                        })
+                    if is_relevant:
+                        relevant_docs.append(doc)
+                
+                # Si no hay documentos relevantes, usar todos los documentos
+                if not relevant_docs and docs:
+                    print(f"No se encontraron documentos relevantes. Usando todos los documentos recuperados.")
+                    relevant_docs = docs
+                
+                retrieval_details["unified"] = {
+                    "count": len(docs),
+                    "relevant_count": len(relevant_docs),
+                    "ambito": ambito,
+                    "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
+                }
+                
+                all_docs.extend(relevant_docs)
+                print(f"Documentos relevantes: {len(relevant_docs)}")
+                
+            except Exception as e:
+                print(f"\nERROR al recuperar documentos de la colección unificada:")
+                print(f"Tipo de error: {type(e).__name__}")
+                print(f"Mensaje de error: {str(e)}")
+                retrieval_details["unified"] = {
+                    "count": 0,
+                    "relevant_count": 0,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+                
+        else:
+            # Enfoque tradicional con múltiples colecciones (Chroma)
+            # Si tenemos un ámbito identificado, usar todos sus cubos
+            if ambito and ambito in AMBITOS_CUBOS:
+                relevant_cubos = [
+                    cubo for cubo in AMBITOS_CUBOS[ambito]["cubos"]
+                    if cubo in retrievers
+                ]
+                print(f"\nUsando cubos del ámbito {AMBITOS_CUBOS[ambito]['nombre']}:")
+                print(f"Cubos disponibles: {relevant_cubos}")
+            else:
+                relevant_cubos = state.get("relevant_cubos", list(retrievers.keys()))
+                print(f"\nUsando cubos relevantes identificados:")
+                print(f"Cubos disponibles: {relevant_cubos}")
+            
+            # Recuperar documentos de cada cubo relevante
+            for cubo in relevant_cubos:
+                if cubo in retrievers:
+                    try:
+                        print(f"\nProcesando cubo: {cubo}")
+                        print(f"Retriever disponible: {cubo in retrievers}")
                         
-                        # Extraer score de la respuesta
-                        if isinstance(relevance, dict) and "score" in relevance:
-                            is_relevant = relevance["score"].lower() == "yes"
-                        else:
-                            # Por defecto, considerar el documento como relevante
-                            is_relevant = True
+                        retriever = retrievers[cubo]
+                        print("Iniciando recuperación de documentos...")
+                        docs = retriever.invoke(question)
                         
-                        if is_relevant:
-                            # Añadir metadatos sobre el cubo y ámbito
-                            doc.metadata["cubo_source"] = cubo
-                            doc.metadata["ambito"] = CUBO_TO_AMBITO.get(cubo)
-                            relevant_docs.append(doc)
-                    
-                    # Si no hay documentos relevantes, usar todos los documentos del cubo
-                    if not relevant_docs and docs:
-                        print(f"No se encontraron documentos relevantes en el cubo {cubo}. Usando todos los documentos recuperados.")
+                        print(f"Documentos recuperados del cubo {cubo}: {len(docs)}")
+                        
+                        # Filtrar documentos por relevancia usando el retrieval_grader
                         relevant_docs = []
                         for doc in docs:
-                            # Añadir metadatos sobre el cubo y ámbito
-                            doc.metadata["cubo_source"] = cubo
-                            doc.metadata["ambito"] = CUBO_TO_AMBITO.get(cubo)
-                            relevant_docs.append(doc)
-                    
-                    retrieval_details[cubo] = {
-                        "count": len(docs),
-                        "relevant_count": len(relevant_docs),
-                        "ambito": CUBO_TO_AMBITO.get(cubo),
-                        "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
-                    }
-                    
-                    all_docs.extend(relevant_docs)
-                    print(f"Documentos relevantes del cubo {cubo}: {len(relevant_docs)}")
-                    print(f"Total acumulado de documentos: {len(all_docs)}")
-                    
-                except Exception as e:
-                    print(f"\nERROR al recuperar documentos del cubo {cubo}:")
-                    print(f"Tipo de error: {type(e).__name__}")
-                    print(f"Mensaje de error: {str(e)}")
-                    retrieval_details[cubo] = {
-                        "count": 0,
-                        "relevant_count": 0,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
+                            # Evaluar relevancia del documento
+                            relevance = retrieval_grader.invoke({
+                                "document": doc.page_content,
+                                "question": question
+                            })
+                            
+                            # Extraer score de la respuesta
+                            if isinstance(relevance, dict) and "score" in relevance:
+                                is_relevant = relevance["score"].lower() == "yes"
+                            else:
+                                # Por defecto, considerar el documento como relevante
+                                is_relevant = True
+                            
+                            if is_relevant:
+                                # Añadir metadatos sobre el cubo y ámbito
+                                doc.metadata["cubo_source"] = cubo
+                                doc.metadata["ambito"] = CUBO_TO_AMBITO.get(cubo)
+                                relevant_docs.append(doc)
+                        
+                        # Si no hay documentos relevantes, usar todos los documentos del cubo
+                        if not relevant_docs and docs:
+                            print(f"No se encontraron documentos relevantes en el cubo {cubo}. Usando todos los documentos recuperados.")
+                            relevant_docs = []
+                            for doc in docs:
+                                # Añadir metadatos sobre el cubo y ámbito
+                                doc.metadata["cubo_source"] = cubo
+                                doc.metadata["ambito"] = CUBO_TO_AMBITO.get(cubo)
+                                relevant_docs.append(doc)
+                        
+                        retrieval_details[cubo] = {
+                            "count": len(docs),
+                            "relevant_count": len(relevant_docs),
+                            "ambito": CUBO_TO_AMBITO.get(cubo),
+                            "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
+                        }
+                        
+                        all_docs.extend(relevant_docs)
+                        print(f"Documentos relevantes del cubo {cubo}: {len(relevant_docs)}")
+                        print(f"Total acumulado de documentos: {len(all_docs)}")
+                        
+                    except Exception as e:
+                        print(f"\nERROR al recuperar documentos del cubo {cubo}:")
+                        print(f"Tipo de error: {type(e).__name__}")
+                        print(f"Mensaje de error: {str(e)}")
+                        retrieval_details[cubo] = {
+                            "count": 0,
+                            "relevant_count": 0,
+                            "error": str(e),
+                            "error_type": type(e).__name__
+                        }
         
         # Limitar el número total de documentos
         max_docs = VECTORSTORE_CONFIG.get("max_docs_total", 10)
@@ -424,9 +507,9 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         
         print("\n=== RESUMEN DE LA RECUPERACIÓN ===")
         print(f"Total de documentos recuperados: {len(all_docs)}")
-        print(f"Detalles por cubo:")
-        for cubo, details in retrieval_details.items():
-            print(f"- {cubo}: {details['count']} documentos recuperados, {details.get('relevant_count', 0)} relevantes")
+        print(f"Detalles por cubo/colección:")
+        for key, details in retrieval_details.items():
+            print(f"- {key}: {details['count']} documentos recuperados, {details.get('relevant_count', 0)} relevantes")
             if "error" in details:
                 print(f"  Error: {details['error']}")
         
@@ -436,7 +519,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             "documents": all_docs,
             "question": question,
             "retry_count": retry_count,
-            "relevant_cubos": relevant_cubos,
+            "relevant_cubos": state.get("relevant_cubos", []),
             "ambito": ambito,
             "retrieval_details": retrieval_details
         }
