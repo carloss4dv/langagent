@@ -454,18 +454,21 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                 # Filtrar documentos por relevancia usando el evaluador
                 relevant_docs = []
                 for doc in docs:
-                    # Evaluar relevancia del documento
-                    relevance = retrieval_grader.invoke({
-                        "document": doc.page_content,
-                        "question": question
-                    })
+                    # Comentando el código de evaluación de relevancia
+                    # relevance = retrieval_grader.invoke({
+                    #     "document": doc.page_content,
+                    #     "question": question
+                    # })
                     
-                    # Extraer score de la respuesta del evaluador
-                    if isinstance(relevance, dict) and "score" in relevance:
-                        is_relevant = relevance["score"].lower() == "yes"
-                    else:
-                        # Por defecto, considerar el documento como relevante
-                        is_relevant = True
+                    # # Extraer score de la respuesta del evaluador
+                    # if isinstance(relevance, dict) and "score" in relevance:
+                    #     is_relevant = relevance["score"].lower() == "yes"
+                    # else:
+                    #     # Por defecto, considerar el documento como relevante
+                    #     is_relevant = True
+                    
+                    # Considerar todos los documentos como relevantes
+                    is_relevant = True
                     
                     if is_relevant:
                         # Asegurar que tenga los metadatos correctos
@@ -565,21 +568,25 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                         
                         print(f"Documentos recuperados del cubo {cubo}: {len(docs)}")
                         
-                        # Filtrar documentos por relevancia usando el retrieval_grader
+                        # Filtrar documentos por relevancia usando el evaluador
                         relevant_docs = []
                         for doc in docs:
-                            # Evaluar relevancia del documento
-                            relevance = retrieval_grader.invoke({
-                                "document": doc.page_content,
-                                "question": question
-                            })
+                            # Comentando el código de evaluación de relevancia
+                            # # Evaluar relevancia del documento
+                            # relevance = retrieval_grader.invoke({
+                            #     "document": doc.page_content,
+                            #     "question": question
+                            # })
                             
-                            # Extraer score de la respuesta
-                            if isinstance(relevance, dict) and "score" in relevance:
-                                is_relevant = relevance["score"].lower() == "yes"
-                            else:
-                                # Por defecto, considerar el documento como relevante
-                                is_relevant = True
+                            # # Extraer score de la respuesta
+                            # if isinstance(relevance, dict) and "score" in relevance:
+                            #     is_relevant = relevance["score"].lower() == "yes"
+                            # else:
+                            #     # Por defecto, considerar el documento como relevante
+                            #     is_relevant = True
+                            
+                            # Considerar todos los documentos como relevantes
+                            is_relevant = True
                             
                             if is_relevant:
                                 # Añadir metadatos sobre el cubo y ámbito si no existen
@@ -672,14 +679,18 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             # Filtrar por relevancia
             relevant_docs = []
             for doc in docs:
-                # Evaluar relevancia del documento
-                relevance = retrieval_grader.invoke({
-                    "document": doc.page_content,
-                    "question": question
-                })
+                # Comentando el código de evaluación de relevancia
+                # # Evaluar relevancia del documento
+                # relevance = retrieval_grader.invoke({
+                #     "document": doc.page_content,
+                #     "question": question
+                # })
                 
-                if isinstance(relevance, dict) and relevance.get("score", "").lower() == "yes":
-                    relevant_docs.append(doc)
+                # if isinstance(relevance, dict) and relevance.get("score", "").lower() == "yes":
+                #     relevant_docs.append(doc)
+                
+                # Considerar todos los documentos como relevantes
+                relevant_docs.append(doc)
             
             # Si no hay documentos relevantes, usar todos
             if not relevant_docs and docs:

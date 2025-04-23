@@ -165,16 +165,16 @@ class MilvusVectorStore(VectorStoreBase):
                 vs_kwargs["vector_field"] = ["dense", "sparse"]  # 'dense' para embeddings, 'sparse' para BM25
             
             # Crear la vectorstore
-            vectorstore = Milvus.from_documents(
-                documents=documents,
+                vectorstore = Milvus.from_documents(
+                    documents=documents,
                 **vs_kwargs
-            )
-            
-            logger.info(f"Vectorstore creada correctamente con {len(documents)} documentos")
-            return vectorstore
-            
-        except Exception as e:
-            logger.error(f"Error al crear la vectorstore: {e}")
+                )
+                
+                logger.info(f"Vectorstore creada correctamente con {len(documents)} documentos")
+                return vectorstore
+                
+            except Exception as e:
+                logger.error(f"Error al crear la vectorstore: {e}")
             
             # Intentar sin partition_key_field si el error es sobre ese campo
             if "PartitionKeyException" in str(e) and "partition key field" in str(e) and partition_key_field:
@@ -216,7 +216,7 @@ class MilvusVectorStore(VectorStoreBase):
                     except Exception as e3:
                         logger.error(f"Error en tercer intento después de corregir campos: {e3}")
             
-            return None
+                return None
     
     def load_vectorstore(self, embeddings: Embeddings, collection_name: str, 
                        **kwargs) -> Milvus:
@@ -304,7 +304,7 @@ class MilvusVectorStore(VectorStoreBase):
                 raise e
     
     def create_retriever(self, vectorstore: Milvus, k: Optional[int] = None, 
-                       similarity_threshold: float = 0.7, **kwargs) -> BaseRetriever:
+                      similarity_threshold: float = 0.7, **kwargs) -> BaseRetriever:
         """
         Crea un retriever para una vectorstore Milvus.
         Configura el retriever para usar búsqueda con filtrado y/o híbrida.
@@ -349,11 +349,11 @@ class MilvusVectorStore(VectorStoreBase):
         search_type = "similarity"  # Valor por defecto permitido
         
         # Crear los parámetros de búsqueda
-        search_kwargs = {
-            "k": k,
-            "score_threshold": similarity_threshold
-        }
-        
+            search_kwargs = {
+                "k": k,
+                "score_threshold": similarity_threshold
+            }
+            
         # Si usamos búsqueda híbrida, configurar el executor_parameters
         if self.use_hybrid_search:
             # En lugar de usar 'hybrid' como search_type, configuramos parámetros especiales
@@ -503,19 +503,19 @@ class MilvusVectorStore(VectorStoreBase):
                     time.sleep(1)  # Esperar antes de reintentar
         else:
             # Sin filtros, usar método estándar
-            for attempt in range(max_retries):
-                try:
+        for attempt in range(max_retries):
+            try:
                     # Método estándar
                     docs = retriever.invoke(query)
-                    
-                    if not docs:
+                
+                if not docs:
                         logger.warning(f"No se encontraron documentos relevantes para: {query}")
-                        return []
-                    
-                    return docs
-                    
-                except Exception as e:
-                    logger.error(f"Error en intento {attempt + 1}: {str(e)}")
+                    return []
+                
+                return docs
+                
+            except Exception as e:
+                logger.error(f"Error en intento {attempt + 1}: {str(e)}")
                     
                     # Detectar error específico de multi-vector search
                     if "_collection_search does not support multi-vector search" in str(e) and use_hybrid:
@@ -538,10 +538,10 @@ class MilvusVectorStore(VectorStoreBase):
                         except Exception as hybrid_error:
                             logger.error(f"Error al usar hybrid_search manual: {hybrid_error}")
                     
-                    if attempt == max_retries - 1:
-                        logger.error("Se agotaron los reintentos")
-                        return []
-                    time.sleep(1)  # Esperar antes de reintentar
+                if attempt == max_retries - 1:
+                    logger.error("Se agotaron los reintentos")
+                    return []
+                time.sleep(1)  # Esperar antes de reintentar
     
     def _build_filter_expression(self, metadata_filters: Dict[str, Any]) -> str:
         """
@@ -596,7 +596,7 @@ class MilvusVectorStore(VectorStoreBase):
             
         # Verificar y asegurar que los documentos tienen los metadatos requeridos
         documents = self._verify_metadata_fields(documents)
-        
+            
         try:
             # Para colecciones grandes, dividir en lotes
             batch_size = 1000
