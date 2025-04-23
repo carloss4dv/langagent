@@ -375,21 +375,20 @@ class MilvusVectorStore(VectorStoreBase):
                     embeddings_vectors = embeddings.embed_documents(texts)
                     
                     # Preparar datos para inserción en Milvus
-                    entities = []
-                    entities.append({"field": "vector", "type": DataType.FLOAT_VECTOR, "values": embeddings_vectors})
-                    entities.append({"field": "text", "type": DataType.VARCHAR, "values": texts})
-                    
                     sources = [meta.get("source", "") for meta in metadatas]
-                    entities.append({"field": "source", "type": DataType.VARCHAR, "values": sources})
-                    
                     cubo_sources = [meta.get("cubo_source", "general") for meta in metadatas]
-                    entities.append({"field": "cubo_source", "type": DataType.VARCHAR, "values": cubo_sources})
-                    
                     ambitos = [meta.get("ambito", "general") for meta in metadatas]
-                    entities.append({"field": "ambito", "type": DataType.VARCHAR, "values": ambitos})
-                    
                     is_consultas = [meta.get("is_consulta", False) for meta in metadatas]
-                    entities.append({"field": "is_consulta", "type": DataType.BOOL, "values": is_consultas})
+                    
+                    # Crear diccionario con los datos para insertar (formato correcto para Milvus)
+                    entities = {
+                        "vector": embeddings_vectors,
+                        "text": texts,
+                        "source": sources,
+                        "cubo_source": cubo_sources,
+                        "ambito": ambitos,
+                        "is_consulta": is_consultas
+                    }
                     
                     # Insertar los datos en la colección
                     logger.info(f"Insertando {len(texts)} documentos en la colección...")
