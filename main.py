@@ -54,6 +54,8 @@ def main():
     parser.add_argument("--local_llm", default=None, help="Modelo LLM principal")
     parser.add_argument("--local_llm2", default=None, help="Modelo LLM secundario (opcional)")
     parser.add_argument("--question", help="Pregunta a responder")
+    parser.add_argument("--vector_db_type", default="milvus", choices=["chroma", "milvus"],
+                       help="Tipo de vectorstore a utilizar (default: milvus)")
     
     args = parser.parse_args()
     
@@ -61,6 +63,7 @@ def main():
     agent = LangChainAgent(
         data_dir=args.data_dir, 
         vectorstore_dir=args.chroma_dir, 
+        vector_db_type=args.vector_db_type,
         local_llm=args.local_llm, 
         local_llm2=args.local_llm2
     )

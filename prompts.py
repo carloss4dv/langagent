@@ -155,6 +155,7 @@ PROMPTS = {
         2. If the question mentions a cube name (e.g., "cubo MATRÍCULA"), identify its corresponding scope
         3. If multiple scopes/cubes are mentioned, select the one that appears to be the main focus
         4. If you can identify a specific cube based on the question content and metrics needed, select it
+        5. You must output the content in Spanish
 
         Available scopes and their cubes with their main metrics:
 

@@ -26,6 +26,8 @@ def main():
     run_parser.add_argument("--local_llm", help="Modelo LLM principal")
     run_parser.add_argument("--local_llm2", help="Modelo LLM secundario (opcional)")
     run_parser.add_argument("--question", help="Pregunta a responder")
+    run_parser.add_argument("--vector_db_type", default="milvus", choices=["chroma", "milvus"],
+                           help="Tipo de vectorstore a utilizar (default: milvus)")
     
     # Comando para ejecutar la evaluación
     eval_parser = subparsers.add_parser("evaluate", help="Evaluar el rendimiento del agente")
@@ -36,6 +38,8 @@ def main():
     eval_parser.add_argument("--salida", help="Ruta para guardar los resultados")
     eval_parser.add_argument("--verbose", action="store_true", help="Mostrar información detallada")
     eval_parser.add_argument("--casos", help="Archivo JSON con casos de prueba personalizados")
+    eval_parser.add_argument("--vector_db_type", default="milvus", choices=["chroma", "milvus"],
+                           help="Tipo de vectorstore a utilizar (default: milvus)")
     
     # Analizar argumentos
     args = parser.parse_args()
@@ -57,6 +61,9 @@ def main():
             if args.question:
                 run_main_args.extend(["--question", args.question])
             
+            # Agregar el tipo de vectorstore
+            run_main_args.extend(["--vector_db_type", args.vector_db_type])
+            
             # Reimplementar sys.argv
             sys.argv = ["main.py"] + run_main_args
             run_main()
@@ -75,6 +82,9 @@ def main():
                     run_main_args.extend(["--local_llm2", args.local_llm2])
                 if args.question:
                     run_main_args.extend(["--question", args.question])
+                
+                # Agregar el tipo de vectorstore
+                run_main_args.extend(["--vector_db_type", args.vector_db_type])
                 
                 # Reimplementar sys.argv
                 sys.argv = ["main.py"] + run_main_args
@@ -110,6 +120,9 @@ def main():
             if args.casos:
                 eval_main_args.extend(["--casos", args.casos])
             
+            # Agregar el tipo de vectorstore
+            eval_main_args.extend(["--vector_db_type", args.vector_db_type])
+            
             # Reimplementar sys.argv
             sys.argv = ["evaluation/run_evaluation.py"] + eval_main_args
             eval_main()
@@ -133,6 +146,9 @@ def main():
                     eval_main_args.append("--verbose")
                 if args.casos:
                     eval_main_args.extend(["--casos", args.casos])
+                
+                # Agregar el tipo de vectorstore
+                eval_main_args.extend(["--vector_db_type", args.vector_db_type])
                 
                 # Reimplementar sys.argv
                 sys.argv = ["evaluation/run_evaluation.py"] + eval_main_args

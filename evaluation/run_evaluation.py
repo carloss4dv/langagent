@@ -65,6 +65,8 @@ def main():
     parser.add_argument("--salida", help="Ruta para guardar los resultados")
     parser.add_argument("--verbose", action="store_true", help="Mostrar información detallada")
     parser.add_argument("--casos", help="Archivo JSON con casos de prueba personalizados")
+    parser.add_argument("--vector_db_type", default="milvus", choices=["chroma", "milvus"],
+                       help="Tipo de vectorstore a utilizar (default: milvus)")
     
     args = parser.parse_args()
     
@@ -82,6 +84,7 @@ def main():
     evaluador = AgentEvaluator(
         data_dir=args.data_dir,
         vectorstore_dir=args.chroma_dir,
+        vector_db_type=args.vector_db_type,
         local_llm=args.modelo,
         local_llm2=args.modelo2
     )

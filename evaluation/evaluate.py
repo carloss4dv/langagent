@@ -39,21 +39,25 @@ class AgentEvaluator:
     Evaluador que utiliza deepeval para evaluar las respuestas del agente LangChain.
     """
     
-    def __init__(self, data_dir=None, vectorstore_dir=None, local_llm=None, local_llm2=None):
+    def __init__(self, data_dir=None, vectorstore_dir=None, vector_db_type="milvus", local_llm=None, local_llm2=None, local_llm3=None):
         """
         Inicializa el evaluador con el agente LangChain.
         
         Args:
             data_dir (str, optional): Directorio con los documentos markdown.
             vectorstore_dir (str, optional): Directorio base para las bases de datos vectoriales.
+            vector_db_type (str, optional): Tipo de vectorstore a utilizar ('chroma' o 'milvus').
             local_llm (str, optional): Nombre del modelo LLM principal.
             local_llm2 (str, optional): Nombre del segundo modelo LLM.
+            local_llm3 (str, optional): Nombre del tercer modelo LLM.
         """
         self.agent = LangChainAgent(
             data_dir=data_dir,
             vectorstore_dir=vectorstore_dir,
+            vector_db_type=vector_db_type,
             local_llm=local_llm,
-            local_llm2=local_llm2
+            local_llm2=local_llm2,
+            local_llm3=local_llm3
         )
         
         self.test_cases = []
@@ -704,6 +708,8 @@ def main():
     parser.add_argument("--salida", help="Ruta para guardar resultados")
     parser.add_argument("--verbose", action="store_true", help="Mostrar información detallada")
     parser.add_argument("--casos", help="Archivo JSON con casos de prueba")
+    parser.add_argument("--vector_db_type", default="milvus", choices=["chroma", "milvus"],
+                       help="Tipo de vectorstore a utilizar (default: milvus)")
     
     args = parser.parse_args()
     
@@ -711,6 +717,7 @@ def main():
     evaluador = AgentEvaluator(
         data_dir=args.data_dir,
         vectorstore_dir=args.chroma_dir,
+        vector_db_type=args.vector_db_type,
         local_llm=args.modelo,
         local_llm2=args.modelo2,
         local_llm3=args.modelo3
