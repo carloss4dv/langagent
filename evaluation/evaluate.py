@@ -381,6 +381,24 @@ class AgentEvaluator:
             documents = resultado.get("documents", [])
             is_consulta = resultado.get("is_consulta", False)
             consulta_documents = resultado.get("consulta_documents", [])
+            relevant_cubos = resultado.get("relevant_cubos", [])
+            ambito = resultado.get("ambito")
+            retrieval_details = resultado.get("retrieval_details", {})
+            
+            # Extraer puntuaciones si existen
+            hallucination_score = None
+            if "hallucination_score" in resultado and isinstance(resultado["hallucination_score"], dict):
+                hallucination_score = resultado["hallucination_score"].get("score")
+            
+            answer_score = None
+            if "answer_score" in resultado and isinstance(resultado["answer_score"], dict):
+                answer_score = resultado["answer_score"].get("score")
+            
+            # Extraer metadatos de respuesta si existen
+            response_metadata = resultado.get("generation", "")
+            
+            # Calcular información de tokens y costos
+            token_info = self.calcular_token_cost(response_metadata)
             
             # Si es una consulta, agregar los documentos de consulta al contexto
             if is_consulta and consulta_documents:
@@ -389,19 +407,28 @@ class AgentEvaluator:
                 # Usar los documentos recuperados normalmente
                 context_docs = documents
             
-            # Extraer el contexto
+            # Extraer el contexto formateado
             context = self.obtener_contexto_formateado(context_docs)
             
-            # Crear un caso de prueba
-            test_case = deepeval.test_case.LLMTestCase(
+            # Crear un caso de prueba con todos los campos disponibles
+            test_case = LLMTestCase(
                 input=golden.input,
                 actual_output=generation or "No se pudo extraer una respuesta",
                 expected_output=golden.expected_output,
                 retrieval_context=context,
+                token_cost=token_info.get("total_tokens", 0),
+                completion_time=tiempo_completado
             )
             
-            # Guardar metadatos adicionales
-            test_case.completion_time = tiempo_completado
+            # Guardar metadatos adicionales como atributos del objeto para uso posterior
+            test_case.hallucination_score = hallucination_score
+            test_case.answer_score = answer_score
+            test_case.relevant_cubos = relevant_cubos
+            test_case.ambito = ambito
+            test_case.is_consulta = is_consulta
+            test_case.model_info = token_info.get("model", "unknown")
+            test_case.token_info = token_info
+            test_case.retrieval_details = retrieval_details
             
             test_cases.append(test_case)
         
@@ -627,18 +654,8 @@ def main():
     # Guardar resultados
     ruta_resultados = guardar_resultados_deepeval(evaluador, resultados, args.salida)
     
-    print(f"Evaluación completada. Resultados guardados en: {ruta_resultados}")
-    
-    # Mostrar resultados de la evaluación
-    if "results" in resultados and hasattr(resultados["results"], "metrics"):
-        print("\nResumen de puntuaciones:")
-        for metric in resultados["results"].metrics:
-            metric_name = metric.__class__.__name__
-            metric_score = getattr(resultados["results"], f"{metric_name.replace('Metric', '').lower()}_score", None)
-            if metric_score is not None:
-                print(f"  {metric_name}: {metric_score:.2f}")
-            else:
-                print(f"  {metric_name}: No disponible")
+    if args.verbose:
+        print(f"Evaluación completada. Resultados guardados en: {ruta_resultados}")
 
 if __name__ == "__main__":
     main() 
