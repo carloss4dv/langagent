@@ -17,6 +17,8 @@ PROMPTS = {
         3. Avoid using colons (:) especially when starting a list or enumeration.
         4. Instead of listing items after a colon, incorporate them into a fluid paragraph.
         5. Maintain the original language of the question in your response.
+        6. Always maintain Spanish accented characters and special characters (á, é, í, ó, ú, ñ, ü) in your response.
+        7. Do not replace accented characters with their non-accented equivalents.
         <|eot_id|><|start_header_id|>user<|end_header_id|>
         Question: {question} 
         Context: {context} 
@@ -143,16 +145,18 @@ PROMPTS = {
                 - Incorporate all information into fluid paragraphs instead of listing items
                 - Avoid breaking your text with line breaks in the middle of the response
                 - Maintain the original language of the question in your response
+                - Always preserve Spanish accented characters (á, é, í, ó, ú, ñ, ü) in your response
                 - If the information is not in the context, state "I cannot answer based on the available SEGEDA data"
                 - Avoid inferences or assumptions beyond the provided Universidad de Zaragoza data
                 - NEVER use markdown formatting like **, *, or # in your answers
-                - AVOID using any special characters that might interfere with JSON parsing
+                - DO NOT remove or modify accented Spanish characters in your response
 
                 IMPORTANT FORMATTING:
                 - When generating responses, NEVER use actual line breaks within your text
                 - Do not use any formatting that might break JSON structure
                 - Keep your text clean and simple, avoiding any special formatting or characters
                 - Your response should be plain text without any special formatting
+                - Always preserve Spanish special characters like á, é, í, ó, ú, ñ, and keep them intact
 
                 Question: {question}
                 Context: {context} [/INST]""",
@@ -267,7 +271,9 @@ PROMPTS = {
         2. Never use colons (:) followed by lists or enumerations
         3. Incorporate all information into fluid paragraphs instead of listing items
         4. Avoid breaking your text with line breaks in the middle of the response
-        5. Always maintain the original language of the question in your response<|im_end|>
+        5. Always maintain the original language of the question in your response
+        6. Always preserve Spanish accented characters (á, é, í, ó, ú, ñ, ü) in your output
+        7. Do not replace or modify accented characters in any way<|im_end|>
         <|im_start|>user
         Question: {question}
         Context: {context}<|im_end|>

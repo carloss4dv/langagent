@@ -825,8 +825,8 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         # Manejar casos específicos donde el texto incluye caracteres como comillas o barras invertidas
         formatted_generation = formatted_generation.replace('"', '\\"')
         
-        # Limpiar cualquier carácter que pueda romper el JSON
-        formatted_generation = re.sub(r'[^\x20-\x7E]', '', formatted_generation)
+        # Preservar los caracteres acentuados y especiales en español
+        # Ya no limpiamos caracteres Unicode: formatted_generation = re.sub(r'[^\x20-\x7E]', '', formatted_generation)
         
         # Envolver la respuesta en un JSON simple
         # Usar un formato directo para evitar problemas de parseo
