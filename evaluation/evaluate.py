@@ -181,6 +181,10 @@ class AgentEvaluator:
         Returns:
             str: Texto de la respuesta extraído.
         """
+        # Si es un diccionario con campo answer directo (nuevo formato)
+        if isinstance(respuesta, dict) and "answer" in respuesta:
+            return respuesta["answer"]
+        
         # Si es un string directamente
         if isinstance(respuesta, str):
             # Formato específico mostrado en el ejemplo del usuario

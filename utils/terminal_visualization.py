@@ -87,13 +87,16 @@ def print_workflow_result(result: Dict[str, Any]):
     # Extraer la información relevante
     pregunta = result.get('question', 'N/A')
     
-    # Extraer la generación del formato actualizado
+    # Extraer la generación
     generacion = result.get('generation', 'N/A')
     respuesta_texto = "No se pudo extraer la respuesta"
     
-    # Procesar la generación que ahora contiene un formato específico
-    if isinstance(generacion, str) and 'content=' in generacion:
-        # Intentar extraer el contenido JSON de la respuesta
+    # Procesar diferentes formatos de generación
+    if isinstance(generacion, dict) and "answer" in generacion:
+        # Formato nuevo: objeto JSON directo
+        respuesta_texto = generacion["answer"]
+    elif isinstance(generacion, str) and 'content=' in generacion:
+        # Formato antiguo: string con contenido JSON
         try:
             # Buscar el contenido JSON en el formato content='{ "answer": "..." }'
             content_start = generacion.find("content='") + 9
@@ -126,6 +129,9 @@ def print_workflow_result(result: Dict[str, Any]):
                                     respuesta_texto = json_remainder[:last_quote]
         except Exception as e:
             print(f"Error al procesar la generación: {e}")
+    elif isinstance(generacion, str):
+        # Formato simple: solo texto
+        respuesta_texto = generacion
     
     print(f"Pregunta: {pregunta}")
     print(f"Respuesta: {respuesta_texto}")

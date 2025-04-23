@@ -808,6 +808,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             print("---DECISION: GENERATION DOES NOT ADDRESS QUESTION---")
         
         # Formatear la respuesta
+        formatted_generation = ""
         if isinstance(generation, dict):
             if "answer" in generation:
                 formatted_generation = generation["answer"]
@@ -821,6 +822,9 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         formatted_generation = re.sub(r'\n\s*\n', '\n\n', formatted_generation)  # Eliminar líneas vacías múltiples
         formatted_generation = re.sub(r'\s+', ' ', formatted_generation)  # Eliminar espacios múltiples
         
+        # Crear un objeto JSON para la respuesta en lugar de formatear directamente
+        response_json = {"answer": formatted_generation}
+        
         # Si la generación no es exitosa, incrementar contador de reintentos
         if not (is_grounded and is_useful):
             retry_count += 1
@@ -829,7 +833,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         return {
             "documents": documents,
             "question": question,
-            "generation": formatted_generation,
+            "generation": response_json,  # Devolver el objeto JSON completo
             "retry_count": retry_count,
             "hallucination_score": hallucination_eval,
             "answer_score": answer_eval,
