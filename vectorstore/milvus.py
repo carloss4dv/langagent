@@ -27,10 +27,12 @@ class MilvusFilterRetriever(BaseRetriever):
     
     def __init__(self, vectorstore, search_kwargs=None, filter_threshold=0.7):
         """Inicializa el retriever personalizado."""
-        super().__init__()  # Inicializar la clase base correctamente
+        # Inicializar los atributos ANTES de llamar a super.__init__
         self._vectorstore = vectorstore  # Usar _vectorstore en lugar de vectorstore
         self.search_kwargs = search_kwargs or {}  # Inicializar como diccionario vacío si es None
         self.filter_threshold = filter_threshold
+        # Llamar a super().__init__ después de inicializar los atributos
+        super().__init__()
         
     def _get_relevant_documents(self, query: str, *, run_manager=None):
         """Recupera documentos sin filtrado de metadatos."""
@@ -219,6 +221,23 @@ class MilvusVectorStore(VectorStoreBase):
         # Para modo de colección única, asegurarnos de usar todos los documentos
         use_single_collection = VECTORSTORE_CONFIG.get("use_single_collection", True)
         
+        # Intentar eliminar la colección si drop_old es True
+        if drop_old and use_single_collection:
+            try:
+                from pymilvus import connections, utility
+                
+                # Conectar a Milvus
+                connections.connect(**connection_args)
+                
+                # Verificar si la colección existe y eliminarla
+                if utility.has_collection(collection_name):
+                    logger.info(f"Eliminando colección existente {collection_name}")
+                    utility.drop_collection(collection_name)
+                    logger.info(f"Colección {collection_name} eliminada correctamente")
+            except Exception as e:
+                logger.error(f"Error al eliminar colección: {e}")
+                # Continuar de todos modos
+        
         # Comprobar que los documentos tienen metadatos necesarios
         for doc in documents:
             if 'source' in doc.metadata:
@@ -228,7 +247,7 @@ class MilvusVectorStore(VectorStoreBase):
                 # Comprobar si falta el cubo_source
                 if 'cubo_source' not in doc.metadata:
                     # Extraer cubo del nombre del archivo
-                    match = re.search(r'info_cubo_([^_]+)_v\d+\.md', file_name)
+                    match = re.search(r'info_cubo_([^_]+)', file_name)
                     if match:
                         cubo_name = match.group(1)
                         doc.metadata['cubo_source'] = cubo_name
@@ -278,14 +297,126 @@ class MilvusVectorStore(VectorStoreBase):
                 # Usar los documentos con metadatos completos
                 logger.info(f"Creando colección unificada con {len(docs_with_complete_metadata)} documentos")
                 
-                # Definir campos de metadatos para Milvus
-                metadata_fields = [
-                    {"name": "cubo_source", "type": "VARCHAR", "is_primary": False, "dim": 100},
-                    {"name": "ambito", "type": "VARCHAR", "is_primary": False, "dim": 100},
-                    {"name": "is_consulta", "type": "BOOL", "is_primary": False}
-                ]
+                # Para Milvus/Zilliz Cloud, necesitamos usar su API de bajo nivel para definir esquema
+                try:
+                    from pymilvus import connections, FieldSchema, CollectionSchema, DataType, Collection
+                    from pymilvus import utility
+                    
+                    # Conectar a Milvus
+                    connections.connect(**connection_args)
+                    
+                    # Si la colección ya existe, eliminarla si drop_old es True
+                    if utility.has_collection(collection_name):
+                        if drop_old:
+                            utility.drop_collection(collection_name)
+                            logger.info(f"Colección {collection_name} eliminada para recreación")
+                        else:
+                            logger.info(f"La colección {collection_name} ya existe, se usará la existente")
+                            
+                            # Crear una instancia de Milvus con la colección existente
+                            return Milvus(
+                                embedding_function=embeddings,
+                                collection_name=collection_name,
+                                connection_args=connection_args
+                            )
+                    
+                    # Definir el esquema con campos para metadatos
+                    fields = [
+                        FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=True),
+                        FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=1024),
+                        FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
+                        FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=65535),
+                        FieldSchema(name="cubo_source", dtype=DataType.VARCHAR, max_length=255),
+                        FieldSchema(name="ambito", dtype=DataType.VARCHAR, max_length=255),
+                        FieldSchema(name="is_consulta", dtype=DataType.BOOL)
+                    ]
+                    
+                    # Crear el esquema y la colección
+                    schema = CollectionSchema(fields)
+                    collection = Collection(name=collection_name, schema=schema)
+                    
+                    logger.info(f"Colección {collection_name} creada con esquema personalizado")
+                    
+                    # Crear un índice para el campo vector
+                    logger.info("Creando índice para el campo vector...")
+                    index_params = {
+                        "metric_type": "COSINE",
+                        "index_type": "HNSW",
+                        "params": {
+                            "M": 16,
+                            "efConstruction": 200
+                        }
+                    }
+                    collection.create_index(field_name="vector", index_params=index_params)
+                    
+                    # Cargar la colección en memoria para insertar datos
+                    collection.load()
+                    
+                    # Procesar los documentos y prepararlos para inserción
+                    logger.info("Preparando datos para inserción...")
+                    texts = []
+                    metadatas = []
+                    for doc in docs_with_complete_metadata:
+                        texts.append(doc.page_content)
+                        meta = doc.metadata.copy()
+                        
+                        # Asegurar que los metadatos tienen los campos necesarios
+                        if "cubo_source" not in meta:
+                            meta["cubo_source"] = "general"
+                        if "ambito" not in meta:
+                            meta["ambito"] = "general"
+                        if "is_consulta" not in meta:
+                            meta["is_consulta"] = False
+                        
+                        metadatas.append(meta)
+                    
+                    # Generar embeddings para todos los textos
+                    logger.info("Generando embeddings...")
+                    embeddings_vectors = embeddings.embed_documents(texts)
+                    
+                    # Preparar datos para inserción en Milvus
+                    entities = []
+                    entities.append({"field": "vector", "type": DataType.FLOAT_VECTOR, "values": embeddings_vectors})
+                    entities.append({"field": "text", "type": DataType.VARCHAR, "values": texts})
+                    
+                    sources = [meta.get("source", "") for meta in metadatas]
+                    entities.append({"field": "source", "type": DataType.VARCHAR, "values": sources})
+                    
+                    cubo_sources = [meta.get("cubo_source", "general") for meta in metadatas]
+                    entities.append({"field": "cubo_source", "type": DataType.VARCHAR, "values": cubo_sources})
+                    
+                    ambitos = [meta.get("ambito", "general") for meta in metadatas]
+                    entities.append({"field": "ambito", "type": DataType.VARCHAR, "values": ambitos})
+                    
+                    is_consultas = [meta.get("is_consulta", False) for meta in metadatas]
+                    entities.append({"field": "is_consulta", "type": DataType.BOOL, "values": is_consultas})
+                    
+                    # Insertar los datos en la colección
+                    logger.info(f"Insertando {len(texts)} documentos en la colección...")
+                    insert_result = collection.insert(entities)
+                    logger.info(f"Inserción completada: {insert_result}")
+                    
+                    # Esperar a que los datos se persistan
+                    collection.flush()
+                    
+                    # Crear una instancia de Milvus vectorstore con la colección
+                    milvus_db = Milvus(
+                        embedding_function=embeddings,
+                        collection_name=collection_name,
+                        connection_args=connection_args
+                    )
+                    
+                    logger.info(f"Vectorstore Milvus creada correctamente como colección única: {collection_name}")
+                    return milvus_db
+                    
+                except ImportError:
+                    logger.warning("No se pudo importar pymilvus. Usando la API de alto nivel.")
+                except Exception as e:
+                    logger.error(f"Error al crear colección con esquema personalizado: {e}")
+                    logger.warning("Continuando con la API de alto nivel...")
                 
-                # Crear la colección con los documentos
+                # Fallback: Usar la API de alto nivel (que puede no preservar todos los metadatos)
+                logger.info("Usando API de alto nivel para crear la colección")
                 milvus_db = Milvus.from_documents(
                     documents=docs_with_complete_metadata,
                     embedding=embeddings,
@@ -311,9 +442,9 @@ class MilvusVectorStore(VectorStoreBase):
                         # Verificar si el campo existe
                         field_names = [field.name for field in milvus_db.col.schema.fields]
                         
-                        if "text_embedding" in field_names:
+                        if "vector" in field_names:
                             milvus_db.col.create_index(
-                                field_name="text_embedding", 
+                                field_name="vector", 
                                 index_params=index_params
                             )
                             
@@ -325,7 +456,7 @@ class MilvusVectorStore(VectorStoreBase):
                             # Buscar campo de embeddings alternativo
                             embedding_field = None
                             for field in field_names:
-                                if "embedding" in field.lower():
+                                if "embedding" in field.lower() or "vector" in field.lower():
                                     embedding_field = field
                                     break
                             
