@@ -137,6 +137,16 @@ class LangChainAgent:
                 from langagent.models.constants import CUBO_TO_AMBITO
                 if cubo_name in CUBO_TO_AMBITO:
                     doc.metadata["ambito"] = CUBO_TO_AMBITO[cubo_name]
+                else:
+                    # Si no podemos determinar el ámbito, usar "general"
+                    doc.metadata["ambito"] = "general"
+                
+                # Asegurar que todos los campos necesarios estén presentes
+                if "is_consulta" not in doc.metadata:
+                    doc.metadata["is_consulta"] = "false"  # Por defecto, no es una consulta guardada
+                elif isinstance(doc.metadata["is_consulta"], bool):
+                    # Convertir booleanos a string para Milvus
+                    doc.metadata["is_consulta"] = str(doc.metadata["is_consulta"]).lower()
                 
                 all_processed_docs.append(doc)
             
@@ -147,9 +157,23 @@ class LangChainAgent:
             for ambito, consultas in consultas_por_ambito.items():
                 consulta_splits = text_splitter.split_documents(consultas)
                 for doc in consulta_splits:
+                    # Asegurar que tiene todos los metadatos necesarios
                     doc.metadata["ambito"] = ambito
-                    doc.metadata["is_consulta"] = True
+                    doc.metadata["is_consulta"] = "true"  # Usar string en lugar de bool
+                    doc.metadata["cubo_source"] = f"consultas_{ambito}"  # Asignar un cubo_source basado en el ámbito
                 doc_splits.extend(consulta_splits)
+            
+            # Hacer una verificación final de que todos los documentos tienen los metadatos requeridos
+            for doc in doc_splits:
+                # Verificar campos obligatorios
+                if "ambito" not in doc.metadata or not doc.metadata["ambito"]:
+                    doc.metadata["ambito"] = "general"
+                if "cubo_source" not in doc.metadata or not doc.metadata["cubo_source"]:
+                    doc.metadata["cubo_source"] = "general"
+                if "is_consulta" not in doc.metadata:
+                    doc.metadata["is_consulta"] = "false"
+                elif isinstance(doc.metadata["is_consulta"], bool):
+                    doc.metadata["is_consulta"] = str(doc.metadata["is_consulta"]).lower()
             
             # Nombre para la colección única de Milvus
             unified_collection_name = VECTORSTORE_CONFIG.get("unified_collection_name", "UnifiedKnowledgeBase")
@@ -513,6 +537,16 @@ class LangChainAgent:
             from langagent.models.constants import CUBO_TO_AMBITO
             if cubo_name in CUBO_TO_AMBITO:
                 doc.metadata["ambito"] = CUBO_TO_AMBITO[cubo_name]
+            else:
+                # Si no podemos determinar el ámbito, usar "general"
+                doc.metadata["ambito"] = "general"
+            
+            # Asegurar que todos los campos necesarios estén presentes
+            if "is_consulta" not in doc.metadata:
+                doc.metadata["is_consulta"] = "false"  # Por defecto, no es una consulta guardada
+            elif isinstance(doc.metadata["is_consulta"], bool):
+                # Convertir booleanos a string para Milvus
+                doc.metadata["is_consulta"] = str(doc.metadata["is_consulta"]).lower()
             
             all_processed_docs.append(doc)
         
@@ -523,10 +557,24 @@ class LangChainAgent:
         for ambito, consultas in consultas_por_ambito.items():
             consulta_splits = text_splitter.split_documents(consultas)
             for doc in consulta_splits:
+                # Asegurar que tiene todos los metadatos necesarios
                 doc.metadata["ambito"] = ambito
-                doc.metadata["is_consulta"] = True
+                doc.metadata["is_consulta"] = "true"  # Usar string en lugar de bool
+                doc.metadata["cubo_source"] = f"consultas_{ambito}"  # Asignar un cubo_source basado en el ámbito
             doc_splits.extend(consulta_splits)
-            
+        
+        # Hacer una verificación final de que todos los documentos tienen los metadatos requeridos
+        for doc in doc_splits:
+            # Verificar campos obligatorios
+            if "ambito" not in doc.metadata or not doc.metadata["ambito"]:
+                doc.metadata["ambito"] = "general"
+            if "cubo_source" not in doc.metadata or not doc.metadata["cubo_source"]:
+                doc.metadata["cubo_source"] = "general"
+            if "is_consulta" not in doc.metadata:
+                doc.metadata["is_consulta"] = "false"
+            elif isinstance(doc.metadata["is_consulta"], bool):
+                doc.metadata["is_consulta"] = str(doc.metadata["is_consulta"]).lower()
+        
         # Nombre para la colección única de Milvus
         unified_collection_name = VECTORSTORE_CONFIG.get("unified_collection_name", "UnifiedKnowledgeBase")
         

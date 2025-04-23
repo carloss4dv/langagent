@@ -380,10 +380,12 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         print(f"Pregunta: {state['question']}")
         print(f"Intento actual: {state.get('retry_count', 0)}")
         print(f"Ámbito identificado: {state.get('ambito', 'No identificado')}")
+        print(f"Cubos relevantes: {state.get('relevant_cubos', [])}")
         
         question = state["question"]
         retry_count = state.get("retry_count", 0)
         ambito = state.get("ambito")
+        relevant_cubos = state.get("relevant_cubos", [])
         
         # Obtener el tipo de vectorstore de la configuración
         from langagent.config.config import VECTORSTORE_CONFIG
@@ -404,30 +406,46 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             if ambito:
                 print(f"Filtrando por ámbito: {ambito}")
                 metadata_filters["ambito"] = ambito
-                
-                # También verificar si es una consulta guardada
-                if state.get("is_consulta", False):
-                    metadata_filters["is_consulta"] = "true"
             
-            # Si tenemos cubos relevantes específicos, usarlos como filtro
-            relevant_cubos = state.get("relevant_cubos", [])
+            # Si tenemos un cubo específico identificado (sólo uno), usarlo como filtro
+            cubo_identificado = None
             if relevant_cubos and len(relevant_cubos) == 1 and relevant_cubos[0] != "unified":
                 cubo = relevant_cubos[0]
                 if not cubo.startswith("consultas_"):  # Evitar duplicar filtros de consultas
-                    print(f"Filtrando por cubo: {cubo}")
+                    print(f"Filtrando por cubo específico: {cubo}")
                     metadata_filters["cubo_source"] = cubo
+                    cubo_identificado = cubo
+            
+            # Si es una consulta guardada, añadir ese filtro
+            if state.get("is_consulta", False):
+                print("Filtrando por consultas guardadas")
+                metadata_filters["is_consulta"] = "true"
             
             try:
                 # Obtener el retriever unificado
                 unified_retriever = retrievers["unified"]
                 
-                # Recuperar documentos aplicando los filtros de metadatos directamente
-                print(f"Aplicando filtros: {metadata_filters}")
-                docs = unified_retriever.invoke(question, filter=metadata_filters)
+                # Verificar si tenemos filtros para aplicar
+                if metadata_filters:
+                    print(f"Aplicando filtros: {metadata_filters}")
+                    # Recuperar documentos aplicando los filtros de metadatos directamente
+                    docs = unified_retriever.invoke(question, filter=metadata_filters)
+                else:
+                    print("No hay filtros para aplicar, recuperando sin filtros")
+                    docs = unified_retriever.invoke(question)
                 
                 print(f"Documentos recuperados: {len(docs)}")
                 
-                # Si no hay documentos, intentar sin filtros como fallback
+                # Si no hay documentos con el filtro por cubo, intentar solo con el ámbito
+                if not docs and "cubo_source" in metadata_filters:
+                    print(f"No se encontraron documentos para el cubo {metadata_filters['cubo_source']}. Intentando solo con ámbito.")
+                    metadata_filters_ambito = {k: v for k, v in metadata_filters.items() if k != "cubo_source"}
+                    if metadata_filters_ambito:
+                        print(f"Aplicando filtros de ámbito: {metadata_filters_ambito}")
+                        docs = unified_retriever.invoke(question, filter=metadata_filters_ambito)
+                        print(f"Documentos recuperados con filtro de ámbito: {len(docs)}")
+                
+                # Si aún no hay documentos, intentar sin filtros como fallback
                 if not docs and metadata_filters:
                     print("No se encontraron documentos con filtros. Intentando sin filtros...")
                     docs = unified_retriever.invoke(question)
@@ -450,17 +468,29 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                         is_relevant = True
                     
                     if is_relevant:
+                        # Asegurar que tenga los metadatos correctos
+                        if cubo_identificado and "cubo_source" not in doc.metadata:
+                            doc.metadata["cubo_source"] = cubo_identificado
+                        if ambito and "ambito" not in doc.metadata:
+                            doc.metadata["ambito"] = ambito
                         relevant_docs.append(doc)
                 
                 # Si no hay documentos relevantes, usar todos los documentos
                 if not relevant_docs and docs:
                     print(f"No se encontraron documentos relevantes. Usando todos los documentos recuperados.")
-                    relevant_docs = docs
+                    for doc in docs:
+                        # Asegurar que tenga los metadatos correctos
+                        if cubo_identificado and "cubo_source" not in doc.metadata:
+                            doc.metadata["cubo_source"] = cubo_identificado
+                        if ambito and "ambito" not in doc.metadata:
+                            doc.metadata["ambito"] = ambito
+                        relevant_docs.append(doc)
                 
                 retrieval_details["unified"] = {
                     "count": len(docs),
                     "relevant_count": len(relevant_docs),
                     "ambito": ambito,
+                    "cubo": cubo_identificado,
                     "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
                 }
                 
@@ -481,20 +511,34 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         else:
             # Enfoque con múltiples colecciones/retrievers
             # Determinar los cubos a consultar
-            if ambito and ambito in AMBITOS_CUBOS:
-                relevant_cubos = [
+            cubos_a_consultar = []
+            
+            # Si tenemos cubos relevantes específicos, usarlos
+            if relevant_cubos and any(cubo != "unified" for cubo in relevant_cubos):
+                cubos_a_consultar = [cubo for cubo in relevant_cubos if cubo != "unified" and cubo in retrievers]
+                print(f"\nUsando cubos relevantes identificados específicamente:")
+                print(f"Cubos a consultar: {cubos_a_consultar}")
+            # Si tenemos un ámbito identificado, usar todos sus cubos
+            elif ambito and ambito in AMBITOS_CUBOS:
+                cubos_a_consultar = [
                     cubo for cubo in AMBITOS_CUBOS[ambito]["cubos"]
                     if cubo in retrievers
                 ]
                 print(f"\nUsando cubos del ámbito {AMBITOS_CUBOS[ambito]['nombre']}:")
-                print(f"Cubos disponibles: {relevant_cubos}")
+                print(f"Cubos a consultar: {cubos_a_consultar}")
+            # Si no tenemos ni ámbito ni cubos específicos, usar todos los retrievers
             else:
-                relevant_cubos = state.get("relevant_cubos", list(retrievers.keys()))
-                print(f"\nUsando cubos relevantes identificados:")
-                print(f"Cubos disponibles: {relevant_cubos}")
+                cubos_a_consultar = [cubo for cubo in retrievers.keys() if cubo != "unified"]
+                print(f"\nUsando todos los cubos disponibles:")
+                print(f"Cubos a consultar: {cubos_a_consultar}")
+            
+            # Si no hay cubos específicos pero tenemos unified, usarlo
+            if not cubos_a_consultar and "unified" in retrievers:
+                print("No hay cubos específicos disponibles. Usando retriever unificado.")
+                return retrieve_from_unified(state)
             
             # Recuperar documentos de cada cubo relevante
-            for cubo in relevant_cubos:
+            for cubo in cubos_a_consultar:
                 if cubo in retrievers:
                     try:
                         print(f"\nProcesando cubo: {cubo}")
@@ -509,6 +553,8 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                                 metadata_filters["cubo_source"] = cubo
                             if ambito:
                                 metadata_filters["ambito"] = ambito
+                            if state.get("is_consulta", False) and cubo.startswith("consultas_"):
+                                metadata_filters["is_consulta"] = "true"
                         
                         # Recuperar documentos, con filtros si es Milvus
                         if metadata_filters and vector_db_type.lower() == "milvus":
@@ -600,6 +646,81 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             "ambito": ambito,
             "retrieval_details": retrieval_details
         }
+        
+    # Función auxiliar para recuperar documentos de la colección unificada
+    def retrieve_from_unified(state):
+        """
+        Recupera documentos de la colección unificada como fallback.
+        
+        Args:
+            state (dict): Estado actual del grafo.
+            
+        Returns:
+            dict: Estado actualizado con los documentos recuperados.
+        """
+        question = state["question"]
+        retry_count = state.get("retry_count", 0)
+        ambito = state.get("ambito")
+        
+        try:
+            # Usar el retriever unificado sin filtros
+            docs = retrievers["unified"].invoke(question)
+            
+            # Procesar los documentos recuperados
+            print(f"Documentos recuperados de la colección unificada (sin filtros): {len(docs)}")
+            
+            # Filtrar por relevancia
+            relevant_docs = []
+            for doc in docs:
+                # Evaluar relevancia del documento
+                relevance = retrieval_grader.invoke({
+                    "document": doc.page_content,
+                    "question": question
+                })
+                
+                if isinstance(relevance, dict) and relevance.get("score", "").lower() == "yes":
+                    relevant_docs.append(doc)
+            
+            # Si no hay documentos relevantes, usar todos
+            if not relevant_docs and docs:
+                relevant_docs = docs
+            
+            retrieval_details = {
+                "unified": {
+                    "count": len(docs),
+                    "relevant_count": len(relevant_docs),
+                    "ambito": ambito,
+                    "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
+                }
+            }
+            
+            # Limitar el número total de documentos
+            max_docs = VECTORSTORE_CONFIG.get("max_docs_total", 10)
+            if len(relevant_docs) > max_docs:
+                relevant_docs = relevant_docs[:max_docs]
+            
+            return {
+                "documents": relevant_docs,
+                "question": question,
+                "retry_count": retry_count,
+                "relevant_cubos": state.get("relevant_cubos", []),
+                "ambito": ambito,
+                "retrieval_details": retrieval_details
+            }
+            
+        except Exception as e:
+            print(f"\nERROR al usar retriever unificado como fallback:")
+            print(f"Tipo de error: {type(e).__name__}")
+            print(f"Mensaje de error: {str(e)}")
+            
+            return {
+                "documents": [],
+                "question": question,
+                "retry_count": retry_count,
+                "relevant_cubos": state.get("relevant_cubos", []),
+                "ambito": ambito,
+                "retrieval_details": {"unified_fallback": {"count": 0, "error": str(e)}}
+            }
     
     def generate(state):
         """
