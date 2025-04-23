@@ -345,10 +345,8 @@ class MilvusVectorStore(VectorStoreBase):
         k = k or VECTORSTORE_CONFIG.get("k_retrieval", 4)
         
         # Determinar el tipo de búsqueda a utilizar
-        search_type = kwargs.get("search_type", "similarity")
-        if self.use_hybrid_search:
-            search_type = "hybrid"  # Usar "hybrid" para búsqueda híbrida en Milvus
-            logger.info("Usando búsqueda híbrida para Milvus")
+        # 'hybrid' no es un valor válido para search_type, usar 'similarity' en su lugar
+        search_type = "similarity"  # Valor por defecto permitido
         
         # Crear los parámetros de búsqueda
         search_kwargs = {
@@ -356,11 +354,12 @@ class MilvusVectorStore(VectorStoreBase):
             "score_threshold": similarity_threshold
         }
         
-        # Si usamos búsqueda híbrida, configurar el reranker
+        # Si usamos búsqueda híbrida, configurar el executor_parameters
         if self.use_hybrid_search:
-            search_kwargs["search_params"] = {
-                "fusion_coefficient": [0.7, 0.3]  # 70% dense, 30% sparse
-            }
+            # En lugar de usar 'hybrid' como search_type, configuramos parámetros especiales
+            # y luego manejaremos la búsqueda híbrida directamente en retrieve_documents
+            search_kwargs["filter"] = None  # Será establecido en retrieve_documents
+            logger.info("Configurando retriever para manejar búsqueda híbrida manualmente")
         
         try:
             logger.info(f"Creando retriever con tipo de búsqueda: {search_type}")
@@ -368,6 +367,13 @@ class MilvusVectorStore(VectorStoreBase):
                 search_type=search_type,
                 search_kwargs=search_kwargs
             )
+            
+            # Guardamos una referencia para saber si este retriever debe usar búsqueda híbrida
+            if self.use_hybrid_search:
+                # Añadimos un atributo personalizado para identificar que debe usar hybrid_search
+                retriever._use_hybrid_search = True
+                logger.info("Retriever configurado para usar búsqueda híbrida manualmente")
+            
             return retriever
         except Exception as e:
             logger.error(f"Error al crear retriever: {e}")
@@ -401,6 +407,42 @@ class MilvusVectorStore(VectorStoreBase):
             logger.error("No se puede recuperar documentos con un retriever None")
             return []
         
+        # Verificar si este retriever debe usar búsqueda híbrida
+        use_hybrid = hasattr(retriever, '_use_hybrid_search') and retriever._use_hybrid_search
+        
+        if use_hybrid and hasattr(retriever, '_vectorstore'):
+            logger.info("Usando búsqueda híbrida directamente desde retrieve_documents")
+            try:
+                # Preparar la expresión de filtro si hay filtros de metadatos
+                filter_expr = ""
+                if metadata_filters:
+                    # Convertir valores booleanos a string para Milvus
+                    for key, value in metadata_filters.items():
+                        if isinstance(value, bool):
+                            metadata_filters[key] = str(value).lower()
+                    
+                    filter_expr = self._build_filter_expression(metadata_filters)
+                
+                # Usar hybrid_search directamente en el vectorstore
+                search_results = retriever._vectorstore.hybrid_search(
+                    query=query,
+                    k=VECTORSTORE_CONFIG.get("k_retrieval", 4),
+                    expr=filter_expr if filter_expr else None,
+                    fusion_coefficient=[0.7, 0.3]  # 70% dense, 30% sparse
+                )
+                
+                # Convertir resultados a formato Document
+                if search_results:
+                    # El formato de hybrid_search devuelve tuplas (Document, score)
+                    return [doc[0] for doc in search_results]
+                return []
+                
+            except Exception as e:
+                logger.error(f"Error al usar hybrid_search: {e}")
+                # Intentar con método estándar como fallback
+                logger.info("Fallback: usando método estándar del retriever")
+        
+        # Código existente para retriever estándar con filtros
         if metadata_filters:
             logger.info(f"Aplicando filtros de metadatos: {metadata_filters}")
             
@@ -409,27 +451,11 @@ class MilvusVectorStore(VectorStoreBase):
                 if isinstance(value, bool):
                     metadata_filters[key] = str(value).lower()
             
-            # Construir expresión de filtrado para Milvus
-            filter_expr = self._build_filter_expression(metadata_filters)
-            logger.info(f"Expresión de filtro: {filter_expr}")
-            
             # Intentar recuperar con filtros
             for attempt in range(max_retries):
                 try:
                     # Usar invoke() con parámetro filter
-                    if hasattr(retriever, '_vectorstore') and self.use_hybrid_search:
-                        # Si estamos usando búsqueda híbrida, usar hybrid_search directamente
-                        docs = retriever._vectorstore.hybrid_search(
-                            query=query,
-                            k=VECTORSTORE_CONFIG.get("k_retrieval", 4),
-                            expr=filter_expr,
-                            fusion_coefficient=[0.7, 0.3]  # 70% dense, 30% sparse
-                        )
-                        # Convertir resultados de hybrid_search a formato Document
-                        return [doc[0] for doc in docs] if docs else []
-                    else:
-                        # Método estándar
-                        docs = retriever.invoke(query, filter=metadata_filters)
+                    docs = retriever.invoke(query, filter=metadata_filters)
                     
                     if not docs:
                         logger.warning(f"No se encontraron documentos con filtros: {metadata_filters}")
@@ -443,20 +469,29 @@ class MilvusVectorStore(VectorStoreBase):
                 except Exception as e:
                     logger.error(f"Error en intento {attempt + 1} con filtros: {str(e)}")
                     
-                    # Si el error es _collection_search no soporta multi-vector search, usar hybrid_search
-                    if "_collection_search does not support multi-vector search" in str(e) and hasattr(retriever, '_vectorstore'):
+                    # Detectar error específico de multi-vector search
+                    if "_collection_search does not support multi-vector search" in str(e) and use_hybrid:
+                        # Reintentar con búsqueda híbrida manual
                         try:
-                            logger.info("Detectado error de multi-vector search. Usando hybrid_search directamente.")
-                            docs = retriever._vectorstore.hybrid_search(
+                            logger.info("Detectado error de multi-vector. Reintentando con método manual.")
+                            # Construir expresión de filtro para Milvus
+                            filter_expr = self._build_filter_expression(metadata_filters)
+                            
+                            # Usar hybrid_search directamente
+                            search_results = retriever._vectorstore.hybrid_search(
                                 query=query,
                                 k=VECTORSTORE_CONFIG.get("k_retrieval", 4),
                                 expr=filter_expr if filter_expr else None,
                                 fusion_coefficient=[0.7, 0.3]  # 70% dense, 30% sparse
                             )
-                            # Convertir resultados de hybrid_search a formato Document
-                            return [doc[0] for doc in docs] if docs else []
+                            
+                            # Convertir resultados a formato Document
+                            if search_results:
+                                return [doc[0] for doc in search_results]
+                            return []
+                            
                         except Exception as hybrid_error:
-                            logger.error(f"Error al usar hybrid_search: {hybrid_error}")
+                            logger.error(f"Error al usar hybrid_search manual: {hybrid_error}")
                     
                     if attempt == max_retries - 1:
                         logger.info("Intentando recuperar sin filtros como último recurso")
@@ -470,18 +505,8 @@ class MilvusVectorStore(VectorStoreBase):
             # Sin filtros, usar método estándar
             for attempt in range(max_retries):
                 try:
-                    # Si estamos usando búsqueda híbrida, usar hybrid_search directamente
-                    if hasattr(retriever, '_vectorstore') and self.use_hybrid_search:
-                        docs = retriever._vectorstore.hybrid_search(
-                            query=query,
-                            k=VECTORSTORE_CONFIG.get("k_retrieval", 4),
-                            fusion_coefficient=[0.7, 0.3]  # 70% dense, 30% sparse
-                        )
-                        # Convertir resultados de hybrid_search a formato Document
-                        return [doc[0] for doc in docs] if docs else []
-                    else:
-                        # Método estándar
-                        docs = retriever.invoke(query)
+                    # Método estándar
+                    docs = retriever.invoke(query)
                     
                     if not docs:
                         logger.warning(f"No se encontraron documentos relevantes para: {query}")
@@ -492,19 +517,26 @@ class MilvusVectorStore(VectorStoreBase):
                 except Exception as e:
                     logger.error(f"Error en intento {attempt + 1}: {str(e)}")
                     
-                    # Si el error es _collection_search no soporta multi-vector search, usar hybrid_search
-                    if "_collection_search does not support multi-vector search" in str(e) and hasattr(retriever, '_vectorstore'):
+                    # Detectar error específico de multi-vector search
+                    if "_collection_search does not support multi-vector search" in str(e) and use_hybrid:
+                        # Reintentar con búsqueda híbrida manual
                         try:
-                            logger.info("Detectado error de multi-vector search. Usando hybrid_search directamente.")
-                            docs = retriever._vectorstore.hybrid_search(
+                            logger.info("Detectado error de multi-vector. Reintentando con método manual.")
+                            
+                            # Usar hybrid_search directamente
+                            search_results = retriever._vectorstore.hybrid_search(
                                 query=query,
                                 k=VECTORSTORE_CONFIG.get("k_retrieval", 4),
                                 fusion_coefficient=[0.7, 0.3]  # 70% dense, 30% sparse
                             )
-                            # Convertir resultados de hybrid_search a formato Document
-                            return [doc[0] for doc in docs] if docs else []
+                            
+                            # Convertir resultados a formato Document
+                            if search_results:
+                                return [doc[0] for doc in search_results]
+                            return []
+                            
                         except Exception as hybrid_error:
-                            logger.error(f"Error al usar hybrid_search: {hybrid_error}")
+                            logger.error(f"Error al usar hybrid_search manual: {hybrid_error}")
                     
                     if attempt == max_retries - 1:
                         logger.error("Se agotaron los reintentos")
