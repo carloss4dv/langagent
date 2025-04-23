@@ -172,11 +172,17 @@ class LangChainAgent:
             self.vectorstores[cubo_name] = db
             
             # Crear retriever para este cubo
-            self.retrievers[cubo_name] = self.vectorstore_handler.create_retriever(
-                vectorstore=db,
-                k=VECTORSTORE_CONFIG["k_retrieval"],
-                similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
-            )
+            try:
+                self.retrievers[cubo_name] = self.vectorstore_handler.create_retriever(
+                    vectorstore=db,
+                    k=VECTORSTORE_CONFIG["k_retrieval"],
+                    similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
+                )
+                print(f"Retriever creado correctamente para el cubo: {cubo_name}")
+            except Exception as e:
+                print(f"Error al crear retriever para el cubo {cubo_name}: {str(e)}")
+                print("Continuando con el siguiente cubo...")
+                # No añadir este retriever si falla la creación para evitar errores posteriores
         
         # Procesar consultas guardadas por ámbito
         for ambito, consultas in consultas_por_ambito.items():
@@ -218,11 +224,17 @@ class LangChainAgent:
             
             # Crear retriever para las consultas de este ámbito y agregarlo a los retrievers
             retriever_key = f"consultas_{ambito}"
-            self.retrievers[retriever_key] = self.vectorstore_handler.create_retriever(
-                vectorstore=db,
-                k=VECTORSTORE_CONFIG["k_retrieval"],
-                similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
-            )
+            try:
+                self.retrievers[retriever_key] = self.vectorstore_handler.create_retriever(
+                    vectorstore=db,
+                    k=VECTORSTORE_CONFIG["k_retrieval"],
+                    similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
+                )
+                print(f"Retriever creado correctamente para consultas de: {ambito}")
+            except Exception as e:
+                print(f"Error al crear retriever para consultas de {ambito}: {str(e)}")
+                print("Continuando con el siguiente ámbito...")
+                # No añadir este retriever si falla la creación para evitar errores posteriores
         
         # Crear LLMs
         print("Configurando modelos de lenguaje...")
@@ -238,6 +250,36 @@ class LangChainAgent:
         
         # Crear un router de preguntas que determine qué cubo usar y si es una consulta
         self.question_router = create_question_router(self.llm2)
+        
+        # Verificar si tenemos al menos un retriever disponible
+        if not self.retrievers:
+            print("¡ADVERTENCIA! No se ha creado ningún retriever. Creando un retriever predeterminado...")
+            try:
+                # Crear un documento vacío y una vectorstore básica para evitar errores
+                empty_doc = Document(page_content="Documento predeterminado", metadata={"source": "default"})
+                
+                # Crear vectorstore predeterminada
+                default_collection = "default_collection"
+                db = self.vectorstore_handler.create_vectorstore(
+                    documents=[empty_doc],
+                    embeddings=self.embeddings,
+                    collection_name=default_collection,
+                    persist_directory=os.path.join(self.vectorstore_dir, default_collection)
+                )
+                
+                # Guardar la vectorstore
+                self.vectorstores["default"] = db
+                
+                # Crear un retriever predeterminado
+                self.retrievers["default"] = self.vectorstore_handler.create_retriever(
+                    vectorstore=db,
+                    k=VECTORSTORE_CONFIG["k_retrieval"],
+                    similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
+                )
+                print("Retriever predeterminado creado correctamente")
+            except Exception as e:
+                print(f"Error al crear retriever predeterminado: {str(e)}")
+                print("¡ADVERTENCIA! La aplicación puede fallar debido a la falta de retrievers disponibles")
         
         # Modificar create_workflow para manejar múltiples retrievers
         print("Creando flujo de trabajo con múltiples vectorstores...")

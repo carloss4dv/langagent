@@ -244,6 +244,21 @@ class MilvusVectorStore(VectorStoreBase):
                 connection_args=connection_args
             )
             
+            # Verificar que la colección existe realmente
+            if not hasattr(milvus_db, 'col') or milvus_db.col is None:
+                logger.warning(f"La colección {collection_name} no existe o no se pudo cargar correctamente")
+                # Crear una colección nueva con un documento de ejemplo para inicializar
+                logger.info(f"Creando nueva colección {collection_name}")
+                empty_doc = Document(page_content="Documento de inicialización", metadata={"source": "init"})
+                milvus_db = Milvus.from_documents(
+                    documents=[empty_doc],
+                    embedding=embeddings,
+                    collection_name=collection_name,
+                    connection_args=connection_args,
+                    drop_old=False
+                )
+                return milvus_db
+            
             # Cargar metadatos de particiones si existen
             try:
                 partitions = milvus_db.col.partitions
@@ -259,12 +274,26 @@ class MilvusVectorStore(VectorStoreBase):
             return milvus_db
         except Exception as e:
             logger.error(f"Error al cargar colección {collection_name}: {str(e)}")
-            # Proporcionar información detallada sobre el problema de conexión
-            if "connection" in str(e).lower():
-                logger.error(f"Problema de conexión a Milvus. Verifique que el servidor esté en ejecución en {connection_args['uri']} " +
-                             f"y que las credenciales sean correctas.")
-                logger.error("Asegúrese de configurar las variables de entorno ZILLIZ_CLOUD_URI y ZILLIZ_CLOUD_TOKEN correctamente.")
-            raise e
+            # Crear una colección nueva con un documento de ejemplo para inicializar
+            try:
+                logger.info(f"Intentando crear nueva colección {collection_name}")
+                empty_doc = Document(page_content="Documento de inicialización", metadata={"source": "init"})
+                milvus_db = Milvus.from_documents(
+                    documents=[empty_doc],
+                    embedding=embeddings,
+                    collection_name=collection_name,
+                    connection_args=connection_args,
+                    drop_old=False
+                )
+                return milvus_db
+            except Exception as create_error:
+                # Si falla la creación, registrar el error y proporcionar información detallada
+                logger.error(f"Error al crear colección {collection_name}: {str(create_error)}")
+                if "connection" in str(e).lower():
+                    logger.error(f"Problema de conexión a Milvus. Verifique que el servidor esté en ejecución en {connection_args['uri']} " +
+                                f"y que las credenciales sean correctas.")
+                    logger.error("Asegúrese de configurar las variables de entorno ZILLIZ_CLOUD_URI y ZILLIZ_CLOUD_TOKEN correctamente.")
+                raise e
     
     def _get_ambito_from_query(self, query: str) -> Optional[str]:
         """
@@ -329,10 +358,17 @@ class MilvusVectorStore(VectorStoreBase):
             }
         )
         
-        # Añadir atributos adicionales al retriever
-        retriever.vectorstore = vectorstore
-        retriever.collection_name = vectorstore.col.name
-        retriever.partition_names = self.collection_mapping.get(vectorstore.col.name, [])
+        # Verificar que vectorstore.col no sea None antes de acceder a sus atributos
+        if hasattr(vectorstore, 'col') and vectorstore.col is not None:
+            # Añadir atributos adicionales al retriever
+            retriever.vectorstore = vectorstore
+            retriever.collection_name = vectorstore.col.name
+            retriever.partition_names = self.collection_mapping.get(vectorstore.col.name, [])
+        else:
+            # Si col es None, añadir atributos básicos
+            retriever.vectorstore = vectorstore
+            # No asignar collection_name ni partition_names
+            logger.warning("No se pudo acceder a los atributos de la colección, retriever funcionará en modo básico")
         
         return retriever
     
