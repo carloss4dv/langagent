@@ -19,7 +19,7 @@ LLM_CONFIG = {
     "model_format": "json",    # Formato de salida (json, text, etc.)
     "default_model": "hf.co/unsloth/Mistral-Small-3.1-24B-Instruct-2503-GGUF",  # Modelo predeterminado para el LLM principal
     "default_model2": "qwen2.5:3b", # Modelo predeterminado para el LLM secundario (routing)
-    "default_model3": "qwen2.5:1b" # Modelo predeterminado para el LLM tercero (eavluation)
+    "default_model3": "qwen2.5:1.5b" # Modelo predeterminado para el LLM tercero (eavluation)
 }
 
 # Configuración de Vector Store

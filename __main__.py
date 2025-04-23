@@ -42,56 +42,105 @@ def main():
     
     # Ejecutar el comando correspondiente
     if args.command == "run":
-        # Directamente llamamos a la función main en main.py
-        from main import main as run_main
-        run_main_args = []
-        if args.data_dir:
-            run_main_args.extend(["--data_dir", args.data_dir])
-        if args.chroma_dir:
-            run_main_args.extend(["--chroma_dir", args.chroma_dir])
-        if args.local_llm:
-            run_main_args.extend(["--local_llm", args.local_llm])
-        if args.local_llm2:
-            run_main_args.extend(["--local_llm2", args.local_llm2])
-        if args.question:
-            run_main_args.extend(["--question", args.question])
-        
-        # Reimplementar sys.argv
-        sys.argv = ["main.py"] + run_main_args
-        run_main()
+        try:
+            # Directamente llamamos a la función main en main.py
+            from langagent.main import main as run_main
+            run_main_args = []
+            if args.data_dir:
+                run_main_args.extend(["--data_dir", args.data_dir])
+            if args.chroma_dir:
+                run_main_args.extend(["--chroma_dir", args.chroma_dir])
+            if args.local_llm:
+                run_main_args.extend(["--local_llm", args.local_llm])
+            if args.local_llm2:
+                run_main_args.extend(["--local_llm2", args.local_llm2])
+            if args.question:
+                run_main_args.extend(["--question", args.question])
+            
+            # Reimplementar sys.argv
+            sys.argv = ["main.py"] + run_main_args
+            run_main()
+        except ImportError:
+            try:
+                # Intentar importar desde el directorio actual
+                from main import main as run_main
+                run_main_args = []
+                if args.data_dir:
+                    run_main_args.extend(["--data_dir", args.data_dir])
+                if args.chroma_dir:
+                    run_main_args.extend(["--chroma_dir", args.chroma_dir])
+                if args.local_llm:
+                    run_main_args.extend(["--local_llm", args.local_llm])
+                if args.local_llm2:
+                    run_main_args.extend(["--local_llm2", args.local_llm2])
+                if args.question:
+                    run_main_args.extend(["--question", args.question])
+                
+                # Reimplementar sys.argv
+                sys.argv = ["main.py"] + run_main_args
+                run_main()
+            except ImportError:
+                print("Error: No se pudo importar el módulo main.py.")
+                print("Asegúrate de que estás ejecutando el script desde el directorio correcto.")
+                sys.exit(1)
         
     elif args.command == "evaluate":
-        # Llamar directamente a la función main en run_evaluation.py
-        import sys
-        import os
-        
-        # Importar directamente el script de evaluación
         # Asegurarnos que el directorio actual está en el path
         current_dir = os.path.dirname(os.path.abspath(__file__))
         if current_dir not in sys.path:
             sys.path.insert(0, current_dir)
             
-        from evaluation.run_evaluation import main as eval_main
-        
-        eval_main_args = []
-        if args.data_dir:
-            eval_main_args.extend(["--data_dir", args.data_dir])
-        if args.chroma_dir:
-            eval_main_args.extend(["--chroma_dir", args.chroma_dir])
-        if args.modelo:
-            eval_main_args.extend(["--modelo", args.modelo])
-        if args.modelo2:
-            eval_main_args.extend(["--modelo2", args.modelo2])
-        if args.salida:
-            eval_main_args.extend(["--salida", args.salida])
-        if args.verbose:
-            eval_main_args.append("--verbose")
-        if args.casos:
-            eval_main_args.extend(["--casos", args.casos])
-        
-        # Reimplementar sys.argv
-        sys.argv = ["evaluation/run_evaluation.py"] + eval_main_args
-        eval_main()
+        try:
+            # Importar directamente el script de evaluación
+            from langagent.evaluation.run_evaluation import main as eval_main
+            
+            eval_main_args = []
+            if args.data_dir:
+                eval_main_args.extend(["--data_dir", args.data_dir])
+            if args.chroma_dir:
+                eval_main_args.extend(["--chroma_dir", args.chroma_dir])
+            if args.modelo:
+                eval_main_args.extend(["--modelo", args.modelo])
+            if args.modelo2:
+                eval_main_args.extend(["--modelo2", args.modelo2])
+            if args.salida:
+                eval_main_args.extend(["--salida", args.salida])
+            if args.verbose:
+                eval_main_args.append("--verbose")
+            if args.casos:
+                eval_main_args.extend(["--casos", args.casos])
+            
+            # Reimplementar sys.argv
+            sys.argv = ["evaluation/run_evaluation.py"] + eval_main_args
+            eval_main()
+        except ImportError:
+            try:
+                # Intentar importar desde el directorio actual
+                from evaluation.run_evaluation import main as eval_main
+                
+                eval_main_args = []
+                if args.data_dir:
+                    eval_main_args.extend(["--data_dir", args.data_dir])
+                if args.chroma_dir:
+                    eval_main_args.extend(["--chroma_dir", args.chroma_dir])
+                if args.modelo:
+                    eval_main_args.extend(["--modelo", args.modelo])
+                if args.modelo2:
+                    eval_main_args.extend(["--modelo2", args.modelo2])
+                if args.salida:
+                    eval_main_args.extend(["--salida", args.salida])
+                if args.verbose:
+                    eval_main_args.append("--verbose")
+                if args.casos:
+                    eval_main_args.extend(["--casos", args.casos])
+                
+                # Reimplementar sys.argv
+                sys.argv = ["evaluation/run_evaluation.py"] + eval_main_args
+                eval_main()
+            except ImportError:
+                print("Error: No se pudo importar el módulo de evaluación.")
+                print("Asegúrate de que estás ejecutando el script desde el directorio correcto.")
+                sys.exit(1)
         
     else:
         parser.print_help()
