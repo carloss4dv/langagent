@@ -171,6 +171,7 @@ class LangChainAgent:
                     # Si el vectorstore tiene un método para actualizar documentos, usarlo
                     if hasattr(db, "add_documents") and callable(getattr(db, "add_documents")):
                         db.add_documents(doc_splits)
+                        print(f"Colección actualizada con {len(doc_splits)} documentos")
                     
                     # O si tiene método from_documents, intentar agregar
                     elif hasattr(self.vectorstore_handler, "add_documents_to_collection"):
@@ -178,18 +179,56 @@ class LangChainAgent:
                             vectorstore=db,
                             documents=doc_splits
                         )
+                        print(f"Colección actualizada con {len(doc_splits)} documentos")
                     
                     print("Colección unificada actualizada correctamente")
                 
             except Exception as e:
                 # Si no existe, crear la colección unificada
                 print(f"Creando nueva vectorstore unificada: {unified_collection_name}...")
-                db = self.vectorstore_handler.create_vectorstore(
-                    documents=doc_splits,
-                    embeddings=self.embeddings,
-                    collection_name=unified_collection_name
-                )
-                print(f"Nueva vectorstore unificada creada correctamente")
+                print(f"Cargando {len(doc_splits)} documentos en la colección unificada")
+                
+                # Forzar la creación desde cero con todos los documentos
+                try:
+                    # Crear la colección con todos los documentos
+                    db = self.vectorstore_handler.create_vectorstore(
+                        documents=doc_splits,
+                        embeddings=self.embeddings,
+                        collection_name=unified_collection_name,
+                        drop_old=True  # Forzar recreación completa
+                    )
+                    print(f"Nueva vectorstore unificada creada correctamente con {len(doc_splits)} documentos")
+                except Exception as inner_e:
+                    print(f"Error al crear la colección unificada: {str(inner_e)}")
+                    print("Intentando crear colección con subconjunto de documentos...")
+                    
+                    # Si falla con todos los documentos, intentar con un subconjunto
+                    max_docs_per_batch = 1000
+                    if len(doc_splits) > max_docs_per_batch:
+                        print(f"Dividiendo documentos en lotes de {max_docs_per_batch}")
+                        first_batch = doc_splits[:max_docs_per_batch]
+                        
+                        # Crear con el primer lote
+                        db = self.vectorstore_handler.create_vectorstore(
+                            documents=first_batch,
+                            embeddings=self.embeddings,
+                            collection_name=unified_collection_name
+                        )
+                        
+                        # Añadir el resto de documentos en lotes
+                        remaining_docs = doc_splits[max_docs_per_batch:]
+                        batch_size = max_docs_per_batch
+                        
+                        for i in range(0, len(remaining_docs), batch_size):
+                            batch = remaining_docs[i:i + batch_size]
+                            print(f"Añadiendo lote de {len(batch)} documentos...")
+                            if hasattr(db, "add_documents"):
+                                db.add_documents(batch)
+                        
+                        print(f"Colección creada y actualizada con todos los documentos en lotes")
+                    else:
+                        # Reintento con error original
+                        raise inner_e
             
             # Guardar la vectorstore y crear un retriever unificado
             self.vectorstores["unified"] = db
@@ -424,3 +463,113 @@ class LangChainAgent:
             print_workflow_steps(result["workflow_trace"])
         
         return result 
+
+    def recreate_unified_collection(self):
+        """
+        Recrea la colección unificada desde cero.
+        Útil cuando hay problemas con la colección existente.
+        
+        Returns:
+            bool: True si la recreación fue exitosa
+        """
+        print_title("Recreando colección unificada")
+        
+        if self.vector_db_type.lower() != "milvus":
+            print("Esta función solo está disponible para Milvus")
+            return False
+            
+        # Verificar si estamos usando el enfoque de colección única
+        use_single_collection = VECTORSTORE_CONFIG.get("use_single_collection", True)
+        if not use_single_collection:
+            print("Esta función solo está disponible en modo de colección única")
+            return False
+            
+        # Cargar todos los documentos y consultas
+        print("Cargando documentos y consultas...")
+        all_documents = load_documents_from_directory(self.data_dir)
+        consultas_por_ambito = load_consultas_guardadas(self.consultas_dir)
+        
+        # Dividir documentos en chunks
+        text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            chunk_size=VECTORSTORE_CONFIG["chunk_size"], 
+            chunk_overlap=VECTORSTORE_CONFIG["chunk_overlap"]
+        )
+        
+        # Procesar documentos por cubo y añadir metadatos
+        all_processed_docs = []
+        for doc in all_documents:
+            # Extraer el nombre del cubo del nombre del archivo o metadatos
+            file_path = doc.metadata.get('source', '')
+            file_name = os.path.basename(file_path)
+            
+            # Buscar el patrón info_cubo_X_vY.md y extraer X como nombre del cubo
+            match = re.search(r'info_cubo_([^_]+)_v\d+\.md', file_name)
+            cubo_name = match.group(1) if match else "general"
+            
+            # Añadir metadatos sobre el cubo a los documentos
+            doc.metadata["cubo_source"] = cubo_name
+            
+            # Intentar identificar el ámbito del cubo
+            from langagent.models.constants import CUBO_TO_AMBITO
+            if cubo_name in CUBO_TO_AMBITO:
+                doc.metadata["ambito"] = CUBO_TO_AMBITO[cubo_name]
+            
+            all_processed_docs.append(doc)
+        
+        # Dividir todos los documentos en chunks
+        doc_splits = text_splitter.split_documents(all_processed_docs)
+        
+        # Procesar consultas guardadas y añadirlas al conjunto de documentos
+        for ambito, consultas in consultas_por_ambito.items():
+            consulta_splits = text_splitter.split_documents(consultas)
+            for doc in consulta_splits:
+                doc.metadata["ambito"] = ambito
+                doc.metadata["is_consulta"] = True
+            doc_splits.extend(consulta_splits)
+            
+        # Nombre para la colección única de Milvus
+        unified_collection_name = VECTORSTORE_CONFIG.get("unified_collection_name", "UnifiedKnowledgeBase")
+        
+        # Forzar la recreación de la colección
+        print(f"Creando nueva colección unificada: {unified_collection_name}...")
+        print(f"Cargando {len(doc_splits)} documentos en la colección")
+        
+        try:
+            # Crear la colección con todos los documentos
+            db = self.vectorstore_handler.create_vectorstore(
+                documents=doc_splits,
+                embeddings=self.embeddings,
+                collection_name=unified_collection_name,
+                drop_old=True  # Forzar recreación completa
+            )
+            print(f"Nueva vectorstore unificada creada correctamente con {len(doc_splits)} documentos")
+            
+            # Actualizar la vectorstore y retriever
+            self.vectorstores["unified"] = db
+            
+            # Crear retriever para la colección unificada
+            self.retrievers["unified"] = self.vectorstore_handler.create_retriever(
+                vectorstore=db,
+                k=VECTORSTORE_CONFIG["k_retrieval"],
+                similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
+            )
+            print(f"Retriever unificado creado correctamente")
+            
+            # Recompilar el workflow
+            print("Recompilando workflow...")
+            self.workflow = create_workflow(
+                self.retrievers, 
+                self.rag_chain, 
+                self.retrieval_grader, 
+                self.hallucination_grader, 
+                self.answer_grader, 
+                self.question_router
+            )
+            self.app = self.workflow.compile()
+            
+            print_title("¡Colección recreada con éxito!")
+            return True
+            
+        except Exception as e:
+            print(f"Error al recrear la colección: {str(e)}")
+            return False 

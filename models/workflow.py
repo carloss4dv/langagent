@@ -362,15 +362,28 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                 if metadata_filters:
                     # Si el retriever soporta búsqueda con filtros
                     if hasattr(unified_retriever, "search_documents") and callable(getattr(unified_retriever, "search_documents")):
+                        print(f"Usando búsqueda con filtros de metadatos: {metadata_filters}")
                         docs = unified_retriever.search_documents(query=question, metadata_filters=metadata_filters)
                     elif hasattr(unified_retriever, "get_relevant_documents") and callable(getattr(unified_retriever, "get_relevant_documents")):
+                        # Algunos retrievers soportan filtrado a través del parámetro 'filter'
+                        print(f"Usando filtro estándar: {metadata_filters}")
                         docs = unified_retriever.get_relevant_documents(question, filter=metadata_filters)
                     else:
+                        # Si el retriever no soporta filtrado, usar búsqueda normal
+                        print("Retriever no soporta filtrado, usando búsqueda estándar")
                         docs = unified_retriever.invoke(question)
                 else:
+                    # Sin filtros
+                    print("No se utilizan filtros de metadatos")
                     docs = unified_retriever.invoke(question)
                 
                 print(f"Documentos recuperados: {len(docs)}")
+                
+                # Si no hay documentos, probar como fallback sin filtros
+                if not docs and metadata_filters:
+                    print("No se encontraron documentos con filtros. Intentando sin filtros...")
+                    docs = unified_retriever.invoke(question)
+                    print(f"Documentos recuperados sin filtros: {len(docs)}")
                 
                 # Filtrar documentos por relevancia
                 relevant_docs = []
