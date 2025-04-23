@@ -9,6 +9,7 @@ como particionamiento y búsqueda híbrida.
 import os
 import time
 import logging
+import re
 from typing import List, Dict, Any, Optional, Union, Tuple
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -20,6 +21,75 @@ from langagent.config.config import VECTORSTORE_CONFIG
 from langagent.models.constants import CUBO_TO_AMBITO, AMBITOS_CUBOS
 
 logger = logging.getLogger(__name__)
+
+class MilvusFilterRetriever(BaseRetriever):
+    """Retriever personalizado para Milvus que soporta filtrado por metadatos."""
+    
+    def __init__(self, vectorstore, search_kwargs=None, filter_threshold=0.7):
+        """Inicializa el retriever personalizado."""
+        super().__init__()  # Inicializar la clase base correctamente
+        self._vectorstore = vectorstore  # Usar _vectorstore en lugar de vectorstore
+        self.search_kwargs = search_kwargs or {}  # Inicializar como diccionario vacío si es None
+        self.filter_threshold = filter_threshold
+        
+    def _get_relevant_documents(self, query: str, *, run_manager=None):
+        """Recupera documentos sin filtrado de metadatos."""
+        try:
+            return self._vectorstore.similarity_search(query, **self.search_kwargs)
+        except Exception as e:
+            logger.error(f"Error en búsqueda de documentos: {e}")
+            # Si falla con los parámetros proporcionados, intentar con parámetros mínimos
+            fallback_kwargs = {"k": self.search_kwargs.get("k", 6)}
+            return self._vectorstore.similarity_search(query, **fallback_kwargs)
+    
+    def search_documents(self, query: str, metadata_filters=None):
+        """
+        Realiza búsqueda con filtrado por metadatos.
+        
+        Args:
+            query: Consulta de texto
+            metadata_filters: Diccionario con filtros de metadatos
+            
+        Returns:
+            List[Document]: Documentos filtrados por metadatos
+        """
+        if not metadata_filters:
+            return self._get_relevant_documents(query)
+        
+        # Preparar consulta con filtros
+        filter_expr = None
+        
+        # Convertir filtros de metadatos a expresión de filtro de Milvus
+        try:
+            expressions = []
+            for key, value in metadata_filters.items():
+                # Convertir a string para asegurar compatibilidad
+                if isinstance(value, bool):
+                    # Los booleanos se manejan de forma especial
+                    value_str = str(value).lower()
+                    expressions.append(f'{key} == "{value_str}"')
+                else:
+                    # Otros tipos se convierten a string
+                    value_str = str(value)
+                    expressions.append(f'{key} == "{value_str}"')
+            
+            if expressions:
+                filter_expr = " && ".join(expressions)
+        except Exception as e:
+            logger.error(f"Error al crear expresión de filtro: {e}")
+        
+        # Configurar parámetros de búsqueda
+        search_params = dict(self.search_kwargs)
+        if filter_expr:
+            search_params["filter"] = filter_expr  # Usar filter en lugar de expr
+        
+        # Realizar búsqueda con filtros
+        try:
+            return self._vectorstore.similarity_search(query, **search_params)
+        except Exception as e:
+            logger.error(f"Error en búsqueda con filtros: {e}")
+            # Si falla la búsqueda con filtros, intentar sin filtros
+            return self._get_relevant_documents(query)
 
 class MilvusVectorStore(VectorStoreBase):
     """Implementación de VectorStoreBase para Milvus/Zilliz."""
@@ -117,7 +187,6 @@ class MilvusVectorStore(VectorStoreBase):
         """
         # Milvus tiene algunas restricciones en los nombres de particiones
         # Eliminar caracteres no alfanuméricos y convertir a minúsculas
-        import re
         normalized = re.sub(r'[^a-zA-Z0-9_]', '_', name.lower())
         
         # Asegurarse de que no comienza con un número
@@ -150,12 +219,75 @@ class MilvusVectorStore(VectorStoreBase):
         # Para modo de colección única, asegurarnos de usar todos los documentos
         use_single_collection = VECTORSTORE_CONFIG.get("use_single_collection", True)
         
+        # Comprobar que los documentos tienen metadatos necesarios
+        for doc in documents:
+            if 'source' in doc.metadata:
+                file_path = doc.metadata.get('source', '')
+                file_name = os.path.basename(file_path)
+                
+                # Comprobar si falta el cubo_source
+                if 'cubo_source' not in doc.metadata:
+                    # Extraer cubo del nombre del archivo
+                    match = re.search(r'info_cubo_([^_]+)_v\d+\.md', file_name)
+                    if match:
+                        cubo_name = match.group(1)
+                        doc.metadata['cubo_source'] = cubo_name
+                        
+                        # También agregar ámbito si se conoce
+                        if cubo_name in CUBO_TO_AMBITO and 'ambito' not in doc.metadata:
+                            doc.metadata['ambito'] = CUBO_TO_AMBITO[cubo_name]
+        
         try:
             if use_single_collection:
-                # Para colección única, crear la colección con todos los documentos
-                logger.info(f"Creando colección unificada con {len(documents)} documentos")
+                # Verificar que todos los documentos tengan los metadatos necesarios
+                logger.info("Verificando metadatos de los documentos...")
+                docs_with_complete_metadata = []
+                
+                for idx, doc in enumerate(documents):
+                    # Asegurarse de que exista el campo metadata
+                    if not hasattr(doc, 'metadata') or doc.metadata is None:
+                        doc.metadata = {}
+                    
+                    # Extraer información de la fuente si existe
+                    if 'source' in doc.metadata:
+                        source = doc.metadata['source']
+                        # Extraer cubo_source si no existe
+                        if 'cubo_source' not in doc.metadata:
+                            match = re.search(r'info_cubo_([^_]+)', os.path.basename(source))
+                            if match:
+                                doc.metadata['cubo_source'] = match.group(1)
+                            else:
+                                doc.metadata['cubo_source'] = 'general'
+                        
+                        # Asignar ámbito basado en cubo_source si no existe
+                        if 'ambito' not in doc.metadata and 'cubo_source' in doc.metadata:
+                            cubo = doc.metadata['cubo_source']
+                            if cubo in CUBO_TO_AMBITO:
+                                doc.metadata['ambito'] = CUBO_TO_AMBITO[cubo]
+                            else:
+                                doc.metadata['ambito'] = 'general'
+                    
+                    # Si falta ambito y cubo_source, asignar valores predeterminados
+                    if 'cubo_source' not in doc.metadata:
+                        doc.metadata['cubo_source'] = 'general'
+                    if 'ambito' not in doc.metadata:
+                        doc.metadata['ambito'] = 'general'
+                    
+                    docs_with_complete_metadata.append(doc)
+                
+                # Usar los documentos con metadatos completos
+                logger.info(f"Creando colección unificada con {len(docs_with_complete_metadata)} documentos")
+                
+                # Definir campos de metadatos para Milvus
+                metadata_fields = [
+                    {"name": "cubo_source", "type": "VARCHAR", "is_primary": False, "dim": 100},
+                    {"name": "ambito", "type": "VARCHAR", "is_primary": False, "dim": 100},
+                    {"name": "is_consulta", "type": "BOOL", "is_primary": False}
+                ]
+                
+                # Crear la colección con los documentos
                 milvus_db = Milvus.from_documents(
-                    documents=documents,
+                    documents=docs_with_complete_metadata,
                     embedding=embeddings,
                     collection_name=collection_name,
                     connection_args=connection_args,
@@ -176,15 +308,40 @@ class MilvusVectorStore(VectorStoreBase):
                     
                     # Crear el índice en el campo de embeddings
                     if hasattr(milvus_db, 'col') and milvus_db.col is not None:
-                        milvus_db.col.create_index(
-                            field_name="text_embedding", 
-                            index_params=index_params
-                        )
+                        # Verificar si el campo existe
+                        field_names = [field.name for field in milvus_db.col.schema.fields]
                         
-                        # Cargar la colección en memoria para mejor rendimiento
-                        milvus_db.col.load()
-                        
-                        logger.info(f"Índice creado correctamente para colección {collection_name}")
+                        if "text_embedding" in field_names:
+                            milvus_db.col.create_index(
+                                field_name="text_embedding", 
+                                index_params=index_params
+                            )
+                            
+                            # Cargar la colección en memoria para mejor rendimiento
+                            milvus_db.col.load()
+                            
+                            logger.info(f"Índice creado correctamente para colección {collection_name}")
+                        else:
+                            # Buscar campo de embeddings alternativo
+                            embedding_field = None
+                            for field in field_names:
+                                if "embedding" in field.lower():
+                                    embedding_field = field
+                                    break
+                            
+                            if embedding_field:
+                                logger.info(f"Usando campo alternativo para embeddings: {embedding_field}")
+                                milvus_db.col.create_index(
+                                    field_name=embedding_field, 
+                                    index_params=index_params
+                                )
+                                
+                                # Cargar la colección en memoria para mejor rendimiento
+                                milvus_db.col.load()
+                                
+                                logger.info(f"Índice creado correctamente para colección {collection_name}")
+                            else:
+                                logger.error("No se encontró un campo válido para embeddings")
                 except Exception as e:
                     logger.error(f"Error al crear índice en colección {collection_name}: {str(e)}")
                 
@@ -408,93 +565,70 @@ class MilvusVectorStore(VectorStoreBase):
         
         # Crear un wrapper personalizado para el retriever de Milvus si es necesario
         if use_single_collection and filter_by_metadata:
-            # Crear un retriever con soporte para filtrado por metadatos
-            from langchain_core.retrievers import BaseRetriever
-            
-            class MilvusFilterRetriever(BaseRetriever):
-                """Retriever personalizado para Milvus que soporta filtrado por metadatos."""
-                
-                def __init__(self, vectorstore, search_kwargs=None, filter_threshold=similarity_threshold):
-                    """Inicializa el retriever personalizado."""
-                    self._vectorstore = vectorstore  # Usar _vectorstore en lugar de vectorstore
-                    self.search_kwargs = search_kwargs or {}
-                    self.filter_threshold = filter_threshold
-                    
-                def _get_relevant_documents(self, query: str, *, run_manager=None):
-                    """Recupera documentos sin filtrado de metadatos."""
-                    return self._vectorstore.similarity_search(query, **self.search_kwargs)
-                
-                def search_documents(self, query: str, metadata_filters=None):
-                    """
-                    Realiza búsqueda con filtrado por metadatos.
-                    
-                    Args:
-                        query: Consulta de texto
-                        metadata_filters: Diccionario con filtros de metadatos
-                        
-                    Returns:
-                        List[Document]: Documentos filtrados por metadatos
-                    """
-                    if not metadata_filters:
-                        return self._get_relevant_documents(query)
-                    
-                    # Preparar consulta con filtros
-                    filter_expr = None
-                    
-                    # Convertir filtros de metadatos a expresión de filtro de Milvus
-                    try:
-                        expressions = []
-                        for key, value in metadata_filters.items():
-                            # Convertir a string para asegurar compatibilidad
-                            if isinstance(value, bool):
-                                # Los booleanos se manejan de forma especial
-                                value_str = str(value).lower()
-                                expressions.append(f'{key} == "{value_str}"')
-                            else:
-                                # Otros tipos se convierten a string
-                                value_str = str(value)
-                                expressions.append(f'{key} == "{value_str}"')
-                        
-                        if expressions:
-                            filter_expr = " && ".join(expressions)
-                    except Exception as e:
-                        logger.error(f"Error al crear expresión de filtro: {e}")
-                    
-                    # Configurar parámetros de búsqueda
-                    search_params = dict(self.search_kwargs)
-                    if filter_expr:
-                        search_params["expr"] = filter_expr
-                    
-                    # Realizar búsqueda con filtros
-                    try:
-                        return self._vectorstore.similarity_search(query, **search_params)
-                    except Exception as e:
-                        logger.error(f"Error en búsqueda con filtros: {e}")
-                        # Si falla la búsqueda con filtros, intentar sin filtros
-                        return self._get_relevant_documents(query)
-            
-            # Configurar parámetros de búsqueda
-            search_kwargs = {"k": k, "search_params": search_params, "score_threshold": similarity_threshold}
-            
-            # Crear y devolver el retriever personalizado
+            # Crear retriever con soporte para filtrado por metadatos
             logger.info(f"Creando retriever personalizado con filtrado para Milvus")
-            return MilvusFilterRetriever(vectorstore=vectorstore, search_kwargs=search_kwargs)
-        
+            
+            from langagent.vectorstore.milvus import MilvusFilterRetriever
+            
+            # Crear los search_kwargs que funcionarán con la colección
+            # Intentar recuperar el nombre del campo de vectores
+            embedding_field = "vector"
+            if hasattr(vectorstore, 'col') and vectorstore.col is not None:
+                try:
+                    field_names = [field.name for field in vectorstore.col.schema.fields]
+                    # Buscar el campo de embedding por nombre
+                    for field in field_names:
+                        if "embedding" in field.lower():
+                            embedding_field = field
+                            break
+                    logger.info(f"Campo de embeddings detectado: {embedding_field}")
+                except Exception as e:
+                    logger.error(f"Error al detectar campo de embeddings: {e}")
+            
+            # Configurar parámetros de búsqueda que funcionarán
+            search_kwargs = {
+                "k": k, 
+                "score_threshold": similarity_threshold
+            }
+            
+            # Solo añadir search_params si estamos seguros de que la colección los soporta
+            try:
+                if hasattr(vectorstore, 'col') and vectorstore.col is not None:
+                    schema = vectorstore.col.schema
+                    search_kwargs["search_params"] = search_params
+            except Exception as e:
+                logger.warning(f"No se pudieron verificar los parámetros de búsqueda: {e}")
+            
+            try:
+                # Crear y devolver el retriever personalizado
+                return MilvusFilterRetriever(vectorstore=vectorstore, search_kwargs=search_kwargs)
+            except Exception as e:
+                logger.error(f"Error al crear MilvusFilterRetriever: {e}")
+                logger.info("Creando retriever estándar como fallback")
+                
+                # Si falla, usar el método estándar
+                return vectorstore.as_retriever(
+                    search_type="similarity",
+                    search_kwargs={"k": k, "score_threshold": similarity_threshold}
+                )
         else:
             # Enfoque estándar: crear un retriever normal
             logger.info(f"Creando retriever estándar para Milvus")
             
             # Si es una vectorstore de Milvus, crear un retriever específico
-            retriever = vectorstore.as_retriever(
-                search_type="similarity",
-                search_kwargs={
-                    "k": k,
-                    "score_threshold": similarity_threshold,
-                    "search_params": search_params
-                }
-            )
-            
-            return retriever
+            try:
+                retriever = vectorstore.as_retriever(
+                    search_type="similarity",
+                    search_kwargs={
+                        "k": k,
+                        "score_threshold": similarity_threshold
+                    }
+                )
+                return retriever
+            except Exception as e:
+                logger.error(f"Error al crear retriever estándar: {e}")
+                # Fallback simple
+                return vectorstore.as_retriever()
     
     def retrieve_documents(self, retriever: BaseRetriever, query: str, 
                          max_retries: int = 3) -> List[Document]:
