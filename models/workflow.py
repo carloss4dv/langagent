@@ -819,8 +819,18 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         
         # Limpiar y formatear la respuesta
         formatted_generation = formatted_generation.strip()
-        formatted_generation = re.sub(r'\n\s*\n', '\n\n', formatted_generation)  # Eliminar líneas vacías múltiples
+        
+        # Normalizamos los saltos de línea para asegurar un formato consistente
+        # Primero reemplazamos los saltos de línea escapados por un marcador temporal
+        formatted_generation = formatted_generation.replace('\\n', '[NEWLINE]')
+        
+        # Ahora reemplazamos los saltos de línea reales por espacios
+        formatted_generation = re.sub(r'\n\s*\n', ' ', formatted_generation)  
         formatted_generation = re.sub(r'\s+', ' ', formatted_generation)  # Eliminar espacios múltiples
+        
+        # Finalmente volvemos a reemplazar los marcadores por saltos de línea reales
+        formatted_generation = formatted_generation.replace('[NEWLINE][NEWLINE]', '\n\n')
+        formatted_generation = formatted_generation.replace('[NEWLINE]', '\n')
         
         # Crear un objeto JSON para la respuesta en lugar de formatear directamente
         response_json = {"answer": formatted_generation}
