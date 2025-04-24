@@ -20,6 +20,7 @@ from langagent.vectorstore.base import VectorStoreBase
 from langagent.config.config import VECTORSTORE_CONFIG
 from langagent.models.constants import CUBO_TO_AMBITO, AMBITOS_CUBOS
 from langagent.models.llm import create_context_generator
+from tqdm import tqdm  # Añadir importación de tqdm para barra de progreso
 
 logger = logging.getLogger(__name__)
 
@@ -149,49 +150,12 @@ class MilvusVectorStore(VectorStoreBase):
         
         return connection_args
     
-    def _verify_metadata_fields(self, documents: List[Document]) -> List[Document]:
-        """
-        Verifica y asegura que todos los documentos tienen los campos de metadatos requeridos.
-        
-        Args:
-            documents: Lista de documentos a verificar
-            
-        Returns:
-            List[Document]: Documentos con metadatos verificados
-        """
-        for doc in documents:
-            # Verificar que el documento tiene un objeto de metadatos
-            if 'metadata' not in doc.__dict__ or doc.metadata is None:
-                doc.metadata = {}
-            
-            # Asegurar que tiene el campo ambito
-            if 'ambito' not in doc.metadata or not doc.metadata['ambito']:
-                # Intentar obtener el ámbito a partir del cubo_source
-                if 'cubo_source' in doc.metadata and doc.metadata['cubo_source'] in CUBO_TO_AMBITO:
-                    doc.metadata['ambito'] = CUBO_TO_AMBITO[doc.metadata['cubo_source']]
-                else:
-                    # Si no se puede determinar, usar un valor predeterminado
-                    doc.metadata['ambito'] = "general"
-            
-            # Asegurar que tiene el campo cubo_source
-            if 'cubo_source' not in doc.metadata or not doc.metadata['cubo_source']:
-                doc.metadata['cubo_source'] = "general"
-                
-            # Inicializar el campo context_generation si no existe
-            if 'context_generation' not in doc.metadata:
-                doc.metadata['context_generation'] = ""
-                
-            # Convertir valores booleanos a string para evitar problemas con Milvus
-            if 'is_consulta' in doc.metadata and isinstance(doc.metadata['is_consulta'], bool):
-                doc.metadata['is_consulta'] = str(doc.metadata['is_consulta']).lower()
-        
-        return documents
-    
     def create_vectorstore(self, documents: List[Document], embeddings: Embeddings, 
                          collection_name: str, **kwargs) -> Milvus:
         """
         Crea una nueva vectorstore Milvus con los documentos proporcionados.
         Configura particiones basadas en un campo clave en los metadatos.
+        Muestra una barra de progreso durante el procesamiento.
         
         Args:
             documents: Lista de documentos a indexar
@@ -205,20 +169,94 @@ class MilvusVectorStore(VectorStoreBase):
             logger.error("No se pueden crear vectorstores sin documentos.")
             return None
         
+        # Mostrar el número de documentos a procesar
+        logger.info(f"Preparando {len(documents)} documentos para vectorstore {collection_name}")
+        
         # Verificar y asegurar que los documentos tienen los metadatos requeridos
-        documents = self._verify_metadata_fields(documents)
+        # Usar tqdm para mostrar el progreso
+        logger.info("Verificando metadatos de los documentos...")
+        with tqdm(total=len(documents), desc="Verificando metadatos", unit="doc") as progress_bar:
+            updated_documents = []
+            for doc in documents:
+                # Verificar que el documento tiene un objeto de metadatos
+                if 'metadata' not in doc.__dict__ or doc.metadata is None:
+                    doc.metadata = {}
+                
+                # Asegurar que tiene el campo ambito
+                if 'ambito' not in doc.metadata or not doc.metadata['ambito']:
+                    # Intentar obtener el ámbito a partir del cubo_source
+                    if 'cubo_source' in doc.metadata and doc.metadata['cubo_source'] in CUBO_TO_AMBITO:
+                        doc.metadata['ambito'] = CUBO_TO_AMBITO[doc.metadata['cubo_source']]
+                    else:
+                        # Si no se puede determinar, usar un valor predeterminado
+                        doc.metadata['ambito'] = "general"
+                
+                # Asegurar que tiene el campo cubo_source
+                if 'cubo_source' not in doc.metadata or not doc.metadata['cubo_source']:
+                    doc.metadata['cubo_source'] = "general"
+                    
+                # Inicializar el campo context_generation si no existe
+                if 'context_generation' not in doc.metadata:
+                    doc.metadata['context_generation'] = ""
+                    
+                # Convertir valores booleanos a string para evitar problemas con Milvus
+                if 'is_consulta' in doc.metadata and isinstance(doc.metadata['is_consulta'], bool):
+                    doc.metadata['is_consulta'] = str(doc.metadata['is_consulta']).lower()
+                
+                updated_documents.append(doc)
+                progress_bar.update(1)
+        
+        # Reemplazar los documentos originales con los actualizados
+        documents = updated_documents
         
         # Recuperar los argumentos de conexión
         connection_args = self._get_connection_args()
         
         # Obtener opciones para la vectorstore
         drop_old = kwargs.get("drop_old", True)
+        check_collection_exists = kwargs.get("check_collection_exists", False)
         consistency_level = kwargs.get("consistency_level", "Strong")
         
         # Determinar si queremos usar búsqueda híbrida
         use_hybrid_search = kwargs.get("use_hybrid_search", self.use_hybrid_search)
         use_partition_key = VECTORSTORE_CONFIG.get("use_partitioning", False)
         partition_key_field = kwargs.get("partition_key_field", self.partition_key_field) if use_partition_key else None
+        
+        # Si se solicita verificar si la colección existe antes de crearla
+        if check_collection_exists:
+            try:
+                # Intentar cargar la colección existente sin crear una nueva
+                logger.info(f"Verificando si la colección {collection_name} ya existe...")
+                
+                # Preparar argumentos para verificar
+                check_kwargs = {
+                    "embedding_function": embeddings,
+                    "collection_name": collection_name,
+                    "connection_args": connection_args
+                }
+                
+                # Configurar búsqueda híbrida si es necesario
+                if use_hybrid_search:
+                    check_kwargs["builtin_function"] = BM25BuiltInFunction()
+                    check_kwargs["vector_field"] = ["dense", "sparse"]
+                
+                # Intentar cargar la colección
+                existing_db = Milvus(**check_kwargs)
+                
+                # Verificar si la colección se cargó correctamente
+                if hasattr(existing_db, 'col') and existing_db.col is not None:
+                    logger.info(f"La colección {collection_name} ya existe. No se creará una nueva.")
+                    
+                    # Si no queremos recrearla, devolver la existente
+                    if not drop_old:
+                        logger.info(f"Usando colección existente {collection_name}")
+                        return existing_db
+                    else:
+                        logger.info(f"La colección {collection_name} existe pero se recreará (drop_old=True)")
+            except Exception as check_error:
+                # Si hay un error al verificar, asumir que no existe
+                logger.info(f"Error al verificar colección existente: {str(check_error)}")
+                logger.info("Continuando con la creación de una nueva colección")
         
         try:
             logger.info(f"Creando vectorstore para colección {collection_name}")
@@ -300,6 +338,7 @@ class MilvusVectorStore(VectorStoreBase):
                        **kwargs) -> Milvus:
         """
         Carga una vectorstore Milvus existente.
+        Si la colección no existe, la crea con un documento de inicialización.
         
         Args:
             embeddings: Modelo de embeddings a utilizar
@@ -313,6 +352,7 @@ class MilvusVectorStore(VectorStoreBase):
         
         # Determinar si queremos usar búsqueda híbrida
         use_hybrid_search = kwargs.get("use_hybrid_search", self.use_hybrid_search)
+        always_drop_old = kwargs.get("always_drop_old", False)
         
         try:
             # Preparar argumentos para cargar la vectorstore
@@ -328,39 +368,58 @@ class MilvusVectorStore(VectorStoreBase):
                 vs_kwargs["builtin_function"] = BM25BuiltInFunction()
                 vs_kwargs["vector_field"] = ["dense", "sparse"]  # 'dense' para embeddings, 'sparse' para BM25
             
-            # Cargar la vectorstore
-            milvus_db = Milvus(**vs_kwargs)
+            # Intentar cargar la vectorstore
+            milvus_db = None
+            collection_exists = False
             
-            # Verificar que la colección existe realmente
-            if not hasattr(milvus_db, 'col') or milvus_db.col is None:
-                logger.warning(f"La colección {collection_name} no existe o no se pudo cargar correctamente")
+            try:
+                # Intentar cargar directamente
+                milvus_db = Milvus(**vs_kwargs)
                 
+                # Verificar si la colección existe realmente
+                if hasattr(milvus_db, 'col') and milvus_db.col is not None:
+                    logger.info(f"Colección {collection_name} cargada correctamente")
+                    collection_exists = True
+                    # Si siempre queremos recrear, no devolvemos aquí
+                    if not always_drop_old:
+                        return milvus_db
+                    else:
+                        logger.info(f"La colección {collection_name} existe pero se recreará (always_drop_old=True)")
+            except Exception as load_error:
+                logger.warning(f"Error al cargar colección: {str(load_error)}")
+                collection_exists = False
+            
+            # Si la colección no existe o siempre queremos recrearla, la creamos
+            if not collection_exists or always_drop_old:
                 # Crear una colección nueva con un documento de ejemplo para inicializar
-                logger.info(f"Creando nueva colección {collection_name}")
+                logger.info(f"{'Recreando' if collection_exists else 'Creando nueva'} colección {collection_name}")
                 empty_doc = Document(
                     page_content="Documento de inicialización", 
                     metadata={"source": "init", "ambito": "general", "cubo_source": "general"}
                 )
                 
-                # Usar los mismos argumentos pero con from_documents
+                # Crear la vectorstore con el documento de inicialización
                 return self.create_vectorstore(
                     documents=[empty_doc],
                     embeddings=embeddings,
                     collection_name=collection_name,
-                    drop_old=False,
+                    drop_old=always_drop_old,  # Solo forzar drop_old si se solicitó
+                    check_collection_exists=False,  # Ya verificamos, no es necesario volver a verificar
                     **kwargs
                 )
             
-            return milvus_db
+            # Si llegamos aquí, la colección existe pero no pudimos cargarla correctamente
+            logger.error(f"La colección {collection_name} existe pero no se pudo cargar correctamente")
+            return None
             
         except Exception as e:
-            logger.error(f"Error al cargar colección {collection_name}: {str(e)}")
+            logger.error(f"Error grave al cargar/crear colección {collection_name}: {str(e)}")
             
-            # Crear una colección nueva con un documento de ejemplo para inicializar
+            # Último intento: crear una colección nueva
             try:
-                logger.info(f"Intentando crear nueva colección {collection_name}")
+                logger.info(f"Último intento: creando nueva colección {collection_name}")
                 empty_doc = Document(
-                    page_content="Documento de inicialización", 
+                    page_content="Documento de inicialización (último intento)", 
                     metadata={"source": "init", "ambito": "general", "cubo_source": "general"}
                 )
                 
@@ -368,13 +427,14 @@ class MilvusVectorStore(VectorStoreBase):
                     documents=[empty_doc],
                     embeddings=embeddings,
                     collection_name=collection_name,
-                    drop_old=False,
+                    drop_old=False,  # No forzar drop_old en el último intento
+                    check_collection_exists=False,  # Ya verificamos, no es necesario volver a verificar
                     **kwargs
                 )
                 
             except Exception as create_error:
                 # Si falla la creación, registrar el error y proporcionar información detallada
-                logger.error(f"Error al crear colección {collection_name}: {str(create_error)}")
+                logger.error(f"Error final al crear colección {collection_name}: {str(create_error)}")
                 if "connection" in str(e).lower():
                     logger.error(f"Problema de conexión a Milvus. Verifique que el servidor esté en ejecución en {connection_args['uri']} " +
                                 f"y que las credenciales sean correctas.")
@@ -662,6 +722,7 @@ class MilvusVectorStore(VectorStoreBase):
         """
         Añade documentos a una vectorstore Milvus existente.
         Si está habilitado, genera contexto para mejorar la recuperación.
+        Muestra una barra de progreso para visualizar el avance.
         
         Args:
             vectorstore: Instancia de Milvus vectorstore
@@ -709,7 +770,41 @@ class MilvusVectorStore(VectorStoreBase):
             logger.info("Generación de contexto desactivada para esta operación")
             
         # Verificar y asegurar que los documentos tienen los metadatos requeridos
-        documents = self._verify_metadata_fields(documents)
+        # Usar tqdm para mostrar el progreso
+        logger.info("Verificando metadatos de los documentos...")
+        with tqdm(total=len(documents), desc="Verificando metadatos", unit="doc") as progress_bar:
+            updated_documents = []
+            for doc in documents:
+                # Verificar que el documento tiene un objeto de metadatos
+                if 'metadata' not in doc.__dict__ or doc.metadata is None:
+                    doc.metadata = {}
+                
+                # Asegurar que tiene el campo ambito
+                if 'ambito' not in doc.metadata or not doc.metadata['ambito']:
+                    # Intentar obtener el ámbito a partir del cubo_source
+                    if 'cubo_source' in doc.metadata and doc.metadata['cubo_source'] in CUBO_TO_AMBITO:
+                        doc.metadata['ambito'] = CUBO_TO_AMBITO[doc.metadata['cubo_source']]
+                    else:
+                        # Si no se puede determinar, usar un valor predeterminado
+                        doc.metadata['ambito'] = "general"
+                
+                # Asegurar que tiene el campo cubo_source
+                if 'cubo_source' not in doc.metadata or not doc.metadata['cubo_source']:
+                    doc.metadata['cubo_source'] = "general"
+                    
+                # Inicializar el campo context_generation si no existe
+                if 'context_generation' not in doc.metadata:
+                    doc.metadata['context_generation'] = ""
+                    
+                # Convertir valores booleanos a string para evitar problemas con Milvus
+                if 'is_consulta' in doc.metadata and isinstance(doc.metadata['is_consulta'], bool):
+                    doc.metadata['is_consulta'] = str(doc.metadata['is_consulta']).lower()
+                
+                updated_documents.append(doc)
+                progress_bar.update(1)
+        
+        # Reemplazar los documentos originales con los actualizados
+        documents = updated_documents
             
         try:
             # Para colecciones grandes, dividir en lotes
@@ -720,16 +815,30 @@ class MilvusVectorStore(VectorStoreBase):
                 # Si son pocos documentos, añadirlos directamente
                 logger.info(f"Añadiendo {total_docs} documentos a la colección")
                 vectorstore.add_documents(documents)
+                logger.info(f"Se han añadido {total_docs} documentos correctamente")
             else:
                 # Para muchos documentos, procesarlos en lotes
                 logger.info(f"Añadiendo {total_docs} documentos en lotes de {batch_size}")
-                for i in range(0, total_docs, batch_size):
-                    end_idx = min(i + batch_size, total_docs)
-                    batch = documents[i:end_idx]
-                    logger.info(f"Añadiendo lote {i//batch_size + 1}/{(total_docs + batch_size - 1)//batch_size}: {len(batch)} documentos")
-                    vectorstore.add_documents(batch)
-                    
-            logger.info(f"Se han añadido {total_docs} documentos correctamente")
+                
+                # Crear barra de progreso para el proceso de adición por lotes
+                total_batches = (total_docs + batch_size - 1) // batch_size
+                with tqdm(total=total_batches, desc="Añadiendo documentos", unit="lote") as progress_bar:
+                    for i in range(0, total_docs, batch_size):
+                        end_idx = min(i + batch_size, total_docs)
+                        batch = documents[i:end_idx]
+                        
+                        # Actualizar la descripción con información del lote actual
+                        current_batch = i // batch_size + 1
+                        progress_bar.set_description(f"Añadiendo lote {current_batch}/{total_batches} ({len(batch)} docs)")
+                        
+                        # Añadir el lote
+                        vectorstore.add_documents(batch)
+                        
+                        # Actualizar la barra de progreso
+                        progress_bar.update(1)
+                
+                logger.info(f"Se han añadido {total_docs} documentos correctamente en {total_batches} lotes")
+            
             return True
             
         except Exception as e:
@@ -740,6 +849,7 @@ class MilvusVectorStore(VectorStoreBase):
                                source_documents: Dict[str, Document]) -> List[Document]:
         """
         Genera contexto para cada chunk utilizando el documento completo y el LLM.
+        Muestra una barra de progreso para visualizar el avance del procesamiento.
         
         Args:
             documents: Lista de chunks (documentos) a enriquecer con contexto
@@ -765,6 +875,9 @@ class MilvusVectorStore(VectorStoreBase):
         docs_with_context = 0
         docs_without_source = 0
         
+        # Crear barra de progreso
+        progress_bar = tqdm(total=total_docs, desc="Generando contexto", unit="chunk")
+        
         for i, doc in enumerate(documents):
             # Obtener la ruta del documento original
             source_path = doc.metadata.get('source', '')
@@ -773,12 +886,14 @@ class MilvusVectorStore(VectorStoreBase):
             if not source_path:
                 logger.warning(f"El chunk {i} no tiene campo 'source' en sus metadatos")
                 docs_without_source += 1
+                progress_bar.update(1)  # Actualizar barra aunque se omita
                 continue
                 
             # Si el documento original no está en la colección, lo registramos y continuamos
             if source_path not in source_documents:
                 logger.warning(f"No se encontró el documento original para el chunk {i}: {source_path}")
                 docs_without_source += 1
+                progress_bar.update(1)  # Actualizar barra aunque se omita
                 continue
                 
             # Obtener el documento original completo
@@ -789,11 +904,17 @@ class MilvusVectorStore(VectorStoreBase):
                 logger.info(f"El chunk {i} ya tiene contexto: {doc.metadata['context_generation'][:50]}...")
                 docs_with_context += 1
                 processed_count += 1
+                progress_bar.update(1)  # Actualizar barra de progreso
                 continue
             
             try:
                 # Generar contexto para el chunk usando el LLM
-                logger.info(f"Generando contexto para chunk {i}/{total_docs}: {source_path}")
+                if VECTORSTORE_CONFIG.get("log_context_generation", False):
+                    logger.info(f"Generando contexto para chunk {i}/{total_docs}: {source_path}")
+                
+                # Actualizar descripción de la barra con el avance
+                progress_bar.set_description(f"Generando contexto ({processed_count}/{total_docs})")
+                
                 context_result = self.context_generator.invoke({
                     "document": full_document.page_content,
                     "chunk": doc.page_content
@@ -824,14 +945,21 @@ class MilvusVectorStore(VectorStoreBase):
                 # Actualizar contador
                 processed_count += 1
                 
-                # Mostrar progreso cada cierto número de documentos
-                if processed_count % 10 == 0:
-                    logger.info(f"Progreso: {processed_count}/{total_docs} chunks procesados")
+                # Actualizar barra de progreso
+                progress_bar.update(1)
+                
+                # Actualizar la descripción de la barra con el porcentaje
+                completion_percentage = (processed_count / total_docs) * 100
+                progress_bar.set_description(f"Generando contexto {completion_percentage:.1f}%")
                     
             except Exception as e:
                 logger.error(f"Error al generar contexto para chunk {i}: {str(e)}")
                 # En caso de error, establecer un contexto vacío
                 doc.metadata['context_generation'] = ""
+                progress_bar.update(1)  # Actualizar barra a pesar del error
+        
+        # Cerrar la barra de progreso
+        progress_bar.close()
         
         # Mostrar resumen completo al finalizar
         logger.info(f"Resumen de generación de contexto:")

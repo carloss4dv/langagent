@@ -64,6 +64,7 @@ def create_vectorstore(documents: List[Document], embeddings: Embeddings, persis
 def load_vectorstore(persist_directory: str, embeddings: Embeddings) -> VectorStore:
     """
     Función de compatibilidad para cargar una base de datos vectorial.
+    Si la base de datos no existe, se crea automáticamente.
     
     Args:
         persist_directory (str): Directorio donde está persistida la base de datos.
@@ -81,7 +82,9 @@ def load_vectorstore(persist_directory: str, embeddings: Embeddings) -> VectorSt
     return vectorstore_handler.load_vectorstore(
         embeddings=embeddings,
         collection_name=collection_name,
-        persist_directory=persist_directory
+        persist_directory=persist_directory,
+        check_collection_exists=True,  # Verificar si la colección existe antes de crear
+        always_drop_old=False          # No recrear si ya existe
     )
 
 # Función de compatibilidad para crear retriever

@@ -106,7 +106,7 @@ class LangChainAgent:
                 try:
                     # Primero creamos el generador de contexto con el LLM principal
                     print(f"Usando modelo {self.llm.model} para generación de contexto")
-                    context_generator = create_context_generator(self.llm)
+                    context_generator = create_context_generator(self.llm2)
                     
                     # Verificar que se creó correctamente
                     if context_generator is not None:
@@ -245,7 +245,9 @@ class LangChainAgent:
                 print(f"Intentando cargar vectorstore unificada: {unified_collection_name}...")
                 db = self.vectorstore_handler.load_vectorstore(
                     embeddings=self.embeddings,
-                    collection_name=unified_collection_name
+                    collection_name=unified_collection_name,
+                    check_collection_exists=True,  # Verificar si la colección existe antes de crearla
+                    always_drop_old=False          # No recrear si ya existe
                 )
                 print(f"Vectorstore unificada cargada correctamente")
                 
@@ -297,6 +299,7 @@ class LangChainAgent:
                     "embeddings": self.embeddings,
                     "collection_name": unified_collection_name,
                     "drop_old": True,  # Forzar recreación completa
+                    "check_collection_exists": True,  # Verificar si existe antes de intentar recrear
                 }
                 
                 # Si está activada la generación de contexto, generar el contexto antes de crear la vectorstore
@@ -398,7 +401,9 @@ class LangChainAgent:
                     db = self.vectorstore_handler.load_vectorstore(
                         embeddings=self.embeddings,
                         collection_name=collection_name,
-                        persist_directory=os.path.join(self.vectorstore_dir, collection_name)
+                        persist_directory=os.path.join(self.vectorstore_dir, collection_name),
+                        check_collection_exists=True,  # Verificar si la colección existe antes de crearla
+                        always_drop_old=False          # No recrear si ya existe
                     )
                     print(f"Vectorstore existente cargada para {cubo_name}")
                 except Exception as e:
@@ -408,7 +413,9 @@ class LangChainAgent:
                         documents=doc_splits,
                         embeddings=self.embeddings,
                         collection_name=collection_name,
-                        persist_directory=os.path.join(self.vectorstore_dir, collection_name)
+                        persist_directory=os.path.join(self.vectorstore_dir, collection_name),
+                        check_collection_exists=True,  # Verificar si existe antes de intentar recrear
+                        drop_old=True  # Recrear solo si es necesario
                     )
                     print(f"Nueva vectorstore creada para {cubo_name}")
                 
@@ -695,6 +702,7 @@ class LangChainAgent:
                 "embeddings": self.embeddings,
                 "collection_name": unified_collection_name,
                 "drop_old": True,  # Forzar recreación completa
+                "check_collection_exists": True,  # Verificar si existe antes de intentar recrear
             }
             
             # Si está activada la generación de contexto, generar el contexto antes de crear la vectorstore
