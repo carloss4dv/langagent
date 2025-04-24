@@ -91,6 +91,20 @@ class LangChainAgent:
         """
         print_title("Configurando el agente")
         
+        # Crear LLMs
+        print("Configurando modelos de lenguaje...")
+        self.llm = create_llm(model_name=self.local_llm)
+        self.llm2 = create_llm(model_name=self.local_llm2)
+        self.llm3 = create_llm(model_name=self.local_llm3)
+        
+        # Configurar el generador de contexto para el vectorstore (si es Milvus)
+        if self.vector_db_type.lower() == "milvus" and hasattr(self.vectorstore_handler, "set_context_generator"):
+            use_context_generation = VECTORSTORE_CONFIG.get("use_context_generation", False)
+            if use_context_generation:
+                print("Configurando generador de contexto para Milvus...")
+                self.vectorstore_handler.set_context_generator(self.llm)
+                print("Generador de contexto configurado correctamente")
+        
         # Crear embeddings (compartidos por todas las vectorstores)
         print("Creando embeddings...")
         self.embeddings = create_embeddings()
@@ -159,6 +173,10 @@ class LangChainAgent:
                     # Convertir booleanos a string para Milvus
                     doc.metadata["is_consulta"] = str(doc.metadata["is_consulta"]).lower()
                 
+                # Inicializar el campo de context_generation si no existe
+                if "context_generation" not in doc.metadata:
+                    doc.metadata["context_generation"] = ""
+                
                 all_processed_docs.append(doc)
             
             # Dividir todos los documentos en chunks
@@ -215,12 +233,14 @@ class LangChainAgent:
                         
                         # Si está activada la generación de contexto, incluir los documentos originales
                         if use_context_generation:
+                            print(f"Generación de contexto activada para actualización. Pasando {len(source_documents)} documentos originales.")
                             self.vectorstore_handler.add_documents_to_collection(
                                 vectorstore=db,
                                 documents=doc_splits,
                                 source_documents=source_documents
                             )
                         else:
+                            print("Generación de contexto desactivada para actualización.")
                             self.vectorstore_handler.add_documents_to_collection(
                                 vectorstore=db,
                                 documents=doc_splits
@@ -245,12 +265,14 @@ class LangChainAgent:
                     create_kwargs = {
                         "documents": doc_splits,
                         "embeddings": self.embeddings,
-                        "collection_name": unified_collection_name
+                        "collection_name": unified_collection_name,
+                        "use_context_generation": use_context_generation  # Asegurar que esta opción se pasa explícitamente
                     }
                     
                     # Si está activada la generación de contexto, añadir los documentos originales
                     if use_context_generation:
                         create_kwargs["source_documents"] = source_documents
+                        print(f"Generación de contexto activada. Pasando {len(source_documents)} documentos originales.")
                     
                     db = self.vectorstore_handler.create_vectorstore(**create_kwargs)
                     
@@ -406,20 +428,6 @@ class LangChainAgent:
                     print("Continuando con el siguiente ámbito...")
                     # No añadir este retriever si falla la creación para evitar errores posteriores
         
-        # Crear LLMs
-        print("Configurando modelos de lenguaje...")
-        self.llm = create_llm(model_name=self.local_llm)
-        self.llm2 = create_llm(model_name=self.local_llm2)
-        self.llm3 = create_llm(model_name=self.local_llm3)
-        
-        # Configurar el generador de contexto para el vectorstore (si es Milvus)
-        if self.vector_db_type.lower() == "milvus" and hasattr(self.vectorstore_handler, "set_context_generator"):
-            use_context_generation = VECTORSTORE_CONFIG.get("use_context_generation", False)
-            if use_context_generation:
-                print("Configurando generador de contexto para Milvus...")
-                self.vectorstore_handler.set_context_generator(self.llm)
-                print("Generador de contexto configurado correctamente")
-        
         # Crear cadenas
         self.rag_chain = create_rag_chain(self.llm)
         self.retrieval_grader = create_retrieval_grader(self.llm2)
@@ -538,6 +546,15 @@ class LangChainAgent:
         all_documents = load_documents_from_directory(self.data_dir)
         consultas_por_ambito = load_consultas_guardadas(self.consultas_dir)
         
+        # Diccionario para almacenar documentos originales por fuente
+        source_documents = {}
+        
+        # Primero guardar los documentos originales por su ruta de archivo
+        for doc in all_documents:
+            file_path = doc.metadata.get('source', '')
+            if file_path and file_path not in source_documents:
+                source_documents[file_path] = doc
+                
         # Dividir documentos en chunks
         text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
             chunk_size=VECTORSTORE_CONFIG["chunk_size"], 
@@ -572,6 +589,10 @@ class LangChainAgent:
             elif isinstance(doc.metadata["is_consulta"], bool):
                 # Convertir booleanos a string para Milvus
                 doc.metadata["is_consulta"] = str(doc.metadata["is_consulta"]).lower()
+                
+            # Inicializar el campo de context_generation si no existe
+            if "context_generation" not in doc.metadata:
+                doc.metadata["context_generation"] = ""
             
             all_processed_docs.append(doc)
         
@@ -586,6 +607,9 @@ class LangChainAgent:
                 doc.metadata["ambito"] = ambito
                 doc.metadata["is_consulta"] = "true"  # Usar string en lugar de bool
                 doc.metadata["cubo_source"] = f"consultas_{ambito}"  # Asignar un cubo_source basado en el ámbito
+                # Inicializar el campo de context_generation si no existe
+                if "context_generation" not in doc.metadata:
+                    doc.metadata["context_generation"] = ""
             doc_splits.extend(consulta_splits)
         
         # Hacer una verificación final de que todos los documentos tienen los metadatos requeridos
@@ -599,6 +623,8 @@ class LangChainAgent:
                 doc.metadata["is_consulta"] = "false"
             elif isinstance(doc.metadata["is_consulta"], bool):
                 doc.metadata["is_consulta"] = str(doc.metadata["is_consulta"]).lower()
+            if "context_generation" not in doc.metadata:
+                doc.metadata["context_generation"] = ""
         
         # Nombre para la colección única de Milvus
         unified_collection_name = VECTORSTORE_CONFIG.get("unified_collection_name", "UnifiedKnowledgeBase")
@@ -608,13 +634,26 @@ class LangChainAgent:
         print(f"Cargando {len(doc_splits)} documentos en la colección")
         
         try:
+            # Verificar si queremos usar generación de contexto
+            use_context_generation = VECTORSTORE_CONFIG.get("use_context_generation", False)
+            
+            # Crear argumentos para la creación de la vectorstore
+            create_kwargs = {
+                "documents": doc_splits,
+                "embeddings": self.embeddings,
+                "collection_name": unified_collection_name,
+                "drop_old": True,  # Forzar recreación completa
+                "use_context_generation": use_context_generation  # Pasar explícitamente
+            }
+            
+            # Si está activada la generación de contexto, añadir los documentos originales
+            if use_context_generation:
+                print(f"Generación de contexto activada. Pasando {len(source_documents)} documentos originales.")
+                create_kwargs["source_documents"] = source_documents
+                
             # Crear la colección con todos los documentos
-            db = self.vectorstore_handler.create_vectorstore(
-                documents=doc_splits,
-                embeddings=self.embeddings,
-                collection_name=unified_collection_name,
-                drop_old=True  # Forzar recreación completa
-            )
+            db = self.vectorstore_handler.create_vectorstore(**create_kwargs)
+            
             print(f"Nueva vectorstore unificada creada correctamente con {len(doc_splits)} documentos")
             
             # Actualizar la vectorstore y retriever
