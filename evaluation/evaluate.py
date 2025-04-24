@@ -358,6 +358,7 @@ class AgentEvaluator:
         relevant_cubos = resultado.get("relevant_cubos", [])
         is_consulta = resultado.get("is_consulta", False)
         consulta_documents = resultado.get("consulta_documents", [])
+        rewritten_query = resultado.get("rewritten_query", "")
         
         # Extraer puntuaciones si existen
         hallucination_score = None
@@ -406,14 +407,26 @@ class AgentEvaluator:
             actual_output=generation or "No se pudo extraer una respuesta",
             expected_output=respuesta_esperada,
             context=formatted_context,
-            token_cost=token_info.get("total_tokens", 0),
-            completion_time=tiempo_completado
+            token_cost=token_info.get("cost_estimate", {}).get("total_cost", 0),
+            completion_time=tiempo_completado,
+            additional_metadata=json.dumps({
+                "rewritten_query": rewritten_query,
+                "hallucination_score": hallucination_score,
+                "answer_score": answer_score,
+                "relevant_cubos": relevant_cubos,
+                "ambito": ambito,
+                "is_consulta": is_consulta,
+                "model_info": token_info.get("model", "unknown"),
+                "token_info": token_info,
+                "retrieval_details": retrieval_details
+            })
         )
         
         # Guardar los metadatos adicionales como atributos del objeto para uso posterior
         test_case.hallucination_score = hallucination_score
         test_case.answer_score = answer_score
         test_case.relevant_cubos = relevant_cubos
+        test_case.rewritten_query = rewritten_query
         test_case.ambito = ambito
         test_case.is_consulta = is_consulta
         test_case.model_info = token_info.get("model", "unknown")
@@ -497,6 +510,7 @@ class AgentEvaluator:
             relevant_cubos = resultado.get("relevant_cubos", [])
             ambito = resultado.get("ambito")
             retrieval_details = resultado.get("retrieval_details", {})
+            rewritten_query = resultado.get("rewritten_query", "")
             
             # Extraer puntuaciones si existen
             hallucination_score = None
@@ -529,14 +543,27 @@ class AgentEvaluator:
                 actual_output=generation or "No se pudo extraer una respuesta",
                 expected_output=golden.expected_output,
                 retrieval_context=context,
-                token_cost=token_info.get("total_tokens", 0),
-                completion_time=tiempo_completado
+                token_cost=token_info.get("cost_estimate", {}).get("total_cost", 0),
+                completion_time=tiempo_completado,
+                additional_metadata=json.dumps({
+                    "original_query": golden.input,
+                    "rewritten_query": rewritten_query,
+                    "hallucination_score": hallucination_score,
+                    "answer_score": answer_score,
+                    "relevant_cubos": relevant_cubos,
+                    "ambito": ambito,
+                    "is_consulta": is_consulta,
+                    "model_info": token_info.get("model", "unknown"),
+                    "token_info": token_info,
+                    "retrieval_details": retrieval_details
+                })
             )
             
             # Guardar metadatos adicionales como atributos del objeto para uso posterior
             test_case.hallucination_score = hallucination_score
             test_case.answer_score = answer_score
             test_case.relevant_cubos = relevant_cubos
+            test_case.rewritten_query = rewritten_query
             test_case.ambito = ambito
             test_case.is_consulta = is_consulta
             test_case.model_info = token_info.get("model", "unknown")
