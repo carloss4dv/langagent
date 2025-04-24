@@ -421,7 +421,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         if retry_count >= WORKFLOW_CONFIG.get("max_retries", 2) - 1 and combined_retriever_exists:
             try:
                 print("Usando retriever combinado para todos los cubos...")
-                docs = retrievers["combined"].get_relevant_documents(rewritten_question)
+                docs = retrievers["combined"].invoke(rewritten_question)
                 
                 # Comprobar si todos los documentos son relevantes
                 relevant_docs = []
@@ -469,7 +469,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                     
                     # Obtener documentos del cubo
                     print(f"Recuperando documentos del cubo: {cubo}")
-                    docs = retrievers[cubo].get_relevant_documents(rewritten_question)
+                    docs = retrievers[cubo].invoke(rewritten_question)
                     print(f"Documentos recuperados de {cubo}: {len(docs)}")
                     
                     # Comprobar si todos los documentos son relevantes
@@ -819,8 +819,8 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         "generate",
         should_retry,
         {
-            "generate": "generate",
-            END: END
+            "retrieve": "retrieve",
+            "END": END
         }
     )
     

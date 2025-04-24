@@ -43,7 +43,7 @@ VECTORSTORE_CONFIG = {
     # Configuración para enfoque de colección única
     "use_single_collection": True,  # Usar una sola colección para todos los documentos
     "unified_collection_name": "UnifiedKnowledgeBase",  # Nombre de la colección unificada
-    "always_update_collection": True,  # Si se deben actualizar documentos en colección existente
+    "always_update_collection": False,  # Si se deben actualizar documentos en colección existente
     "filter_by_metadata": True,  # Habilitar filtrado por metadatos en consultas
     
     # Configuración de búsqueda híbrida
