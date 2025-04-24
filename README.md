@@ -23,7 +23,7 @@ LangAgent es un sistema de respuesta a preguntas que implementa un agente utiliz
 ## Workflow del sistema
 
 <div align="center">
-  <img src="logos/diagrama_workflow_prototipo.png" alt="Diagrama workflow" width="600"/>
+  <img src="logos/diagrama_workflow_prototipo.png" alt="Diagrama workflow" width="1000"/>
   <br>
   <em>Diagrama del workflow del agente (Protipo 1, sujeto aun a cambios)</em>
 </div>
@@ -245,7 +245,7 @@ El sistema implementa autenticación JWT para la API con:
 <div align="center">
   <div style="display: flex; justify-content: center; align-items: center; gap: 20px;">
     <img src="logos/cosmos-logo.png" alt="Cosmos Logo" width="250"/>
-    <img src="./NEAT-AMBIENCE-logoAcks.jpg" alt="NEAT-AMBIENCE ACKS Logo" width="250"/>
+    <img src="logos/NEAT-AMBIENCE-logoAcks.jpg" alt="NEAT-AMBIENCE ACKS Logo" width="250"/>
   </div>
   <p>Desarrollado por Carlos de Vera Sanz</p>
   <p>Universidad de Zaragoza - COSMOS</p>
