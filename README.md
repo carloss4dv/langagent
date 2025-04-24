@@ -2,13 +2,14 @@
 
 <div align="center">
   <img src="logos/NEAT-AMBIENCE-logo.png" alt="NEAT-AMBIENCE Logo" width="400"/>
+  <img src="NEAT-AMBIENCE-logoAcks.jpg" alt = "NEAT-AMBIENCE ACKS Logo", width = "400">
   <br>
   <em>Sistema de respuesta a preguntas con enrutamiento inteligente y mecanismos de reintento</em>
 </div>
 
 ## Descripción
 
-LangAgent es un sistema de respuesta a preguntas que implementa un agente utilizando LangGraph, LLaMA3 y bases de datos vectoriales. El sistema organiza la información en "cubos" temáticos dentro de diferentes "ámbitos", permitiendo dirigir las preguntas de manera adecuada y reintentar cuando las respuestas no son satisfactorias.
+LangAgent es un sistema de respuesta a preguntas que implementa un agente utilizando LangGraph, Ollama y bases de datos vectoriales. El sistema organiza la información en "cubos" temáticos dentro de diferentes "ámbitos", permitiendo dirigir las preguntas de manera adecuada y reintentar cuando las respuestas no son satisfactorias.
 
 ## Características principales
 
@@ -21,6 +22,12 @@ LangAgent es un sistema de respuesta a preguntas que implementa un agente utiliz
 - **Soporte para distintas bases de datos vectoriales**: Compatible con Chroma DB y Milvus
 
 ## Workflow del sistema
+
+<div align="center">
+  <img src="logos/diagrama_workflow_protipo.png" alt="NEAT-AMBIENCE Logo" width="400"/>
+  <br>
+  <em>Diagrama del workflow del agente (Protipo 1, sujeto aun a cambios)</em>
+</div>
 
 El sistema implementa un flujo de trabajo basado en LangGraph con tres nodos principales:
 1. **Route Question**: Determina qué cubos son relevantes para la pregunta
