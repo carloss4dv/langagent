@@ -103,14 +103,34 @@ class LangChainAgent:
             use_context_generation = VECTORSTORE_CONFIG.get("use_context_generation", False)
             if use_context_generation:
                 print("Configurando generador de contexto para Milvus...")
-                # Primero creamos el generador de contexto con el LLM principal
-                context_generator = create_context_generator(self.llm)
-                if context_generator is not None:
-                    # Luego lo pasamos al handler de vectorstore
-                    self.vectorstore_handler.set_context_generator(context_generator)
-                    print("Generador de contexto configurado correctamente")
-                else:
-                    print("Error: No se pudo crear el generador de contexto")
+                try:
+                    # Primero creamos el generador de contexto con el LLM principal
+                    print(f"Usando modelo {self.llm.model} para generación de contexto")
+                    context_generator = create_context_generator(self.llm)
+                    
+                    # Verificar que se creó correctamente
+                    if context_generator is not None:
+                        print(f"Generador de contexto creado: {type(context_generator)}")
+                        
+                        # Hacer una prueba rápida
+                        try:
+                            test_result = context_generator.invoke({
+                                "document": "Documento de prueba.",
+                                "chunk": "Chunk de prueba."
+                            })
+                            print(f"Prueba del generador: {test_result}")
+                        except Exception as test_error:
+                            print(f"Error al probar el generador: {str(test_error)}")
+                            
+                        # Pasarlo al handler de vectorstore
+                        self.vectorstore_handler.set_context_generator(context_generator)
+                        print("Generador de contexto configurado correctamente")
+                    else:
+                        print("Error: No se pudo crear el generador de contexto")
+                except Exception as e:
+                    print(f"Error al configurar el generador de contexto: {str(e)}")
+                    import traceback
+                    print(f"Traza de error: {traceback.format_exc()}")
         
         # Crear embeddings (compartidos por todas las vectorstores)
         print("Creando embeddings...")

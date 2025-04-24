@@ -173,7 +173,7 @@ PROMPTS = {
         <|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
     },
     
-    "hf.co/unsloth/Mistral-Small-3.1-24B-Instruct-2503-GGUF": {
+    "mistral-small-3.1:24b": {
         "rag": """[INST] You are an expert assistant in Universidad de Zaragoza (UZ) data analysis with access to detailed information from the SEGEDA (DATUZ: Open Data and Transparency UZ) system. Your goal is to provide precise and well-founded answers based on available institutional data.
 
                 SYSTEM CONTEXT:

@@ -54,19 +54,46 @@ class MilvusVectorStore(VectorStoreBase):
             logger.info("Configurando generador de contexto para chunks...")
             self.context_generator = context_generator
             
+            # Verificar el tipo de context_generator
+            logger.info(f"Tipo de context_generator: {type(context_generator)}")
+            
             # Realizar una pequeña prueba para verificar que funciona
-            test_result = self.context_generator.invoke({
+            logger.info("Iniciando prueba del generador de contexto...")
+            test_input = {
                 "document": "Este es un documento de prueba para verificar que el generador funciona.",
                 "chunk": "Este es un chunk de prueba."
-            })
+            }
+            logger.info(f"Enviando entrada de prueba: {test_input}")
+            
+            test_result = None
+            try:
+                test_result = self.context_generator.invoke(test_input)
+                logger.info(f"Tipo de resultado: {type(test_result)}")
+                logger.info(f"Resultado completo: {test_result}")
+            except Exception as invoke_err:
+                logger.error(f"Error al invocar el generador de contexto: {str(invoke_err)}")
+                # Intentar con un formato alternativo
+                try:
+                    logger.info("Intentando formato alternativo...")
+                    test_result = self.context_generator(test_input)
+                    logger.info(f"Resultado con formato alternativo: {test_result}")
+                except Exception as alt_err:
+                    logger.error(f"Error al usar formato alternativo: {str(alt_err)}")
             
             if test_result and isinstance(test_result, str) and len(test_result.strip()) > 0:
                 logger.info("Generador de contexto configurado y probado correctamente.")
                 logger.info(f"Ejemplo de generación: '{test_result.strip()}'")
             else:
-                logger.warning("El generador de contexto se configuró pero la prueba no generó texto.")
+                logger.warning("El generador de contexto se configuró pero la prueba no generó texto o el resultado no es un string.")
+                logger.warning(f"Resultado obtenido: {test_result}")
+                logger.warning("Comprueba que el modelo LLM está funcionando correctamente y que el prompt es adecuado.")
+                
+                # Intentar continuar a pesar del error
+                logger.info("Se intentará continuar con el generador de contexto a pesar del error.")
         except Exception as e:
             logger.error(f"Error al configurar el generador de contexto: {str(e)}")
+            import traceback
+            logger.error(f"Traza completa: {traceback.format_exc()}")
             self.context_generator = None
     
     def _get_connection_args(self) -> Dict[str, Any]:
