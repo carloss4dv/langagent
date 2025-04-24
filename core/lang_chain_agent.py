@@ -288,38 +288,47 @@ class LangChainAgent:
                 print(f"Creando nueva vectorstore unificada: {unified_collection_name}...")
                 print(f"Cargando {len(doc_splits)} documentos en la colección unificada")
                 
-                # Crear la colección unificada con los documentos procesados
-                print(f"Creando nueva colección unificada: {unified_collection_name}...")
-                try:
-                    # Verificar si queremos usar generación de contexto
-                    use_context_generation = VECTORSTORE_CONFIG.get("use_context_generation", False)
+                # Verificar si queremos usar generación de contexto
+                use_context_generation = VECTORSTORE_CONFIG.get("use_context_generation", False)
+                
+                # Crear argumentos para la creación de la vectorstore
+                create_kwargs = {
+                    "documents": doc_splits,
+                    "embeddings": self.embeddings,
+                    "collection_name": unified_collection_name,
+                    "drop_old": True,  # Forzar recreación completa
+                }
+                
+                # Si está activada la generación de contexto, generar el contexto antes de crear la vectorstore
+                if use_context_generation:
+                    # Verifica que el generador de contexto esté configurado para el vectorstore_handler
+                    if self.vectorstore_handler.context_generator is None and hasattr(self.vectorstore_handler, "set_context_generator"):
+                        print("Configurando generador de contexto antes de recrear la colección...")
+                        context_generator = create_context_generator(self.llm)
+                        if context_generator is not None:
+                            self.vectorstore_handler.set_context_generator(context_generator)
+                            print("Generador de contexto configurado correctamente para recreación")
+                        else:
+                            print("Error: No se pudo crear el generador de contexto")
                     
-                    # Crear la vectorstore con los documentos y pasar los originales si se usa generación de contexto
-                    create_kwargs = {
-                        "documents": doc_splits,
-                        "embeddings": self.embeddings,
-                        "collection_name": unified_collection_name,
-                        "use_context_generation": use_context_generation  # Asegurar que esta opción se pasa explícitamente
-                    }
-                    
-                    # Si está activada la generación de contexto, añadir los documentos originales
-                    if use_context_generation:
-                        # Verifica que el generador de contexto esté configurado para el vectorstore_handler
-                        if self.vectorstore_handler.context_generator is None and hasattr(self.vectorstore_handler, "set_context_generator"):
-                            print("Configurando generador de contexto antes de recrear la colección...")
-                            context_generator = create_context_generator(self.llm)
-                            if context_generator is not None:
-                                self.vectorstore_handler.set_context_generator(context_generator)
-                                print("Generador de contexto configurado correctamente para recreación")
-                            else:
-                                print("Error: No se pudo crear el generador de contexto")
+                    # Si tenemos documentos originales y el generador está configurado, generar contexto
+                    if source_documents and hasattr(self.vectorstore_handler, "_generate_context_for_chunks"):
+                        print(f"Generando contexto para {len(doc_splits)} chunks antes de cargarlos...")
+                        print("=== INICIANDO GENERACIÓN DE CONTEXTO ===")
+                        doc_splits = self.vectorstore_handler._generate_context_for_chunks(doc_splits, source_documents)
+                        print("=== FINALIZADA GENERACIÓN DE CONTEXTO ===")
                         
-                        print(f"Generación de contexto activada. Pasando {len(source_documents)} documentos originales.")
-                        create_kwargs["source_documents"] = source_documents
-                    
+                        # Contar documentos con contexto generado
+                        docs_with_context = sum(1 for doc in doc_splits if doc.metadata.get('context_generation', '').strip())
+                        print(f"Documentos con contexto generado: {docs_with_context}/{len(doc_splits)}")
+                    else:
+                        print("No se puede generar contexto: faltan documentos originales o generador no configurado")
+                
+                # Crear la vectorstore sin pasar los documentos originales para generación de contexto,
+                # ya que el contexto ya fue generado
+                try:
                     db = self.vectorstore_handler.create_vectorstore(**create_kwargs)
-                    
-                    print(f"Nueva colección unificada creada con {len(doc_splits)} documentos")
+                    print(f"Nueva vectorstore unificada creada correctamente con {len(doc_splits)} documentos")
                 except Exception as e:
                     print(f"Error al crear colección unificada: {str(e)}")
                     db = None
@@ -686,10 +695,9 @@ class LangChainAgent:
                 "embeddings": self.embeddings,
                 "collection_name": unified_collection_name,
                 "drop_old": True,  # Forzar recreación completa
-                "use_context_generation": use_context_generation  # Pasar explícitamente
             }
             
-            # Si está activada la generación de contexto, añadir los documentos originales
+            # Si está activada la generación de contexto, generar el contexto antes de crear la vectorstore
             if use_context_generation:
                 # Verifica que el generador de contexto esté configurado para el vectorstore_handler
                 if self.vectorstore_handler.context_generator is None and hasattr(self.vectorstore_handler, "set_context_generator"):
@@ -701,13 +709,27 @@ class LangChainAgent:
                     else:
                         print("Error: No se pudo crear el generador de contexto")
                 
-                print(f"Generación de contexto activada. Pasando {len(source_documents)} documentos originales.")
-                create_kwargs["source_documents"] = source_documents
-                
-            # Crear la colección con todos los documentos
-            db = self.vectorstore_handler.create_vectorstore(**create_kwargs)
+                # Si tenemos documentos originales y el generador está configurado, generar contexto
+                if source_documents and hasattr(self.vectorstore_handler, "_generate_context_for_chunks"):
+                    print(f"Generando contexto para {len(doc_splits)} chunks antes de cargarlos...")
+                    print("=== INICIANDO GENERACIÓN DE CONTEXTO ===")
+                    doc_splits = self.vectorstore_handler._generate_context_for_chunks(doc_splits, source_documents)
+                    print("=== FINALIZADA GENERACIÓN DE CONTEXTO ===")
+                    
+                    # Contar documentos con contexto generado
+                    docs_with_context = sum(1 for doc in doc_splits if doc.metadata.get('context_generation', '').strip())
+                    print(f"Documentos con contexto generado: {docs_with_context}/{len(doc_splits)}")
+                else:
+                    print("No se puede generar contexto: faltan documentos originales o generador no configurado")
             
-            print(f"Nueva vectorstore unificada creada correctamente con {len(doc_splits)} documentos")
+            # Crear la vectorstore sin pasar los documentos originales para generación de contexto,
+            # ya que el contexto ya fue generado
+            try:
+                db = self.vectorstore_handler.create_vectorstore(**create_kwargs)
+                print(f"Nueva vectorstore unificada creada correctamente con {len(doc_splits)} documentos")
+            except Exception as e:
+                print(f"Error al crear colección unificada: {str(e)}")
+                db = None
             
             # Actualizar la vectorstore y retriever
             self.vectorstores["unified"] = db
