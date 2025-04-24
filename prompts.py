@@ -44,7 +44,12 @@ PROMPTS = {
         4. Include any key figures, dates, or percentages that provide important context.
         5. Do not use phrases like "This chunk discusses" or "This section provides". Instead, directly state the context.
 
-        Please give a short succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the succinct context and nothing else.
+        Your response must be in valid JSON format with a structure like this:
+        {{
+          "context": "Your concise context here"
+        }}
+
+        Please provide succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the JSON structure.
         <|eot_id|><|start_header_id|>user<|end_header_id|>
         Document: {document}
         Chunk: {chunk} 
@@ -225,7 +230,12 @@ PROMPTS = {
         4. Include any key figures, dates, or percentages that provide important context.
         5. Do not use phrases like "This chunk discusses" or "This section provides". Instead, directly state the context.
 
-        Please give a short succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the succinct context and nothing else. [/INST]""",
+        Your response must be in valid JSON format with a structure like this:
+        {{
+          "context": "Your concise context here"
+        }}
+
+        Please provide succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the JSON structure. [/INST]""",
         
         "retrieval_grader": """[INST] Determine if this SEGEDA (DATUZ: Open Data and Transparency UZ) document is relevant to the question about Universidad de Zaragoza data.
         Pay special attention to the specific cube names, scope references, and institutional metrics mentioned.
@@ -386,7 +396,12 @@ PROMPTS = {
         4. Include any key figures, dates, or percentages that provide important context.
         5. Do not use phrases like "This chunk discusses" or "This section provides". Instead, directly state the context.
 
-        Please give a short succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the succinct context and nothing else.<|im_end|>
+        Your response must be in valid JSON format with a structure like this:
+        {{
+          "context": "Your concise context here"
+        }}
+
+        Please provide succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the JSON structure.<|im_end|>
         <|im_start|>user
         Document: {document}
         Chunk: {chunk}<|im_end|>

@@ -805,10 +805,19 @@ class MilvusVectorStore(VectorStoreBase):
             try:
                 # Generar contexto para el chunk usando el LLM
                 logger.info(f"Generando contexto para chunk {i}/{total_docs}: {source_path}")
-                context = self.context_generator.invoke({
+                context_result = self.context_generator.invoke({
                     "document": full_document.page_content,
                     "chunk": doc.page_content
                 })
+                
+                # Procesar el resultado: ahora es un dict con un campo 'context'
+                if isinstance(context_result, dict) and 'context' in context_result:
+                    context = context_result['context']
+                else:
+                    # Fallback si el formato no es el esperado
+                    logger.warning(f"Formato inesperado de contexto generado: {type(context_result)}")
+                    # Intentar convertir a string
+                    context = str(context_result).strip()
                 
                 # Guardar el contexto generado en los metadatos
                 doc.metadata['context_generation'] = context.strip()

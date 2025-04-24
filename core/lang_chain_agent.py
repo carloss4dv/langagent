@@ -119,6 +119,12 @@ class LangChainAgent:
                                 "chunk": "Chunk de prueba."
                             })
                             print(f"Prueba del generador: {test_result}")
+                            
+                            # Verificar si es un diccionario con formato JSON
+                            if isinstance(test_result, dict) and 'context' in test_result:
+                                print(f"Contexto extraído: '{test_result['context']}'")
+                            else:
+                                print(f"Advertencia: Resultado no tiene el formato JSON esperado: {type(test_result)}")
                         except Exception as test_error:
                             print(f"Error al probar el generador: {str(test_error)}")
                             

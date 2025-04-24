@@ -70,8 +70,8 @@ def create_context_generator(llm):
         input_variables=["document", "chunk"],
     )
     
-    # Definir la cadena de generación de contexto
-    context_generator_chain = prompt | llm
+    # Definir la cadena de generación de contexto con JsonOutputParser
+    context_generator_chain = prompt | llm | JsonOutputParser()
     
     return context_generator_chain
 
