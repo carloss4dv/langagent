@@ -1,50 +1,58 @@
-# LangAgent: Agente con LangGraph, LLaMA3 y Chroma Vector Store
+# LangAgent: Agente con LangGraph, LLaMA3 y bases de datos vectoriales
 
 <div align="center">
-  <!-- Nota: Puedes añadir un logo personalizado en esta ubicación -->
+  <img src="logos/NEAT-AMBIENCE-logo.png" alt="NEAT-AMBIENCE Logo" width="400"/>
   <br>
-  <em>Un sistema RAG con enrutamiento inteligente y mecanismos de reintento</em>
+  <em>Sistema de respuesta a preguntas con enrutamiento inteligente y mecanismos de reintento</em>
 </div>
 
-## 🌟 Descripción
+## Descripción
 
-LangAgent es un sistema de respuesta a preguntas (Question Answering) que implementa un agente local utilizando LangGraph, LLaMA3 y Chroma Vector Store. El sistema organiza el conocimiento en "cubos" temáticos dentro de diferentes "ámbitos", permitiendo un enrutamiento inteligente de preguntas y mecanismos de reintento para garantizar respuestas de alta calidad.
+LangAgent es un sistema de respuesta a preguntas que implementa un agente utilizando LangGraph, LLaMA3 y bases de datos vectoriales. El sistema organiza la información en "cubos" temáticos dentro de diferentes "ámbitos", permitiendo dirigir las preguntas de manera adecuada y reintentar cuando las respuestas no son satisfactorias.
 
-## 🔍 Características Principales
+## Características principales
 
-- **Organización Jerárquica del Conocimiento**: Estructura de "cubos" y "ámbitos" para organizar documentos
-- **RAG Adaptativo**: Enrutamiento inteligente de preguntas al vector store basado en el contenido
-- **RAG Correctivo**: Mecanismo de reintento (hasta 3 intentos) cuando las respuestas no son satisfactorias
-- **Evaluación Múltiple**: Evalúa tanto la relevancia de los documentos como la calidad de las respuestas
-- **Autenticación Segura**: Sistema de autenticación basado en tokens JWT para la API
-- **Optimizado para Terminal**: Adaptado para entornos sin interfaz gráfica
+- **Organización jerárquica del conocimiento**: Estructura de "cubos" y "ámbitos" para organizar documentos
+- **Enrutamiento adaptativo**: Selección inteligente de la base de conocimiento según el contenido de la pregunta
+- **Mecanismo de reintento**: Hasta 3 intentos cuando las respuestas no son satisfactorias
+- **Evaluación de calidad**: Verifica la relevancia de los documentos y la calidad de las respuestas
+- **Autenticación**: Sistema basado en tokens JWT para la API
+- **Múltiples interfaces**: API REST, terminal y frontend Streamlit
+- **Soporte para distintas bases de datos vectoriales**: Compatible con Chroma DB y Milvus
 
-## 🔄 Workflow del Sistema
+## Workflow del sistema
 
-El sistema implementa un flujo de trabajo sofisticado basado en LangGraph:
-
-<!-- Puedes incluir aquí el diagrama del workflow generado -->
-
-El workflow consta de tres nodos principales:
+El sistema implementa un flujo de trabajo basado en LangGraph con tres nodos principales:
 1. **Route Question**: Determina qué cubos son relevantes para la pregunta
 2. **Retrieve**: Recupera documentos relevantes de los cubos seleccionados
 3. **Generate**: Genera una respuesta basada en los documentos recuperados
 
-## 📁 Estructura del Proyecto
+## Estructura del proyecto
 
 ```
 langagent/
 ├── api/                  # Módulos para la API FastAPI
 │   ├── __init__.py
-│   └── fastapi_app.py    # Implementación de la API
+│   ├── fastapi_app.py    # Implementación de la API
+│   └── run_api.py        # Script para ejecutar la API
 ├── auth/                 # Módulos para autenticación
 │   ├── __init__.py
 │   └── authentication.py # Funciones de autenticación JWT
 ├── config/               # Configuraciones
 │   ├── __init__.py
 │   └── config.py         # Configuraciones del sistema
+├── core/                 # Núcleo del sistema
+│   ├── __init__.py
+│   └── lang_chain_agent.py # Clase principal del agente
 ├── data/                 # Directorio para datos
 │   └── __init__.py
+├── frontend/             # Interfaces de usuario
+│   ├── __init__.py
+│   └── streamlit/        # Frontend con Streamlit
+│       ├── app.py        # Aplicación Streamlit
+│       ├── run_streamlit.py # Script para ejecutar Streamlit
+│       └── README.md     # Documentación del frontend
+├── logos/                # Logos e imágenes del proyecto
 ├── models/               # Modelos y flujo de trabajo
 │   ├── __init__.py
 │   ├── constants.py      # Constantes del sistema
@@ -54,38 +62,47 @@ langagent/
 │   ├── __init__.py
 │   ├── document_loader.py       # Carga de documentos markdown
 │   ├── terminal_visualization.py # Visualización en terminal
-│   ├── vectorstore.py           # Configuración de vectorstore
 │   └── llamaindex_integration.py # Integración con llama-index
+├── vectorstore/          # Gestión de bases de datos vectoriales
+│   ├── __init__.py
+│   ├── base.py           # Interfaz base para vectorstores
+│   ├── chroma.py         # Implementación para Chroma DB
+│   ├── milvus.py         # Implementación para Milvus
+│   └── embeddings.py     # Gestión de embeddings
 ├── __init__.py
 ├── main.py               # Script principal
 ├── main_llamaindex.py    # Script principal con integración llama-index
 └── requirements.txt      # Dependencias del proyecto
 ```
 
-## 🛠️ Componentes Técnicos
+## Componentes técnicos
 
-- **Modelos LLM**: Utiliza modelos de Ollama (LLaMA3) para diferentes tareas
+- **Modelos LLM**: Modelos de Ollama (LLaMA3) para diferentes tareas
 - **Embeddings**: HuggingFace Embeddings (multilingual-e5-large-instruct)
-- **Vector Store**: Chroma DB para almacenamiento y recuperación eficiente
-- **Framework de Flujo**: LangGraph para orquestar el flujo de trabajo
+- **Bases de datos vectoriales**: 
+  - **Chroma DB**: Para desarrollo local y conjuntos de datos pequeños-medianos
+  - **Milvus**: Para producción, con soporte para búsquedas vectoriales avanzadas
+- **Framework de flujo**: LangGraph para orquestar el flujo de trabajo
 - **API**: FastAPI para exponer la funcionalidad como servicio web
+- **Frontend**: Streamlit para interfaz gráfica de usuario
 
-## 📋 Requisitos
+## Requisitos
 
 Las principales dependencias son:
 
 - Python 3.10+
 - langchain y langgraph
-- chromadb
+- chromadb y pymilvus
 - huggingface_hub
 - unstructured[md]
 - fastapi y uvicorn
+- streamlit
 - authlib
 - ollama (instalado localmente)
 
 Ver el archivo `requirements.txt` para la lista completa de dependencias.
 
-## 🚀 Instalación
+## Instalación
 
 1. Clona el repositorio:
    ```bash
@@ -109,22 +126,42 @@ Ver el archivo `requirements.txt` para la lista completa de dependencias.
    ollama pull llama3
    ```
 
-## 💻 Uso
+## Uso
 
-### Modo Interactivo con llama-index
+### Modo interactivo con terminal
 
-Para iniciar el agente en modo interactivo con las capacidades avanzadas de llama-index:
+Para iniciar el agente en modo interactivo:
 
 ```bash
-python -m langagent.main --data_dir ./data --chroma_dir ./chroma --local_llm llama3
+python -m langagent.main --data_dir ./data --vectorstore_dir ./vectorstores --local_llm llama3
 ```
 
-### Técnicas Avanzadas de RAG
+### API REST con FastAPI
+
+Para iniciar la API REST:
+
+```bash
+python api/run_api.py
+```
+
+La API estará disponible en http://localhost:8000 con documentación interactiva en http://localhost:8000/docs
+
+### Interfaz gráfica con Streamlit
+
+Para iniciar el frontend Streamlit (asegúrate de que la API esté en ejecución):
+
+```bash
+python frontend/streamlit/run_streamlit.py
+```
+
+La interfaz estará disponible en http://localhost:8501
+
+### Técnicas avanzadas de RAG
 
 Puedes especificar qué técnicas avanzadas de RAG utilizar:
 
-```
-python -m langagent.main_llamaindex --data_dir ./data --chroma_dir ./chroma --local_llm llama3 --use_advanced_rag --advanced_techniques dual_chunks document_summary
+```bash
+python -m langagent.main_llamaindex --data_dir ./data --vectorstore_dir ./vectorstores --local_llm llama3 --use_advanced_rag --advanced_techniques dual_chunks document_summary
 ```
 
 Las técnicas disponibles son:
@@ -133,67 +170,74 @@ Las técnicas disponibles son:
 - `router`: Para selección dinámica de estrategias de recuperación
 - `optimize_embeddings`: Para optimización de embeddings
 
-### Responder a una Pregunta Específica
+## Mecanismo de reintento y evaluación
 
-Para responder a una pregunta específica con técnicas avanzadas:
+El sistema implementa un mecanismo de evaluación y reintento:
 
-```
-python -m langagent.main_llamaindex --data_dir ./data --chroma_dir ./chroma --local_llm llama3 --use_advanced_rag --question "¿Qué son los alumnos matriculados?"
-```
+1. **Evaluación de documentos**: Verifica si los documentos recuperados son relevantes para la pregunta
+2. **Evaluación de alucinaciones**: Comprueba si la respuesta contiene información no respaldada por los documentos
+3. **Evaluación de respuesta**: Verifica si la respuesta aborda adecuadamente la pregunta original
+4. **Reintento adaptativo**: Si alguna evaluación falla, el sistema reintenta con ajustes (hasta 3 veces)
+5. **Estrategia de último recurso**: En el último intento, utiliza todos los cubos disponibles
 
-### Iniciar la API
-
-Para iniciar la API FastAPI:
-
-```bash
-uvicorn langagent.api.fastapi_app:app --host 0.0.0.0 --port 5001
-```
-
-## 🔄 Mecanismo de Reintento y Evaluación
-
-El sistema implementa un sofisticado mecanismo de evaluación y reintento:
-
-1. **Evaluación de Documentos**: Determina si los documentos recuperados son relevantes para la pregunta
-2. **Evaluación de Alucinaciones**: Verifica si la respuesta generada contiene información no respaldada por los documentos
-3. **Evaluación de Respuesta**: Comprueba si la respuesta aborda adecuadamente la pregunta original
-4. **Reintento Adaptativo**: Si alguna evaluación falla, el sistema reintenta con ajustes (hasta 3 veces)
-5. **Estrategia de Último Recurso**: En el último intento, utiliza todos los cubos disponibles
-
-## 🧠 Organización del Conocimiento
+## Organización del conocimiento
 
 El sistema organiza los documentos en:
 
 - **Ámbitos**: Categorías amplias de conocimiento (ej. académico, admisión, docencia)
 - **Cubos**: Subconjuntos temáticos dentro de cada ámbito
 
-Esta estructura jerárquica permite un enrutamiento más preciso de las preguntas y una recuperación más eficiente de la información relevante.
+Esta estructura permite una recuperación más precisa de la información relevante.
 
-## 📊 Visualización en Terminal
+## Bases de datos vectoriales
 
-Todas las visualizaciones han sido adaptadas para entornos de terminal, utilizando formato de texto en lugar de gráficos. El módulo `terminal_visualization.py` proporciona funciones para mostrar:
+El sistema soporta dos tipos de bases de datos vectoriales:
 
-- Progreso del procesamiento
-- Documentos recuperados con puntuaciones de relevancia
-- Evaluaciones de calidad de respuesta
-- Estadísticas de rendimiento
+### Chroma DB
+- **Entorno**: Desarrollo local y pruebas
+- **Almacenamiento**: Local en sistema de archivos
+- **Ventajas**: 
+  - Configuración sencilla
+  - Sin dependencias externas
+  - Adecuado para prototipado
 
-## 🔒 Seguridad
+### Milvus
+- **Entorno**: Producción y escalabilidad
+- **Principal diferencia**: Soporte para búsquedas vectoriales avanzadas
+- **Otras ventajas**:
+  - Mejor rendimiento con grandes volúmenes de datos
+  - Escalabilidad horizontal
+  - Búsquedas por similitud más sofisticadas
+  - Soporte para colecciones unificadas
 
-El sistema implementa autenticación JWT para la API, permitiendo:
+El sistema usa una interfaz común para ambas bases de datos, lo que permite cambiar entre ellas según las necesidades.
 
-- Generación segura de tokens
+## Visualización
+
+El sistema ofrece varias formas de visualización:
+
+- **Terminal**: Visualización en texto para entornos sin interfaz gráfica
+- **API REST**: Respuestas JSON para integración con otros sistemas
+- **Streamlit**: Interfaz gráfica para usuarios finales
+
+## Seguridad
+
+El sistema implementa autenticación JWT para la API con:
+
+- Generación de tokens
 - Verificación de autenticidad
 - Control de acceso a endpoints
 - Expiración configurable de tokens
 
+## Notas importantes
 
-## 📝 Notas Importantes
-
-- El sistema está configurado para trabajar con archivos markdown (.md)
-- La base de datos vectorial (Chroma) se guarda en el directorio especificado para su reutilización
-- Para un rendimiento óptimo, se recomienda usar GPU para los modelos de embeddings
-
+- El sistema trabaja con archivos markdown (.md)
+- La base de datos vectorial se guarda en el directorio especificado
+- Para un mejor rendimiento, se recomienda usar GPU para los modelos de embeddings
+- El cambio entre Chroma y Milvus se configura en config.py
 
 <div align="center">
-  <p>Desarrollado con ❤️ por Carlos de Vera Sanz</p>
+  <img src="logos/cosmos-logo.png" alt="Cosmos Logo" width="100"/>
+  <p>Desarrollado por Carlos de Vera Sanz</p>
+  <p>Universidad de Zaragoza - COSMOS</p>
 </div>

@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from typing import Dict, Any
 
 from langagent.auth.authentication import verify_token, create_token
+from langagent.core.lang_chain_agent import LangChainAgent
 
 # Modelos de datos para la API
 class QuestionRequest(BaseModel):
@@ -24,17 +25,21 @@ class TokenRequest(BaseModel):
 # Configuración de seguridad
 security = HTTPBearer()
 
-def create_api(workflow):
+def create_api(agent=None):
     """
     Crea una aplicación FastAPI con las rutas necesarias.
     
     Args:
-        workflow: Flujo de trabajo del agente.
+        agent: Instancia de LangChainAgent. Si es None, se creará uno nuevo.
         
     Returns:
         FastAPI: Aplicación FastAPI configurada.
     """
     app = FastAPI()
+    
+    # Si no se proporciona un agente, crear uno
+    if agent is None:
+        agent = LangChainAgent()
     
     @app.post("/token")
     async def get_token(request: TokenRequest):
@@ -64,28 +69,56 @@ def create_api(workflow):
             dict: Respuesta generada.
         """
         try:
-            # Ejecutar el flujo de trabajo
-            inputs = {"question": request.question}
-            result = None
+            # Ejecutar el agente con la pregunta
+            result = agent.run(request.question)
             
-            # Capturar el último resultado del flujo
-            for output in workflow.stream(inputs):
-                result = output
+            # Extraer la respuesta de la generación
+            answer = None
             
-            # Extraer la generación final
-            final_output = list(result.values())[0]
+            # Intentar extraer la respuesta del campo generation
+            if "generation" in result:
+                generation = result["generation"]
+                
+                # Si generation es un diccionario con el campo answer
+                if isinstance(generation, dict) and "answer" in generation:
+                    answer = generation["answer"]
+                # Si generation es un string en formato JSON con el campo answer
+                elif isinstance(generation, str) and '"answer":' in generation:
+                    try:
+                        import json
+                        import re
+                        
+                        # Intenta encontrar el JSON que contiene el campo answer
+                        json_match = re.search(r'\{.*"answer":\s*"([^"]*)".*\}', generation)
+                        if json_match:
+                            answer = json_match.group(1)
+                        else:
+                            # Intenta parsear como JSON completo
+                            try:
+                                if generation.strip().startswith('{') and generation.strip().endswith('}'):
+                                    json_data = json.loads(generation)
+                                    if "answer" in json_data:
+                                        answer = json_data["answer"]
+                            except:
+                                pass
+                    except:
+                        # Si hay algún error en el parsing, usar la generación completa
+                        answer = generation
+                else:
+                    # Si generation no tiene un formato reconocible, usarlo directamente
+                    answer = generation
             
-            # Si después de 3 intentos no hay una respuesta satisfactoria, devolver la pregunta
-            if final_output.get("retry_count", 0) >= 3:
-                return {
-                    "answer": f"No pude encontrar una respuesta satisfactoria a: {request.question}",
-                    "retry_count": final_output.get("retry_count", 0)
-                }
+            # Si no se pudo extraer la respuesta del campo generation, intentar con response
+            if answer is None and "response" in result:
+                answer = result["response"]
+                
+            # Si tampoco se encontró en response, devolver un mensaje por defecto
+            if answer is None:
+                answer = "No se pudo generar una respuesta."
             
-            return {
-                "answer": final_output.get("generation", ""),
-                "retry_count": final_output.get("retry_count", 0)
-            }
+            # Devolver solamente la respuesta como solicitado
+            return answer
+            
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
