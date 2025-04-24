@@ -80,16 +80,14 @@ class MilvusVectorStore(VectorStoreBase):
                 except Exception as alt_err:
                     logger.error(f"Error al usar formato alternativo: {str(alt_err)}")
             
-            if (isinstance(test_result, dict) and 'context' in test_result and test_result['context']) or \
-               (isinstance(test_result, str) and len(test_result.strip()) > 0):
+            # Verificar que el resultado tenga un formato válido (dict con key 'context' o string)
+            if isinstance(test_result, dict) and 'context' in test_result:
                 logger.info("Generador de contexto configurado y probado correctamente.")
-                
-                # Mostrar ejemplo del contenido generado
-                if isinstance(test_result, dict) and 'context' in test_result:
-                    ejemplo = test_result['context']
-                    logger.info(f"Ejemplo de generación (JSON): '{ejemplo}'")
-                else:
-                    logger.info(f"Ejemplo de generación (string): '{test_result.strip()}'")
+                ejemplo = test_result['context']
+                logger.info(f"Ejemplo de generación (JSON): '{ejemplo}'")
+            elif isinstance(test_result, str) and len(test_result.strip()) > 0:
+                logger.info("Generador de contexto configurado y probado correctamente.")
+                logger.info(f"Ejemplo de generación (string): '{test_result.strip()}'")
             else:
                 logger.warning("El generador de contexto se configuró pero la prueba no generó texto o el resultado no tiene el formato esperado.")
                 logger.warning(f"Resultado obtenido: {test_result}")
@@ -97,6 +95,11 @@ class MilvusVectorStore(VectorStoreBase):
                 
                 # Intentar continuar a pesar del error
                 logger.info("Se intentará continuar con el generador de contexto a pesar del error.")
+                
+            # En todos los casos, configuramos el generador si obtuvimos algún resultado
+            if test_result is not None:
+                logger.info("Generador de contexto configurado correctamente")
+                
         except Exception as e:
             logger.error(f"Error al configurar el generador de contexto: {str(e)}")
             import traceback
@@ -674,9 +677,16 @@ class MilvusVectorStore(VectorStoreBase):
         
         logger.info(f"Añadiendo {len(documents)} documentos a la colección")
         
+        # Verificar si source_documents es None o está vacío
+        if source_documents is None or len(source_documents) == 0:
+            logger.warning("No se proporcionaron documentos originales (source_documents es None o está vacío)")
+            if self.use_context_generation and self.context_generator:
+                logger.warning("Se activó la generación de contexto pero no se proporcionaron documentos originales")
+                logger.warning("La generación de contexto se omitirá para estos documentos")
+        
         # Si tenemos documentos originales y el generador de contexto está configurado,
         # generamos contexto antes de añadir los documentos
-        if self.use_context_generation and self.context_generator and source_documents:
+        if self.use_context_generation and self.context_generator and source_documents and len(source_documents) > 0:
             logger.info(f"Generando contexto para chunks antes de añadirlos a la colección...")
             
             # Mostrar ejemplo de los primeros documentos originales
@@ -693,8 +703,6 @@ class MilvusVectorStore(VectorStoreBase):
             # Comprobar si algún documento tiene contexto
             docs_with_context = sum(1 for doc in documents if doc.metadata.get('context_generation', '').strip())
             logger.info(f"Documentos con contexto generado: {docs_with_context}/{len(documents)}")
-        elif self.use_context_generation and not source_documents:
-            logger.warning("No se proporcionaron documentos originales para generar contexto")
         elif self.use_context_generation and not self.context_generator:
             logger.warning("Generación de contexto activada pero el generador no está configurado")
         else:
@@ -744,6 +752,10 @@ class MilvusVectorStore(VectorStoreBase):
             logger.warning("No se puede generar contexto: generador no configurado o función desactivada")
             logger.warning(f"use_context_generation: {self.use_context_generation}, context_generator existe: {self.context_generator is not None}")
             return documents
+        
+        if not source_documents or len(source_documents) == 0:
+            logger.warning("No se puede generar contexto: no se proporcionaron documentos originales")
+            return documents
             
         logger.info(f"Generando contexto para {len(documents)} chunks...")
         
@@ -751,14 +763,22 @@ class MilvusVectorStore(VectorStoreBase):
         processed_count = 0
         total_docs = len(documents)
         docs_with_context = 0
+        docs_without_source = 0
         
         for i, doc in enumerate(documents):
             # Obtener la ruta del documento original
             source_path = doc.metadata.get('source', '')
             
-            # Si no podemos identificar el documento original, continuamos
-            if not source_path or source_path not in source_documents:
+            # Si no podemos identificar el documento original, lo registramos y continuamos
+            if not source_path:
+                logger.warning(f"El chunk {i} no tiene campo 'source' en sus metadatos")
+                docs_without_source += 1
+                continue
+                
+            # Si el documento original no está en la colección, lo registramos y continuamos
+            if source_path not in source_documents:
                 logger.warning(f"No se encontró el documento original para el chunk {i}: {source_path}")
+                docs_without_source += 1
                 continue
                 
             # Obtener el documento original completo
@@ -813,10 +833,18 @@ class MilvusVectorStore(VectorStoreBase):
                 # En caso de error, establecer un contexto vacío
                 doc.metadata['context_generation'] = ""
         
-        logger.info(f"Contexto generado para {processed_count}/{total_docs} chunks, {docs_with_context} con contexto no vacío")
+        # Mostrar resumen completo al finalizar
+        logger.info(f"Resumen de generación de contexto:")
+        logger.info(f"  Total de chunks: {total_docs}")
+        logger.info(f"  Chunks procesados: {processed_count}")
+        logger.info(f"  Chunks con contexto generado: {docs_with_context}")
+        logger.info(f"  Chunks sin documento original: {docs_without_source}")
         
         # Verificar si se generó algún contexto
         if docs_with_context == 0:
-            logger.warning("¡ADVERTENCIA! No se generó ningún contexto para ningún documento. Revisa la configuración del LLM y el generador de contexto.")
+            logger.warning("¡ADVERTENCIA! No se generó ningún contexto para ningún documento.")
+            if docs_without_source > 0:
+                logger.warning(f"  {docs_without_source} chunks no tenían documento original disponible.")
+            logger.warning("Revisa la configuración del LLM y el generador de contexto.")
             
         return documents 

@@ -216,7 +216,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             # Si el router es un retriever de llama-index, usarlo directamente
             if hasattr(question_router, '_router_query_engine'):
                 # Obtener documentos usando el router retriever con la pregunta reescrita
-                docs = question_router.get_relevant_documents(processed_question)
+                docs = question_router.invoke({"question": processed_question})
                 if docs:
                     # Extraer el cubo del primer documento
                     first_doc = docs[0]
