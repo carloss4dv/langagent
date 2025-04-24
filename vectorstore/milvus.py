@@ -34,31 +34,26 @@ class MilvusVectorStore(VectorStoreBase):
         self.use_context_generation = VECTORSTORE_CONFIG.get("use_context_generation", False)
         self.context_generator = None
     
-    def set_context_generator(self, llm):
+    def set_context_generator(self, context_generator):
         """
         Establece el generador de contexto para enriquecer los chunks.
         
         Args:
-            llm: Modelo de lenguaje a utilizar para la generación de contexto
+            context_generator: Generador de contexto preconfigurado
         """
         if not self.use_context_generation:
             logger.warning("La generación de contexto está desactivada en la configuración. No se configurará el generador.")
             logger.warning("Establece VECTORSTORE_CONFIG['use_context_generation'] = True para activarla.")
             return
             
-        if llm is None:
-            logger.error("Error: Se proporcionó un LLM nulo. No se puede configurar el generador de contexto.")
+        if context_generator is None:
+            logger.error("Error: Se proporcionó un generador de contexto nulo")
             return
             
         try:
             logger.info("Configurando generador de contexto para chunks...")
-            self.context_generator = create_context_generator(llm)
+            self.context_generator = context_generator
             
-            # Verificar que el generador se creó correctamente
-            if self.context_generator is None:
-                logger.error("Error: El generador de contexto no se pudo crear.")
-                return
-                
             # Realizar una pequeña prueba para verificar que funciona
             test_result = self.context_generator.invoke({
                 "document": "Este es un documento de prueba para verificar que el generador funciona.",
@@ -69,7 +64,7 @@ class MilvusVectorStore(VectorStoreBase):
                 logger.info("Generador de contexto configurado y probado correctamente.")
                 logger.info(f"Ejemplo de generación: '{test_result.strip()}'")
             else:
-                logger.warning("El generador de contexto se creó pero la prueba no generó texto. Revisa la configuración del LLM.")
+                logger.warning("El generador de contexto se configuró pero la prueba no generó texto.")
         except Exception as e:
             logger.error(f"Error al configurar el generador de contexto: {str(e)}")
             self.context_generator = None
@@ -773,6 +768,13 @@ class MilvusVectorStore(VectorStoreBase):
             # Obtener el documento original completo
             full_document = source_documents[source_path]
             
+            # Si ya tiene un contexto generado, podemos saltarlo a menos que queramos regenerar
+            if doc.metadata.get('context_generation', '').strip() and VECTORSTORE_CONFIG.get("log_context_generation", False):
+                logger.info(f"El chunk {i} ya tiene contexto: {doc.metadata['context_generation'][:50]}...")
+                docs_with_context += 1
+                processed_count += 1
+                continue
+            
             try:
                 # Generar contexto para el chunk usando el LLM
                 logger.info(f"Generando contexto para chunk {i}/{total_docs}: {source_path}")
@@ -785,7 +787,7 @@ class MilvusVectorStore(VectorStoreBase):
                 doc.metadata['context_generation'] = context.strip()
                 
                 # Mostrar los primeros contextos generados para verificación
-                if processed_count < 3:
+                if processed_count < 3 or VECTORSTORE_CONFIG.get("log_context_generation", False):
                     logger.info(f"Contexto generado para chunk {i}:")
                     logger.info(f"  Chunk: {doc.page_content[:100]}...")
                     logger.info(f"  Contexto: {context.strip()}")

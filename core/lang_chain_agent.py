@@ -23,7 +23,8 @@ from langagent.models.llm import (
     create_hallucination_grader, 
     create_answer_grader, 
     create_question_router,
-    create_query_rewriter
+    create_query_rewriter,
+    create_context_generator
 )
 from langagent.models.workflow import create_workflow
 from langagent.utils.terminal_visualization import (
@@ -102,8 +103,14 @@ class LangChainAgent:
             use_context_generation = VECTORSTORE_CONFIG.get("use_context_generation", False)
             if use_context_generation:
                 print("Configurando generador de contexto para Milvus...")
-                self.vectorstore_handler.set_context_generator(self.llm)
-                print("Generador de contexto configurado correctamente")
+                # Primero creamos el generador de contexto con el LLM principal
+                context_generator = create_context_generator(self.llm)
+                if context_generator is not None:
+                    # Luego lo pasamos al handler de vectorstore
+                    self.vectorstore_handler.set_context_generator(context_generator)
+                    print("Generador de contexto configurado correctamente")
+                else:
+                    print("Error: No se pudo crear el generador de contexto")
         
         # Crear embeddings (compartidos por todas las vectorstores)
         print("Creando embeddings...")
@@ -271,8 +278,18 @@ class LangChainAgent:
                     
                     # Si está activada la generación de contexto, añadir los documentos originales
                     if use_context_generation:
-                        create_kwargs["source_documents"] = source_documents
+                        # Verifica que el generador de contexto esté configurado para el vectorstore_handler
+                        if self.vectorstore_handler.context_generator is None and hasattr(self.vectorstore_handler, "set_context_generator"):
+                            print("Configurando generador de contexto antes de recrear la colección...")
+                            context_generator = create_context_generator(self.llm)
+                            if context_generator is not None:
+                                self.vectorstore_handler.set_context_generator(context_generator)
+                                print("Generador de contexto configurado correctamente para recreación")
+                            else:
+                                print("Error: No se pudo crear el generador de contexto")
+                        
                         print(f"Generación de contexto activada. Pasando {len(source_documents)} documentos originales.")
+                        create_kwargs["source_documents"] = source_documents
                     
                     db = self.vectorstore_handler.create_vectorstore(**create_kwargs)
                     
@@ -648,6 +665,16 @@ class LangChainAgent:
             
             # Si está activada la generación de contexto, añadir los documentos originales
             if use_context_generation:
+                # Verifica que el generador de contexto esté configurado para el vectorstore_handler
+                if self.vectorstore_handler.context_generator is None and hasattr(self.vectorstore_handler, "set_context_generator"):
+                    print("Configurando generador de contexto antes de recrear la colección...")
+                    context_generator = create_context_generator(self.llm)
+                    if context_generator is not None:
+                        self.vectorstore_handler.set_context_generator(context_generator)
+                        print("Generador de contexto configurado correctamente para recreación")
+                    else:
+                        print("Error: No se pudo crear el generador de contexto")
+                
                 print(f"Generación de contexto activada. Pasando {len(source_documents)} documentos originales.")
                 create_kwargs["source_documents"] = source_documents
                 
