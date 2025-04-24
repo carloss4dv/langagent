@@ -422,7 +422,7 @@ PROMPTS = {
         Check if ALL information in the generation about UZ data is EXPLICITLY present in the documents.
         Verify that all references to cube names, scope names, metrics, and institutional data are accurate.
         Respond ONLY with: {{"score": "yes"}} if everything is supported by SEGEDA data, or {{"score": "no"}} if anything is not explicitly present.
-        Do not include any other text or explanation. ONLY RESPOND WITH THE JSON.<|im_end|>
+        Do not include any other text or explanation. ONLY RESPOND WITH JSON :{{"score": "yes"|"no"}}.<|im_end|>
         <|im_start|>user
         Documents: {documents}
         Generation: {generation}<|im_end|>

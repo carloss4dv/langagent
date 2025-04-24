@@ -409,7 +409,7 @@ class AgentEvaluator:
             context=formatted_context,
             token_cost=token_info.get("cost_estimate", {}).get("total_cost", 0),
             completion_time=tiempo_completado,
-            additional_metadata=json.dumps({
+            additional_metadata={
                 "rewritten_query": rewritten_query,
                 "hallucination_score": hallucination_score,
                 "answer_score": answer_score,
@@ -419,7 +419,7 @@ class AgentEvaluator:
                 "model_info": token_info.get("model", "unknown"),
                 "token_info": token_info,
                 "retrieval_details": retrieval_details
-            })
+            }
         )
         
         # Guardar los metadatos adicionales como atributos del objeto para uso posterior
@@ -545,7 +545,7 @@ class AgentEvaluator:
                 retrieval_context=context,
                 token_cost=token_info.get("cost_estimate", {}).get("total_cost", 0),
                 completion_time=tiempo_completado,
-                additional_metadata=json.dumps({
+                additional_metadata={
                     "original_query": golden.input,
                     "rewritten_query": rewritten_query,
                     "hallucination_score": hallucination_score,
@@ -556,7 +556,7 @@ class AgentEvaluator:
                     "model_info": token_info.get("model", "unknown"),
                     "token_info": token_info,
                     "retrieval_details": retrieval_details
-                })
+                }
             )
             
             # Guardar metadatos adicionales como atributos del objeto para uso posterior
