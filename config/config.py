@@ -51,6 +51,7 @@ VECTORSTORE_CONFIG = {
     
     # Configuración de generación de contexto
     "use_context_generation": True,  # Activar generación de contexto para chunks
+    "log_context_generation": True,  # Mostrar logs detallados de la generación de contexto
 }
 
 # Configuración de API
