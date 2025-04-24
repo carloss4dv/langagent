@@ -404,7 +404,6 @@ class MilvusVectorStore(VectorStoreBase):
                     embeddings=embeddings,
                     collection_name=collection_name,
                     drop_old=always_drop_old,  # Solo forzar drop_old si se solicitó
-                    check_collection_exists=False,  # Ya verificamos, no es necesario volver a verificar
                     **kwargs
                 )
             
@@ -428,7 +427,6 @@ class MilvusVectorStore(VectorStoreBase):
                     embeddings=embeddings,
                     collection_name=collection_name,
                     drop_old=False,  # No forzar drop_old en el último intento
-                    check_collection_exists=False,  # Ya verificamos, no es necesario volver a verificar
                     **kwargs
                 )
                 
