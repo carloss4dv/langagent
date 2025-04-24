@@ -243,9 +243,9 @@ El sistema implementa autenticación JWT para la API con:
 - El cambio entre Chroma y Milvus se configura en config.py
 
 <div align="center">
-  <div style="display: flex; justify-content: center; align-items: center; gap: 20px;">
-    <img src="logos/cosmos-logo.png" alt="Cosmos Logo" width="250"/>
-    <img src="logos/NEAT-AMBIENCE-logoAcks.jpg" alt="NEAT-AMBIENCE ACKS Logo" width="250"/>
+  <div style="display: flex; justify-content: center; align-items: center; gap: 30px;">
+    <img src="logos/cosmos-logo.png" alt="Cosmos Logo" width="300"/>
+    <img src="logos/NEAT-AMBIENCE-logoAcks.jpg" alt="NEAT-AMBIENCE ACKS Logo" width="300"/>
   </div>
   <p>Desarrollado por Carlos de Vera Sanz</p>
   <p>Universidad de Zaragoza - COSMOS</p>
