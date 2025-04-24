@@ -2,7 +2,6 @@
 
 <div align="center">
   <img src="logos/NEAT-AMBIENCE-logo.png" alt="NEAT-AMBIENCE Logo" width="400"/>
-  <img src="NEAT-AMBIENCE-logoAcks.jpg" alt = "NEAT-AMBIENCE ACKS Logo", width = "400">
   <br>
   <em>Sistema de respuesta a preguntas con enrutamiento inteligente y mecanismos de reintento</em>
 </div>
@@ -244,7 +243,8 @@ El sistema implementa autenticación JWT para la API con:
 - El cambio entre Chroma y Milvus se configura en config.py
 
 <div align="center">
-  <img src="logos/cosmos-logo.png" alt="Cosmos Logo" width="100"/>
+  <img src="logos/cosmos-logo.png" alt="Cosmos Logo" width="200"/>
+  <img src="NEAT-AMBIENCE-logoAcks.jpg" alt = "NEAT-AMBIENCE ACKS Logo", width = "200">
   <p>Desarrollado por Carlos de Vera Sanz</p>
   <p>Universidad de Zaragoza - COSMOS</p>
 </div>
