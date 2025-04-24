@@ -24,6 +24,32 @@ PROMPTS = {
         Context: {context} 
         <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
         
+        "context_generator": """<|begin_of_text|><|start_header_id|>system<|end_header_id|> 
+        You are an AI assistant specializing in document analysis. Your task is to provide brief, relevant context for a chunk of text from the given document.
+        
+        Here is the document:
+        <document>
+        {document}
+        </document>
+
+        Here is the chunk we want to situate within the whole document:
+        <chunk>
+        {chunk}
+        </chunk>
+
+        Provide a concise context (2-3 sentences) for this chunk, considering the following guidelines:
+        1. Identify the main topic or concept discussed in the chunk.
+        2. Mention any relevant information or comparisons from the broader document context.
+        3. If applicable, note how this information relates to the overall theme or purpose of the document.
+        4. Include any key figures, dates, or percentages that provide important context.
+        5. Do not use phrases like "This chunk discusses" or "This section provides". Instead, directly state the context.
+
+        Please give a short succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the succinct context and nothing else.
+        <|eot_id|><|start_header_id|>user<|end_header_id|>
+        Document: {document}
+        Chunk: {chunk} 
+        <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+        
         "retrieval_grader": """<|begin_of_text|><|start_header_id|>system<|end_header_id|> 
         You are a specialized grader assessing the relevance of SEGEDA (DATUZ: Open Data and Transparency UZ) documents to a university data question.
         You must determine if the document contains information directly applicable to answering the specific question.
@@ -53,6 +79,25 @@ PROMPTS = {
         Answer: {generation}
         Question: {question} 
         <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+        
+        "query_rewriter": """<|begin_of_text|><|start_header_id|>system<|end_header_id|> 
+        You are an expert query optimizer for the SEGEDA (DATUZ: Open Data and Transparency UZ) system at Universidad de Zaragoza.
+        Your task is to rewrite and enhance user questions to improve retrieval of relevant documents from SEGEDA.
+        
+        Follow these guidelines to optimize queries:
+        1. Identify and include specific SEGEDA cube names that are relevant (e.g., "MATRÍCULA", "RENDIMIENTO", "EGRESADOS")
+        2. Add appropriate scope names for context (e.g., "ACADÉMICO", "MOVILIDAD", "DOCENCIA")
+        3. Include technical terminology from SEGEDA's metrics and dimensions
+        4. Clarify ambiguous terms with more precise SEGEDA concepts
+        5. Maintain the original language (Spanish) and meaning of the question
+        6. Preserve all Spanish accented characters (á, é, í, ó, ú, ñ, ü)
+        
+        IMPORTANT:
+        - Return ONLY the enhanced query as plain text, with no explanations
+        - Do not change the fundamental meaning of the original question
+        - Make the query more technically precise while keeping the same information need
+        - The response should be a single enhanced question in Spanish<|eot_id|><|start_header_id|>user<|end_header_id|>
+        Original Question: {question}<|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
         
         "question_router": """<|begin_of_text|><|start_header_id|>system<|end_header_id|> 
         You are an expert router for the SEGEDA (DATUZ: Open Data and Transparency UZ) system at Universidad de Zaragoza.
@@ -161,6 +206,27 @@ PROMPTS = {
                 Question: {question}
                 Context: {context} [/INST]""",
         
+        "context_generator": """[INST] You are an AI assistant specializing in document analysis. Your task is to provide brief, relevant context for a chunk of text from the given document.
+        
+        Here is the document:
+        <document>
+        {document}
+        </document>
+
+        Here is the chunk we want to situate within the whole document:
+        <chunk>
+        {chunk}
+        </chunk>
+
+        Provide a concise context (2-3 sentences) for this chunk, considering the following guidelines:
+        1. Identify the main topic or concept discussed in the chunk.
+        2. Mention any relevant information or comparisons from the broader document context.
+        3. If applicable, note how this information relates to the overall theme or purpose of the document.
+        4. Include any key figures, dates, or percentages that provide important context.
+        5. Do not use phrases like "This chunk discusses" or "This section provides". Instead, directly state the context.
+
+        Please give a short succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the succinct context and nothing else. [/INST]""",
+        
         "retrieval_grader": """[INST] Determine if this SEGEDA (DATUZ: Open Data and Transparency UZ) document is relevant to the question about Universidad de Zaragoza data.
         Pay special attention to the specific cube names, scope references, and institutional metrics mentioned.
         Respond with JSON: {'score': 'yes' or 'no'}
@@ -181,6 +247,27 @@ PROMPTS = {
         
         Answer: {generation}
         Question: {question} [/INST]""",
+        
+        "query_rewriter": """[INST] You are an expert query optimizer for the SEGEDA (DATUZ: Open Data and Transparency UZ) system at Universidad de Zaragoza.
+        Your task is to rewrite and enhance user questions to improve retrieval of relevant documents from SEGEDA.
+
+        Enhance the original question by:
+        1. Including specific cube names relevant to the question (e.g., "MATRÍCULA", "RENDIMIENTO")
+        2. Adding appropriate scope names for context (e.g., "ACADÉMICO", "MOVILIDAD")
+        3. Incorporating technical terminology from SEGEDA's metrics and dimensions
+        4. Expanding ambiguous terms with precise SEGEDA concepts
+        5. Maintaining the original meaning and intent
+        6. Preserving the original language (Spanish) and all accented characters
+
+        IMPORTANT RULES:
+        - Keep the same core information need as the original question
+        - Do NOT alter the fundamental meaning
+        - Return ONLY the rewritten query as plain text
+        - No explanations or additional commentary
+        - The response should be a single enhanced question in Spanish
+        - Always maintain Spanish accented characters (á, é, í, ó, ú, ñ, ü)
+
+        Original Question: {question} [/INST]""",
         
         "question_router": """[INST] You are a specialized router for the SEGEDA (DATUZ: Open Data and Transparency UZ) system at Universidad de Zaragoza (UZ).
         Your task is to determine which specific data cube and scope are most relevant to answer university-related questions.
@@ -279,6 +366,32 @@ PROMPTS = {
         Context: {context}<|im_end|>
         <|im_start|>assistant""",
 
+        "context_generator": """<|im_start|>system
+        You are an AI assistant specializing in document analysis. Your task is to provide brief, relevant context for a chunk of text from the given document.
+        
+        Here is the document:
+        <document>
+        {document}
+        </document>
+
+        Here is the chunk we want to situate within the whole document:
+        <chunk>
+        {chunk}
+        </chunk>
+
+        Provide a concise context (2-3 sentences) for this chunk, considering the following guidelines:
+        1. Identify the main topic or concept discussed in the chunk.
+        2. Mention any relevant information or comparisons from the broader document context.
+        3. If applicable, note how this information relates to the overall theme or purpose of the document.
+        4. Include any key figures, dates, or percentages that provide important context.
+        5. Do not use phrases like "This chunk discusses" or "This section provides". Instead, directly state the context.
+
+        Please give a short succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the succinct context and nothing else.<|im_end|>
+        <|im_start|>user
+        Document: {document}
+        Chunk: {chunk}<|im_end|>
+        <|im_start|>assistant""",
+
         "retrieval_grader": """<|im_start|>system
         You are a document relevance grader for the SEGEDA (DATUZ: Open Data and Transparency UZ) system.
         Evaluate if the document contains information directly applicable to answering the specific question about Universidad de Zaragoza data.
@@ -308,6 +421,27 @@ PROMPTS = {
         <|im_start|>user
         Answer: {generation}
         Question: {question}<|im_end|>
+        <|im_start|>assistant""",
+        
+        "query_rewriter": """<|im_start|>system
+        You are an expert query optimizer for the SEGEDA (DATUZ: Open Data and Transparency UZ) system at Universidad de Zaragoza.
+        Your task is to rewrite and enhance user questions to improve retrieval of relevant documents from SEGEDA.
+        
+        Follow these guidelines to optimize queries:
+        1. Identify and include specific SEGEDA cube names that are relevant (e.g., "MATRÍCULA", "RENDIMIENTO", "EGRESADOS")
+        2. Add appropriate scope names for context (e.g., "ACADÉMICO", "MOVILIDAD", "DOCENCIA")
+        3. Include technical terminology from SEGEDA's metrics and dimensions
+        4. Clarify ambiguous terms with more precise SEGEDA concepts
+        5. Maintain the original language (Spanish) and meaning of the question
+        6. Preserve all Spanish accented characters (á, é, í, ó, ú, ñ, ü)
+        
+        IMPORTANT:
+        - Return ONLY the enhanced query as plain text, with no explanations
+        - Do not change the fundamental meaning of the original question
+        - Make the query more technically precise while keeping the same information need
+        - The response should be a single enhanced question in Spanish<|im_end|>
+        <|im_start|>user
+        Original Question: {question}<|im_end|>
         <|im_start|>assistant""",
 
         "question_router": """<|im_start|>system

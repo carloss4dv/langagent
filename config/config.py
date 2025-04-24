@@ -48,6 +48,9 @@ VECTORSTORE_CONFIG = {
     
     # Configuración de búsqueda híbrida
     "use_hybrid_search": True,  # Activar búsqueda híbrida (vectorial + texto completo)
+    
+    # Configuración de generación de contexto
+    "use_context_generation": True,  # Activar generación de contexto para chunks
 }
 
 # Configuración de API

@@ -19,6 +19,7 @@ from langchain_milvus import Milvus, BM25BuiltInFunction
 from langagent.vectorstore.base import VectorStoreBase
 from langagent.config.config import VECTORSTORE_CONFIG
 from langagent.models.constants import CUBO_TO_AMBITO, AMBITOS_CUBOS
+from langagent.models.llm import create_context_generator
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,20 @@ class MilvusVectorStore(VectorStoreBase):
         self.use_hybrid_search = VECTORSTORE_CONFIG.get("use_hybrid_search", False)
         self.collection_name = VECTORSTORE_CONFIG.get("collection_name", "unified")
         self.partition_key_field = VECTORSTORE_CONFIG.get("partition_key_field", "ambito")
+        self.use_context_generation = VECTORSTORE_CONFIG.get("use_context_generation", False)
+        self.context_generator = None
+    
+    def set_context_generator(self, llm):
+        """
+        Establece el generador de contexto para enriquecer los chunks.
+        
+        Args:
+            llm: Modelo de lenguaje a utilizar para la generación de contexto
+        """
+        if self.use_context_generation:
+            logger.info("Configurando generador de contexto para chunks...")
+            self.context_generator = create_context_generator(llm)
+            logger.info("Generador de contexto configurado correctamente")
     
     def _get_connection_args(self) -> Dict[str, Any]:
         """
@@ -102,6 +117,10 @@ class MilvusVectorStore(VectorStoreBase):
             if 'cubo_source' not in doc.metadata or not doc.metadata['cubo_source']:
                 doc.metadata['cubo_source'] = "general"
                 
+            # Inicializar el campo context_generation si no existe
+            if 'context_generation' not in doc.metadata:
+                doc.metadata['context_generation'] = ""
+                
             # Convertir valores booleanos a string para evitar problemas con Milvus
             if 'is_consulta' in doc.metadata and isinstance(doc.metadata['is_consulta'], bool):
                 doc.metadata['is_consulta'] = str(doc.metadata['is_consulta']).lower()
@@ -113,6 +132,7 @@ class MilvusVectorStore(VectorStoreBase):
         """
         Crea una nueva vectorstore Milvus con los documentos proporcionados.
         Configura particiones basadas en un campo clave en los metadatos.
+        Si está habilitado, genera contexto para mejorar la recuperación.
         
         Args:
             documents: Lista de documentos a indexar
@@ -125,6 +145,20 @@ class MilvusVectorStore(VectorStoreBase):
         if not documents:
             logger.error("No se pueden crear vectorstores sin documentos.")
             return None
+        
+        # Verificar si queremos usar generación de contexto
+        use_context_generation = kwargs.get("use_context_generation", self.use_context_generation)
+        
+        # Si está habilitada la generación de contexto y tenemos un LLM
+        if use_context_generation and self.context_generator:
+            # Verificar si estamos procesando chunks o documentos completos
+            # Si son chunks, necesitamos los documentos originales para generar contexto
+            if "source_documents" in kwargs:
+                source_documents = kwargs.get("source_documents", {})
+                logger.info(f"Generando contexto para chunks usando {len(source_documents)} documentos originales")
+                documents = self._generate_context_for_chunks(documents, source_documents)
+            else:
+                logger.warning("No se proporcionaron documentos originales para generar contexto")
             
         # Verificar y asegurar que los documentos tienen los metadatos requeridos
         documents = self._verify_metadata_fields(documents)
@@ -578,13 +612,16 @@ class MilvusVectorStore(VectorStoreBase):
             
         return " && ".join(expressions)
     
-    def add_documents_to_collection(self, vectorstore: Milvus, documents: List[Document]) -> bool:
+    def add_documents_to_collection(self, vectorstore: Milvus, documents: List[Document], 
+                                 source_documents: Dict[str, Document] = None) -> bool:
         """
         Añade documentos a una vectorstore Milvus existente.
+        Si está habilitado, genera contexto para mejorar la recuperación.
         
         Args:
             vectorstore: Instancia de Milvus vectorstore
             documents: Lista de documentos a añadir
+            source_documents: Diccionario con los documentos originales completos (opcional)
             
         Returns:
             bool: True si los documentos se añadieron correctamente
@@ -592,6 +629,11 @@ class MilvusVectorStore(VectorStoreBase):
         if not documents:
             logger.warning("No hay documentos para añadir a la colección")
             return False
+        
+        # Si está habilitada la generación de contexto y tenemos un LLM y documentos originales
+        if self.use_context_generation and self.context_generator and source_documents:
+            logger.info(f"Generando contexto para chunks antes de añadirlos a la colección...")
+            documents = self._generate_context_for_chunks(documents, source_documents)
             
         # Verificar y asegurar que los documentos tienen los metadatos requeridos
         documents = self._verify_metadata_fields(documents)
@@ -619,4 +661,62 @@ class MilvusVectorStore(VectorStoreBase):
             
         except Exception as e:
             logger.error(f"Error al añadir documentos a la colección: {str(e)}")
-            return False 
+            return False
+    
+    def _generate_context_for_chunks(self, documents: List[Document], 
+                               source_documents: Dict[str, Document]) -> List[Document]:
+        """
+        Genera contexto para cada chunk utilizando el documento completo y el LLM.
+        
+        Args:
+            documents: Lista de chunks (documentos) a enriquecer con contexto
+            source_documents: Diccionario con los documentos originales completos
+            
+        Returns:
+            List[Document]: Documentos con contexto generado añadido
+        """
+        if not self.use_context_generation or not self.context_generator:
+            logger.warning("No se puede generar contexto: generador no configurado o función desactivada")
+            return documents
+            
+        logger.info(f"Generando contexto para {len(documents)} chunks...")
+        
+        # Rastrear documentos procesados
+        processed_count = 0
+        total_docs = len(documents)
+        
+        for doc in documents:
+            # Obtener la ruta del documento original
+            source_path = doc.metadata.get('source', '')
+            
+            # Si no podemos identificar el documento original, continuamos
+            if not source_path or source_path not in source_documents:
+                continue
+                
+            # Obtener el documento original completo
+            full_document = source_documents[source_path]
+            
+            try:
+                # Generar contexto para el chunk usando el LLM
+                context = self.context_generator.invoke({
+                    "document": full_document.page_content,
+                    "chunk": doc.page_content
+                })
+                
+                # Guardar el contexto generado en los metadatos
+                doc.metadata['context_generation'] = context.strip()
+                
+                # Actualizar contador
+                processed_count += 1
+                
+                # Mostrar progreso cada cierto número de documentos
+                if processed_count % 10 == 0:
+                    logger.info(f"Progreso: {processed_count}/{total_docs} chunks procesados")
+                    
+            except Exception as e:
+                logger.error(f"Error al generar contexto para chunk: {str(e)}")
+                # En caso de error, establecer un contexto vacío
+                doc.metadata['context_generation'] = ""
+        
+        logger.info(f"Contexto generado para {processed_count}/{total_docs} chunks")
+        return documents 

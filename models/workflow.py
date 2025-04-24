@@ -25,6 +25,7 @@ class GraphState(TypedDict):
 
     Attributes:
         question: pregunta del usuario
+        rewritten_question: pregunta reescrita con términos técnicos de SEGEDA
         generation: generación del LLM
         documents: lista de documentos
         retry_count: contador de reintentos
@@ -35,6 +36,7 @@ class GraphState(TypedDict):
         consulta_documents: documentos de consultas guardadas recuperados
     """
     question: str
+    rewritten_question: str
     generation: str
     documents: List[Document]
     retrieved_documents: List[Document]
@@ -143,7 +145,7 @@ def find_relevant_cubos_by_keywords(query: str, available_cubos: List[str]) -> T
     # Si no encontramos nada, devolver todos los cubos disponibles
     return list(available_cubos), None
 
-def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grader, answer_grader, question_router):
+def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grader, answer_grader, question_router, query_rewriter=None):
     """
     Crea un flujo de trabajo para el agente utilizando LangGraph.
     Soporta múltiples vectorstores organizados en cubos.
@@ -155,6 +157,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         hallucination_grader: Evaluador de alucinaciones.
         answer_grader: Evaluador de utilidad de respuestas.
         question_router: Router de preguntas para determinar cubos relevantes.
+        query_rewriter: Reescritor de consultas para mejorar la recuperación.
         
     Returns:
         StateGraph: Grafo de estado configurado.
@@ -167,23 +170,38 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
     def route_question(state):
         """
         Determines which cubes are relevant for the question and the corresponding scope.
-        Also identifies if the question is about a saved query.
+        Also rewrites the question to improve retrieval if query_rewriter is provided.
         
         Args:
             state (dict): Current graph state.
             
         Returns:
-            dict: Updated state with identified relevant cubes, scope, and if it's a query.
+            dict: Updated state with identified relevant cubes, scope, rewritten question, and if it's a query.
         """
         print("---ROUTE QUESTION---")
         question = state["question"]
-        print(question)
+        print(f"Pregunta original: {question}")
         
-        # Inicializar el indicador de consulta
+        # Inicializar el indicador de consulta y la pregunta reescrita
         state["is_consulta"] = False
         state["consulta_documents"] = []
+        state["rewritten_question"] = question  # Por defecto, usar la pregunta original
         
         try:
+            # Reescribir la pregunta si tenemos un reescritor
+            if query_rewriter:
+                try:
+                    rewritten_question = query_rewriter.invoke({"question": question})
+                    if rewritten_question and isinstance(rewritten_question, str) and len(rewritten_question.strip()) > 0:
+                        state["rewritten_question"] = rewritten_question.strip()
+                        print(f"Pregunta reescrita: {state['rewritten_question']}")
+                except Exception as e:
+                    print(f"Error al reescribir la pregunta: {e}")
+                    # En caso de error, mantener la pregunta original
+            
+            # Usar la pregunta reescrita para el resto del procesamiento
+            processed_question = state["rewritten_question"]
+            
             # Determinar si la pregunta es sobre una consulta guardada
             consulta_keywords = [
                 "consulta guardada", "consultas guardadas", "dashboard", 
@@ -192,13 +210,13 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             ]
             
             # Verificar si alguna palabra clave está en la pregunta
-            question_lower = question.lower()
+            question_lower = processed_question.lower()
             es_consulta = any(keyword in question_lower for keyword in consulta_keywords)
             
             # Si el router es un retriever de llama-index, usarlo directamente
             if hasattr(question_router, '_router_query_engine'):
-                # Obtener documentos usando el router retriever
-                docs = question_router.get_relevant_documents(question)
+                # Obtener documentos usando el router retriever con la pregunta reescrita
+                docs = question_router.get_relevant_documents(processed_question)
                 if docs:
                     # Extraer el cubo del primer documento
                     first_doc = docs[0]
@@ -213,8 +231,8 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                     state["ambito"] = None
                     print("No specific cube identified. Using all available cubes.")
             else:
-                # Usar el router de preguntas estándar
-                routing_result = question_router.invoke({"question": question})
+                # Usar el router de preguntas estándar con la pregunta reescrita
+                routing_result = question_router.invoke({"question": processed_question})
                 
                 # Router can return a dictionary directly or a JSON string
                 if isinstance(routing_result, dict):
@@ -363,208 +381,120 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
     
     def retrieve(state):
         """
-        Recupera documentos de los vectorstores relevantes y los filtra por relevancia.
+        Retrieves documents from the relevant cubes.
         
         Args:
-            state (dict): Estado actual del grafo.
+            state (dict): Current graph state.
             
         Returns:
-            dict: Estado actualizado con los documentos recuperados y filtrados.
+            dict: Updated state with retrieved documents.
         """
-        print("\n=== INICIO DE RECUPERACIÓN DE DOCUMENTOS ===")
-        print(f"Pregunta: {state['question']}")
-        print(f"Intento actual: {state.get('retry_count', 0)}")
-        print(f"Ámbito identificado: {state.get('ambito', 'No identificado')}")
-        print(f"Cubos relevantes: {state.get('relevant_cubos', [])}")
-        
         question = state["question"]
-        retry_count = state.get("retry_count", 0)
-        ambito = state.get("ambito")
+        rewritten_question = state.get("rewritten_question", question)  # Usar pregunta reescrita si existe, sino la original
         relevant_cubos = state.get("relevant_cubos", [])
+        ambito = state.get("ambito")
+        retry_count = state.get("retry_count", 0)
         
-        # Obtener el tipo de vectorstore de la configuración
-        from langagent.config.config import VECTORSTORE_CONFIG
-        vector_db_type = VECTORSTORE_CONFIG.get("vector_db_type", "chroma")
-        use_single_collection = VECTORSTORE_CONFIG.get("use_single_collection", True)
+        print("---RETRIEVE---")
+        print(f"Búsqueda con pregunta: {rewritten_question}")
+        print(f"Ámbito identificado: {ambito}")
+        print(f"Cubos relevantes: {relevant_cubos}")
+        
+        # Si no hay cubos relevantes, usar todos disponibles
+        if not relevant_cubos and isinstance(retrievers, dict):
+            relevant_cubos = list(retrievers.keys())
+            print(f"No se identificaron cubos relevantes. Usando todos: {relevant_cubos}")
+        
+        # Si estamos en el último intento y la estrategia es usar todos los cubos, pasar directamente al retrieve_from_unified
+        unified_retriever_exists = "unified" in retrievers if isinstance(retrievers, dict) else False
+        if retry_count >= WORKFLOW_CONFIG.get("max_retries", 2) and unified_retriever_exists:
+            print(f"Último intento (retry {retry_count}). Usando colección unificada.")
+            return retrieve_from_unified(state)
         
         all_docs = []
         retrieval_details = {}
         
-        if use_single_collection and "unified" in retrievers:
-            # Enfoque de colección única con filtrado por metadatos
-            print("\n=== Usando colección única con filtrado por metadatos ===")
-            
-            # Crear filtros de metadatos basados en el ámbito y cubo identificados
-            metadata_filters = {}
-            
-            # Si tenemos un ámbito identificado, usarlo como filtro
-            if ambito:
-                print(f"Filtrando por ámbito: {ambito}")
-                metadata_filters["ambito"] = ambito
-            
-            # Si tenemos un cubo específico identificado (sólo uno), usarlo como filtro
-            cubo_identificado = None
-            if relevant_cubos and len(relevant_cubos) == 1 and relevant_cubos[0] != "unified":
-                cubo = relevant_cubos[0]
-                if not cubo.startswith("consultas_"):  # Evitar duplicar filtros de consultas
-                    print(f"Filtrando por cubo específico: {cubo}")
-                    metadata_filters["cubo_source"] = cubo
-                    cubo_identificado = cubo
-            
-            # Si es una consulta guardada, añadir ese filtro
-            if state.get("is_consulta", False):
-                print("Filtrando por consultas guardadas")
-                metadata_filters["is_consulta"] = "true"
-            
+        # Comprobar si tenemos un retriever combinado para todos los cubos
+        combined_retriever_exists = "combined" in retrievers if isinstance(retrievers, dict) else False
+        
+        # En el último intento, si hay un retriever combinado, usarlo
+        if retry_count >= WORKFLOW_CONFIG.get("max_retries", 2) - 1 and combined_retriever_exists:
             try:
-                # Obtener el retriever unificado
-                unified_retriever = retrievers["unified"]
+                print("Usando retriever combinado para todos los cubos...")
+                docs = retrievers["combined"].get_relevant_documents(rewritten_question)
                 
-                # Verificar si tenemos filtros para aplicar
-                if metadata_filters:
-                    print(f"Aplicando filtros: {metadata_filters}")
-                    # Recuperar documentos aplicando los filtros de metadatos directamente
-                    docs = unified_retriever.invoke(question, filter=metadata_filters)
-                else:
-                    print("No hay filtros para aplicar, recuperando sin filtros")
-                    docs = unified_retriever.invoke(question)
-                
-                print(f"Documentos recuperados: {len(docs)}")
-                
-                # Si no hay documentos con el filtro por cubo, intentar solo con el ámbito
-                if not docs and "cubo_source" in metadata_filters:
-                    print(f"No se encontraron documentos para el cubo {metadata_filters['cubo_source']}. Intentando solo con ámbito.")
-                    metadata_filters_ambito = {k: v for k, v in metadata_filters.items() if k != "cubo_source"}
-                    if metadata_filters_ambito:
-                        print(f"Aplicando filtros de ámbito: {metadata_filters_ambito}")
-                        docs = unified_retriever.invoke(question, filter=metadata_filters_ambito)
-                        print(f"Documentos recuperados con filtro de ámbito: {len(docs)}")
-                
-                # Si aún no hay documentos, intentar sin filtros como fallback
-                if not docs and metadata_filters:
-                    print("No se encontraron documentos con filtros. Intentando sin filtros...")
-                    docs = unified_retriever.invoke(question)
-                    print(f"Documentos recuperados sin filtros: {len(docs)}")
-                
-                # Filtrar documentos por relevancia usando el evaluador
+                # Comprobar si todos los documentos son relevantes
                 relevant_docs = []
                 for doc in docs:
                     relevance = retrieval_grader.invoke({
                         "document": doc.page_content,
-                        "question": question
+                        "question": rewritten_question
                     })
                     
-                    # Extraer score de la respuesta del evaluador
-                    if isinstance(relevance, dict) and "score" in relevance:
-                        is_relevant = relevance["score"].lower() == "yes"
-                    else:
-                        # Por defecto, considerar el documento como relevante
-                        is_relevant = True
-                    
-                    if is_relevant:
-                        # Asegurar que tenga los metadatos correctos
-                        if cubo_identificado and "cubo_source" not in doc.metadata:
-                            doc.metadata["cubo_source"] = cubo_identificado
-                        if ambito and "ambito" not in doc.metadata:
+                    if isinstance(relevance, dict) and relevance.get("score", "").lower() == "yes":
+                        # Añadir metadatos sobre el cubo y ámbito si no existen
+                        if "cubo_source" not in doc.metadata:
+                            doc.metadata["cubo_source"] = "combined"
+                        if "ambito" not in doc.metadata and ambito:
                             doc.metadata["ambito"] = ambito
                         relevant_docs.append(doc)
                 
-                # Si no hay documentos relevantes, usar todos los documentos
+                # Si no hay documentos relevantes, usar todos
                 if not relevant_docs and docs:
-                    print(f"No se encontraron documentos relevantes. Usando todos los documentos recuperados.")
                     for doc in docs:
-                        # Asegurar que tenga los metadatos correctos
-                        if cubo_identificado and "cubo_source" not in doc.metadata:
-                            doc.metadata["cubo_source"] = cubo_identificado
-                        if ambito and "ambito" not in doc.metadata:
+                        if "cubo_source" not in doc.metadata:
+                            doc.metadata["cubo_source"] = "combined"
+                        if "ambito" not in doc.metadata and ambito:
                             doc.metadata["ambito"] = ambito
-                        relevant_docs.append(doc)
+                    relevant_docs = docs
                 
-                retrieval_details["unified"] = {
+                retrieval_details["combined"] = {
                     "count": len(docs),
                     "relevant_count": len(relevant_docs),
                     "ambito": ambito,
-                    "cubo": cubo_identificado,
                     "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
                 }
                 
                 all_docs.extend(relevant_docs)
-                print(f"Documentos relevantes: {len(relevant_docs)}")
                 
             except Exception as e:
-                print(f"\nERROR al recuperar documentos de la colección unificada:")
-                print(f"Tipo de error: {type(e).__name__}")
-                print(f"Mensaje de error: {str(e)}")
-                retrieval_details["unified"] = {
-                    "count": 0,
-                    "relevant_count": 0,
-                    "error": str(e),
-                    "error_type": type(e).__name__
-                }
-                
+                print(f"Error al recuperar documentos del retriever combinado: {str(e)}")
         else:
-            # Enfoque con múltiples colecciones/retrievers
-            # Determinar los cubos a consultar
-            cubos_a_consultar = []
-            
-            # Si tenemos cubos relevantes específicos, usarlos
-            if relevant_cubos and any(cubo != "unified" for cubo in relevant_cubos):
-                cubos_a_consultar = [cubo for cubo in relevant_cubos if cubo != "unified" and cubo in retrievers]
-                print(f"\nUsando cubos relevantes identificados específicamente:")
-                print(f"Cubos a consultar: {cubos_a_consultar}")
-            # Si tenemos un ámbito identificado, usar todos sus cubos
-            elif ambito and ambito in AMBITOS_CUBOS:
-                cubos_a_consultar = [
-                    cubo for cubo in AMBITOS_CUBOS[ambito]["cubos"]
-                    if cubo in retrievers
-                ]
-                print(f"\nUsando cubos del ámbito {AMBITOS_CUBOS[ambito]['nombre']}:")
-                print(f"Cubos a consultar: {cubos_a_consultar}")
-            # Si no tenemos ni ámbito ni cubos específicos, usar todos los retrievers
-            else:
-                cubos_a_consultar = [cubo for cubo in retrievers.keys() if cubo != "unified"]
-                print(f"\nUsando todos los cubos disponibles:")
-                print(f"Cubos a consultar: {cubos_a_consultar}")
-            
-            # Si no hay cubos específicos pero tenemos unified, usarlo
-            if not cubos_a_consultar and "unified" in retrievers:
-                print("No hay cubos específicos disponibles. Usando retriever unificado.")
-                return retrieve_from_unified(state)
-            
-            # Recuperar documentos de cada cubo relevante
-            for cubo in cubos_a_consultar:
-                if cubo in retrievers:
-                    try:
-                        print(f"\nProcesando cubo: {cubo}")
+            # Si no, iterar sobre los cubos relevantes
+            for cubo in relevant_cubos:
+                try:
+                    if cubo not in retrievers:
+                        print(f"ADVERTENCIA: No se encontró retriever para el cubo '{cubo}'")
+                        continue
+                    
+                    # Obtener documentos del cubo
+                    print(f"Recuperando documentos del cubo: {cubo}")
+                    docs = retrievers[cubo].get_relevant_documents(rewritten_question)
+                    print(f"Documentos recuperados de {cubo}: {len(docs)}")
+                    
+                    # Comprobar si todos los documentos son relevantes
+                    relevant_docs = []
+                    
+                    if cubo.startswith("consultas_"):
+                        # Para consultas guardadas, añadir siempre todos los documentos sin evaluar relevancia
+                        for doc in docs:
+                            # Añadir metadatos sobre el cubo y ámbito si no existen
+                            if "cubo_source" not in doc.metadata:
+                                doc.metadata["cubo_source"] = cubo
+                            if "ambito" not in doc.metadata and ambito:
+                                doc.metadata["ambito"] = ambito
+                            # Marcar explícitamente como consulta guardada
+                            doc.metadata["is_consulta"] = "true"
+                            relevant_docs.append(doc)
                         
-                        retriever = retrievers[cubo]
-                        print("Iniciando recuperación de documentos...")
-                        
-                        # Crear filtros si es necesario (para Milvus)
-                        metadata_filters = {}
-                        if vector_db_type.lower() == "milvus":
-                            if cubo != "unified" and not cubo.startswith("consultas_"):
-                                metadata_filters["cubo_source"] = cubo
-                            if ambito:
-                                metadata_filters["ambito"] = ambito
-                            if state.get("is_consulta", False) and cubo.startswith("consultas_"):
-                                metadata_filters["is_consulta"] = "true"
-                        
-                        # Recuperar documentos, con filtros si es Milvus
-                        if metadata_filters and vector_db_type.lower() == "milvus":
-                            print(f"Aplicando filtros: {metadata_filters}")
-                            docs = retriever.invoke(question, filter=metadata_filters)
-                        else:
-                            docs = retriever.invoke(question)
-                        
-                        print(f"Documentos recuperados del cubo {cubo}: {len(docs)}")
-                        
-                        # Filtrar documentos por relevancia usando el evaluador
-                        relevant_docs = []
+                        # Añadir a la lista de documentos de consultas guardadas
+                        state["consulta_documents"] = relevant_docs
+                    else:
+                        # Para otros cubos, evaluar relevancia
                         for doc in docs:
                             relevance = retrieval_grader.invoke({
                                 "document": doc.page_content,
-                                "question": question
+                                "question": rewritten_question
                             })
                             
                             # Extraer score de la respuesta
@@ -593,47 +523,32 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                                     doc.metadata["ambito"] = ambito
                                 relevant_docs.append(doc)
                         
-                        retrieval_details[cubo] = {
-                            "count": len(docs),
-                            "relevant_count": len(relevant_docs),
-                            "ambito": ambito or CUBO_TO_AMBITO.get(cubo),
-                            "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
-                        }
+                    # Añadir documentos relevantes a la lista
+                    all_docs.extend(relevant_docs)
+                    
+                    # Guardar detalles de este cubo
+                    retrieval_details[cubo] = {
+                        "count": len(docs),
+                        "relevant_count": len(relevant_docs),
+                    "ambito": ambito,
+                        "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
+                    }
                         
-                        all_docs.extend(relevant_docs)
-                        print(f"Documentos relevantes del cubo {cubo}: {len(relevant_docs)}")
-                        print(f"Total acumulado de documentos: {len(all_docs)}")
-                        
-                    except Exception as e:
-                        print(f"\nERROR al recuperar documentos del cubo {cubo}:")
-                        print(f"Tipo de error: {type(e).__name__}")
-                        print(f"Mensaje de error: {str(e)}")
-                        retrieval_details[cubo] = {
-                            "count": 0,
-                            "relevant_count": 0,
-                            "error": str(e),
-                            "error_type": type(e).__name__
-                        }
+                except Exception as e:
+                    print(f"Error al recuperar documentos del cubo {cubo}: {str(e)}")
         
-        # Limitar el número total de documentos
+        # Limitar el número total de documentos para evitar tokens excesivos
         max_docs = VECTORSTORE_CONFIG.get("max_docs_total", 10)
         if len(all_docs) > max_docs:
-            print(f"\nLímite de documentos alcanzado ({max_docs}). Recortando resultados...")
+            print(f"Limitando a {max_docs} documentos (de {len(all_docs)} recuperados)")
             all_docs = all_docs[:max_docs]
-        
-        print("\n=== RESUMEN DE LA RECUPERACIÓN ===")
-        print(f"Total de documentos recuperados: {len(all_docs)}")
-        print(f"Detalles por cubo/colección:")
-        for key, details in retrieval_details.items():
-            print(f"- {key}: {details['count']} documentos recuperados, {details.get('relevant_count', 0)} relevantes")
-            if "error" in details:
-                print(f"  Error: {details['error']}")
         
         print("=== FIN DE RECUPERACIÓN DE DOCUMENTOS ===\n")
         
         return {
             "documents": all_docs,
             "question": question,
+            "rewritten_question": rewritten_question,
             "retry_count": retry_count,
             "relevant_cubos": state.get("relevant_cubos", []),
             "ambito": ambito,
@@ -652,12 +567,13 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             dict: Estado actualizado con los documentos recuperados.
         """
         question = state["question"]
+        rewritten_question = state.get("rewritten_question", question)  # Usar pregunta reescrita si existe, sino la original
         retry_count = state.get("retry_count", 0)
         ambito = state.get("ambito")
         
         try:
             # Usar el retriever unificado sin filtros
-            docs = retrievers["unified"].invoke(question)
+            docs = retrievers["unified"].invoke(rewritten_question)
             
             # Procesar los documentos recuperados
             print(f"Documentos recuperados de la colección unificada (sin filtros): {len(docs)}")
@@ -667,7 +583,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             for doc in docs:
                 relevance = retrieval_grader.invoke({
                     "document": doc.page_content,
-                    "question": question
+                    "question": rewritten_question
                 })
                 
                 if isinstance(relevance, dict) and relevance.get("score", "").lower() == "yes":
@@ -694,6 +610,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             return {
                 "documents": relevant_docs,
                 "question": question,
+                "rewritten_question": rewritten_question,
                 "retry_count": retry_count,
                 "relevant_cubos": state.get("relevant_cubos", []),
                 "ambito": ambito,
@@ -701,136 +618,129 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             }
             
         except Exception as e:
-            print(f"\nERROR al usar retriever unificado como fallback:")
-            print(f"Tipo de error: {type(e).__name__}")
-            print(f"Mensaje de error: {str(e)}")
-            
+            print(f"Error en retrieve_from_unified: {str(e)}")
             return {
                 "documents": [],
                 "question": question,
+                "rewritten_question": rewritten_question,
                 "retry_count": retry_count,
                 "relevant_cubos": state.get("relevant_cubos", []),
                 "ambito": ambito,
-                "retrieval_details": {"unified_fallback": {"count": 0, "error": str(e)}}
+                "retrieval_details": {"unified": {"error": str(e)}}
             }
     
     def generate(state):
         """
-        Genera una respuesta utilizando RAG en los documentos recuperados.
+        Genera una respuesta basada en los documentos recuperados.
         
         Args:
             state (dict): Estado actual del grafo.
             
         Returns:
-            dict: Estado actualizado con la generación del LLM.
+            dict: Estado actualizado con la respuesta generada.
         """
-        print("---GENERATE---")
-        question = state["question"]
         documents = state["documents"]
+        question = state["question"]
+        rewritten_question = state.get("rewritten_question", question)  # Usar pregunta reescrita si existe, sino la original
         retry_count = state.get("retry_count", 0)
         relevant_cubos = state.get("relevant_cubos", [])
         retrieval_details = state.get("retrieval_details", {})
         
-        # Generación RAG
-        generation = rag_chain.invoke({"context": documents, "question": question})
+        print("---GENERATE---")
+        if not documents:
+            print("No se encontraron documentos relevantes.")
+            response_json = "No se encontró información relevante en SEGEDA para responder a esta pregunta."
+            return {
+                "documents": documents,
+                "question": question,
+                "rewritten_question": rewritten_question,
+                "generation": response_json,
+                "retry_count": retry_count,
+                "hallucination_score": None,
+                "answer_score": None,
+                "relevant_cubos": relevant_cubos,
+                "ambito": state.get("ambito"),
+                "retrieval_details": retrieval_details
+            }
         
-        # Verificar alucinaciones
-        print("---CHECK HALLUCINATIONS---")
-        documents_text = "\n".join([d.page_content for d in documents])
-        hallucination_eval = hallucination_grader.invoke(
-            {"documents": documents_text, "generation": generation}
-        )
-        print(f"Hallucination evaluation: {hallucination_eval}")
-        
-        # Verificar si la respuesta aborda la pregunta
-        print("---GRADE GENERATION vs QUESTION---")
-        answer_eval = answer_grader.invoke(
-            {"question": question, "generation": generation}
-        )
-        print(f"Answer evaluation: {answer_eval}")
-        
-        # Función auxiliar para extraer score de diferentes formatos de respuesta
-        def extract_score(response) -> bool:
-            """
-            Extrae un valor booleano de la respuesta del evaluador.
-            
-            Args:
-                response: Respuesta del evaluador (dict, str, bool, int, float)
+        try:
+            print("Creando contexto a partir de los documentos recuperados...")
+            # Crear contexto a partir de los documentos
+            context_docs = []
+            for idx, doc in enumerate(documents):
+                doc_source = doc.metadata.get('cubo_source', 'Desconocido')
+                doc_id = doc.metadata.get('doc_id', f'doc_{idx}')
                 
-            Returns:
-                bool: True si la evaluación es positiva, False en caso contrario
-            """
-            try:
-                # Si es un diccionario, buscar la clave 'score' primero
-                if isinstance(response, dict):
-                    if "score" in response:
-                        value = str(response["score"]).lower().strip()
-                        return value == "yes" or value == "true" or value == "1"
-                        
-                    # Si no hay 'score', buscar otras claves comunes
-                    for key in ["result", "evaluation", "is_grounded", "is_relevant"]:
-                        if key in response:
-                            value = str(response[key]).lower().strip()
-                            return value == "yes" or value == "true" or value == "1"
-                            
-            except Exception as e:
-                print(f"Error extracting score: {e}")
+                # Usar el contexto generado si está disponible, de lo contrario usar el contenido original
+                doc_content = doc.page_content
+                generated_context = doc.metadata.get('context_generation', '')
                 
-            # Por defecto, asumir que no es válido
-            return False
-        
-        # Determinar si la generación es exitosa
-        is_grounded = extract_score(hallucination_eval)
-        is_useful = extract_score(answer_eval)
-        
-        if is_grounded:
-            print("---DECISION: GENERATION IS GROUNDED IN DOCUMENTS---")
-        else:
-            print("---DECISION: GENERATION CONTAINS HALLUCINATIONS---")
+                # Si existe context_generation y no está vacío, añadirlo antes del contenido
+                context_info = ""
+                if generated_context.strip():
+                    context_info = f"\n[CONTEXTO: {generated_context}]\n"
+                
+                # Crear string con la info del documento
+                doc_string = f"\n[DOCUMENTO {idx+1} - {doc_source} - ID: {doc_id}]{context_info}\n{doc_content}\n"
+                context_docs.append(doc_string)
             
-        if is_useful:
-            print("---DECISION: GENERATION ADDRESSES QUESTION---")
-        else:
-            print("---DECISION: GENERATION DOES NOT ADDRESS QUESTION---")
-        
-        # Formatear la respuesta
-        formatted_generation = ""
-        if isinstance(generation, dict):
-            if "answer" in generation:
-                formatted_generation = generation["answer"]
+            context = "\n".join(context_docs)
+            
+            print("Generando respuesta...")
+            # Generar respuesta utilizando la cadena RAG
+            response = rag_chain.invoke({
+                "context": context,
+                "question": rewritten_question  # Usamos la consulta reescrita para mejorar la respuesta
+            })
+            
+            # La respuesta es un string
+            if not isinstance(response, str):
+                print(f"Advertencia: La respuesta no es un string: {type(response)}")
+                response_json = str(response)
             else:
-                formatted_generation = str(generation)
-        else:
-            formatted_generation = str(generation)
+                response_json = response
+                
+            print("Evaluando si la respuesta contiene alucinaciones...")
+            # Verificar si la respuesta contiene alucinaciones
+            hallucination_eval = hallucination_grader.invoke({
+                "documents": context,
+                "generation": response_json
+            })
+            
+            if isinstance(hallucination_eval, dict) and "score" in hallucination_eval:
+                is_grounded = hallucination_eval["score"].lower() == "yes"
+                print(f"¿Respuesta fundamentada en los documentos? {'Sí' if is_grounded else 'No'}")
+            else:
+                print(f"Advertencia: Evaluación de alucinaciones no válida: {hallucination_eval}")
+                is_grounded = True  # Por defecto, asumir que está fundamentada
+            
+            print("Evaluando calidad de la respuesta...")
+            # Verificar si la respuesta es útil
+            answer_eval = answer_grader.invoke({
+                "generation": response_json,
+                "question": rewritten_question  # Usamos la consulta reescrita para evaluar mejor la respuesta
+            })
+            
+            if isinstance(answer_eval, dict) and "score" in answer_eval:
+                is_useful = answer_eval["score"].lower() == "yes"
+                print(f"¿Respuesta útil para la pregunta? {'Sí' if is_useful else 'No'}")
+            else:
+                print(f"Advertencia: Evaluación de utilidad no válida: {answer_eval}")
+                is_useful = True  # Por defecto, asumir que es útil
+            
+            # Función auxiliar para extraer el valor del "score" de la respuesta
+            def extract_score(response) -> bool:
+                if isinstance(response, dict) and "score" in response:
+                    return response["score"].lower() == "yes"
+                return True  # Por defecto, asumimos que es válido
         
-        # Limpiar y formatear la respuesta
-        formatted_generation = formatted_generation.strip()
-        
-        # Detectar y corregir problemas comunes en la respuesta
-        # Eliminar marcadores markdown como ** que pueden causar problemas
-        formatted_generation = formatted_generation.replace('**', '')
-        
-        # Manejar escapes que pueden estar incorrectamente formateados
-        formatted_generation = formatted_generation.replace('\\\\n', '[DOUBLE_NEWLINE]')
-        formatted_generation = formatted_generation.replace('\\n', '[SINGLE_NEWLINE]')
-        formatted_generation = formatted_generation.replace('\n', ' ')
-        
-        # Eliminar espacios múltiples
-        formatted_generation = re.sub(r'\s+', ' ', formatted_generation)
-        
-        # Restaurar los marcadores de salto de línea de manera controlada
-        formatted_generation = formatted_generation.replace('[DOUBLE_NEWLINE]', '\\n')
-        formatted_generation = formatted_generation.replace('[SINGLE_NEWLINE]', '\\n')
-        
-        # Manejar casos específicos donde el texto incluye caracteres como comillas o barras invertidas
-        formatted_generation = formatted_generation.replace('"', '\\"')
-        
-        # Preservar los caracteres acentuados y especiales en español
-        # Ya no limpiamos caracteres Unicode: formatted_generation = re.sub(r'[^\x20-\x7E]', '', formatted_generation)
-        
-        # Envolver la respuesta en un JSON simple
-        # Usar un formato directo para evitar problemas de parseo
-        response_json = {"answer": formatted_generation}
+        except Exception as e:
+            print(f"Error al generar respuesta: {str(e)}")
+            response_json = f"Se produjo un error al generar la respuesta: {str(e)}"
+            is_grounded = False
+            is_useful = False
+            hallucination_eval = None
+            answer_eval = None
         
         # Si la generación no es exitosa, incrementar contador de reintentos
         if not (is_grounded and is_useful):
@@ -840,6 +750,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         return {
             "documents": documents,
             "question": question,
+            "rewritten_question": rewritten_question,
             "generation": response_json,  # Devolver el objeto JSON completo
             "retry_count": retry_count,
             "hallucination_score": hallucination_eval,
@@ -862,39 +773,47 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
     # Definir condiciones para reintentos o finalización
     def should_retry(state):
         """
-        Determina si se debe reintentar la generación.
+        Determina si se debe reintentar la generación de respuesta.
         
         Args:
             state (dict): Estado actual del grafo.
             
         Returns:
-            str: Siguiente nodo a ejecutar.
+            str: "retrieve" si se debe reintentar, "END" si no.
         """
+        # Extraer información del estado
         retry_count = state.get("retry_count", 0)
-        max_retries = WORKFLOW_CONFIG["max_retries"]
+        hallucination_score = state.get("hallucination_score")
+        answer_score = state.get("answer_score")
+        question = state.get("question", "")
+        rewritten_question = state.get("rewritten_question", question)
         
-        # Verificar si la generación actual es exitosa
-        hallucination_score = state.get("hallucination_score", {})
-        answer_score = state.get("answer_score", {})
+        # Función para extraer score de diferentes formatos
+        def extract_score(response):
+            if isinstance(response, dict) and "score" in response:
+                value = str(response["score"]).lower().strip()
+                return value == "yes" or value == "true" or value == "1"
+            return False
         
-        is_grounded = hallucination_score.get("score", "").lower() == "yes"
-        is_useful = answer_score.get("score", "").lower() == "yes"
+        # Determinar si hay problemas con la generación
+        is_hallucination = not extract_score(hallucination_score) if hallucination_score else False
+        is_unhelpful = not extract_score(answer_score) if answer_score else False
         
-        # Si la generación es exitosa o alcanzamos el máximo de reintentos, terminar
-        if (is_grounded and is_useful) or retry_count >= max_retries:
-            print(f"---DECISION: {'GENERATION SUCCESSFUL' if (is_grounded and is_useful) else 'MAX RETRIES REACHED'}---")
-            return END
+        # Lógica de reintento
+        max_retries = WORKFLOW_CONFIG.get("max_retries", 2)
+        should_retry = (is_hallucination or is_unhelpful) and retry_count < max_retries
         
-        # Si necesitamos reintentar, incrementar el contador
-        state["retry_count"] = retry_count + 1
-        print(f"---RETRY ATTEMPT {state['retry_count']} OF {max_retries}---")
-        
-        # Si estamos en el último reintento, usar todos los cubos disponibles
-        if state["retry_count"] == max_retries - 1:
-            state["relevant_cubos"] = list(retrievers.keys())
-            print("---USING ALL AVAILABLE CUBES FOR FINAL ATTEMPT---")
-        
-        return "generate"
+        if should_retry:
+            print(f"Reintentando (intento {retry_count+1}/{max_retries})")
+            print(f"- Contiene alucinaciones: {is_hallucination}")
+            print(f"- No aborda adecuadamente la pregunta: {is_unhelpful}")
+            return "retrieve"
+        else:
+            if retry_count >= max_retries and (is_hallucination or is_unhelpful):
+                print(f"Máximo de reintentos alcanzado ({max_retries}). Finalizando con la mejor respuesta disponible.")
+            else:
+                print("Generación exitosa. Finalizando.")
+            return "END"
     
     workflow.add_conditional_edges(
         "generate",

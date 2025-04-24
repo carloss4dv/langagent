@@ -50,6 +50,56 @@ def create_llm(model_name: str = None, temperature: float = None, format: str = 
         max_tokens=max_tokens
     )
 
+def create_context_generator(llm):
+    """
+    Crea un generador de contexto para mejorar la calidad de los chunks.
+    
+    Este generador utiliza el LLM principal para crear una descripción contextual
+    para cada chunk basándose en el documento completo, mejorando así su recuperación.
+    
+    Args:
+        llm: Modelo de lenguaje a utilizar.
+        
+    Returns:
+        Chain: Cadena para generar contexto.
+    """
+    # Plantilla para la generación de contexto
+    context_generator_template = """
+    You are an AI assistant specializing in document analysis. Your task is to provide brief, relevant context for a chunk of text from the given document.
+    
+    Here is the document:
+    <document>
+    {document}
+    </document>
+
+    Here is the chunk we want to situate within the whole document:
+    <chunk>
+    {chunk}
+    </chunk>
+
+    Provide a concise context (2-3 sentences) for this chunk, considering the following guidelines:
+    1. Identify the main topic or concept discussed in the chunk.
+    2. Mention any relevant information or comparisons from the broader document context.
+    3. If applicable, note how this information relates to the overall theme or purpose of the document.
+    4. Include any key figures, dates, or percentages that provide important context.
+    5. Do not use phrases like "This chunk discusses" or "This section provides". Instead, directly state the context.
+
+    Please give a short succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the succinct context and nothing else.
+
+    Context:
+    """
+    
+    # Crear plantilla de prompt
+    prompt = PromptTemplate(
+        template=context_generator_template,
+        input_variables=["document", "chunk"],
+    )
+    
+    # Definir la cadena de generación de contexto
+    context_generator_chain = prompt | llm
+    
+    return context_generator_chain
+
 def create_rag_chain(llm):
     """
     Crea una cadena de RAG (Retrieval Augmented Generation).
@@ -152,3 +202,24 @@ def create_question_router(llm):
     
     question_router = prompt | llm | JsonOutputParser()
     return question_router
+
+def create_query_rewriter(llm):
+    """
+    Crea un reescritor de consultas para mejorar la recuperación de información.
+    
+    Args:
+        llm: Modelo de lenguaje a utilizar.
+        
+    Returns:
+        Chain: Cadena de reescritura de consultas configurada.
+    """
+    # Prompt para reescritura de consultas
+    prompt_template = _get_prompt_template(llm, "query_rewriter")
+    prompt = PromptTemplate(
+        template=prompt_template,
+        input_variables=["question"],
+    )
+    
+    # Aquí no usamos JsonOutputParser porque queremos texto plano
+    query_rewriter = prompt | llm
+    return query_rewriter

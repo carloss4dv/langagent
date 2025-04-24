@@ -22,7 +22,8 @@ from langagent.models.llm import (
     create_retrieval_grader, 
     create_hallucination_grader, 
     create_answer_grader, 
-    create_question_router
+    create_question_router,
+    create_query_rewriter
 )
 from langagent.models.workflow import create_workflow
 from langagent.utils.terminal_visualization import (
@@ -77,6 +78,7 @@ class LangChainAgent:
         self.question_router = None
         self.workflow = None
         self.app = None
+        self.query_rewriter = None
         
         # Obtener la instancia de vectorstore
         self.vectorstore_handler = VectorStoreFactory.get_vectorstore_instance(self.vector_db_type)
@@ -119,6 +121,15 @@ class LangChainAgent:
             
             # Diccionario para almacenar todos los documentos procesados
             all_processed_docs = []
+            
+            # Diccionario para almacenar documentos originales por fuente
+            source_documents = {}
+            
+            # Primero guardar los documentos originales por su ruta de archivo
+            for doc in all_documents:
+                file_path = doc.metadata.get('source', '')
+                if file_path and file_path not in source_documents:
+                    source_documents[file_path] = doc
             
             # Procesar documentos por cubo y añadir metadatos
             for doc in all_documents:
@@ -197,12 +208,24 @@ class LangChainAgent:
                         db.add_documents(doc_splits)
                         print(f"Colección actualizada con {len(doc_splits)} documentos")
                     
-                    # O si tiene método from_documents, intentar agregar
+                    # O si tiene método en el handler para agregar documentos
                     elif hasattr(self.vectorstore_handler, "add_documents_to_collection"):
-                        self.vectorstore_handler.add_documents_to_collection(
-                            vectorstore=db,
-                            documents=doc_splits
-                        )
+                        # Verificar si queremos usar generación de contexto
+                        use_context_generation = VECTORSTORE_CONFIG.get("use_context_generation", False)
+                        
+                        # Si está activada la generación de contexto, incluir los documentos originales
+                        if use_context_generation:
+                            self.vectorstore_handler.add_documents_to_collection(
+                                vectorstore=db,
+                                documents=doc_splits,
+                                source_documents=source_documents
+                            )
+                        else:
+                            self.vectorstore_handler.add_documents_to_collection(
+                                vectorstore=db,
+                                documents=doc_splits
+                            )
+                        
                         print(f"Colección actualizada con {len(doc_splits)} documentos")
                     
                     print("Colección unificada actualizada correctamente")
@@ -212,47 +235,29 @@ class LangChainAgent:
                 print(f"Creando nueva vectorstore unificada: {unified_collection_name}...")
                 print(f"Cargando {len(doc_splits)} documentos en la colección unificada")
                 
-                # Forzar la creación desde cero con todos los documentos
+                # Crear la colección unificada con los documentos procesados
+                print(f"Creando nueva colección unificada: {unified_collection_name}...")
                 try:
-                    # Crear la colección con todos los documentos
-                    db = self.vectorstore_handler.create_vectorstore(
-                        documents=doc_splits,
-                        embeddings=self.embeddings,
-                        collection_name=unified_collection_name,
-                        drop_old=True  # Forzar recreación completa
-                    )
-                    print(f"Nueva vectorstore unificada creada correctamente con {len(doc_splits)} documentos")
-                except Exception as inner_e:
-                    print(f"Error al crear la colección unificada: {str(inner_e)}")
-                    print("Intentando crear colección con subconjunto de documentos...")
+                    # Verificar si queremos usar generación de contexto
+                    use_context_generation = VECTORSTORE_CONFIG.get("use_context_generation", False)
                     
-                    # Si falla con todos los documentos, intentar con un subconjunto
-                    max_docs_per_batch = 1000
-                    if len(doc_splits) > max_docs_per_batch:
-                        print(f"Dividiendo documentos en lotes de {max_docs_per_batch}")
-                        first_batch = doc_splits[:max_docs_per_batch]
-                        
-                        # Crear con el primer lote
-                        db = self.vectorstore_handler.create_vectorstore(
-                            documents=first_batch,
-                            embeddings=self.embeddings,
-                            collection_name=unified_collection_name
-                        )
-                        
-                        # Añadir el resto de documentos en lotes
-                        remaining_docs = doc_splits[max_docs_per_batch:]
-                        batch_size = max_docs_per_batch
-                        
-                        for i in range(0, len(remaining_docs), batch_size):
-                            batch = remaining_docs[i:i + batch_size]
-                            print(f"Añadiendo lote de {len(batch)} documentos...")
-                            if hasattr(db, "add_documents"):
-                                db.add_documents(batch)
-                        
-                        print(f"Colección creada y actualizada con todos los documentos en lotes")
-                    else:
-                        # Reintento con error original
-                        raise inner_e
+                    # Crear la vectorstore con los documentos y pasar los originales si se usa generación de contexto
+                    create_kwargs = {
+                        "documents": doc_splits,
+                        "embeddings": self.embeddings,
+                        "collection_name": unified_collection_name
+                    }
+                    
+                    # Si está activada la generación de contexto, añadir los documentos originales
+                    if use_context_generation:
+                        create_kwargs["source_documents"] = source_documents
+                    
+                    db = self.vectorstore_handler.create_vectorstore(**create_kwargs)
+                    
+                    print(f"Nueva colección unificada creada con {len(doc_splits)} documentos")
+                except Exception as e:
+                    print(f"Error al crear colección unificada: {str(e)}")
+                    db = None
             
             # Guardar la vectorstore y crear un retriever unificado
             self.vectorstores["unified"] = db
@@ -407,6 +412,14 @@ class LangChainAgent:
         self.llm2 = create_llm(model_name=self.local_llm2)
         self.llm3 = create_llm(model_name=self.local_llm3)
         
+        # Configurar el generador de contexto para el vectorstore (si es Milvus)
+        if self.vector_db_type.lower() == "milvus" and hasattr(self.vectorstore_handler, "set_context_generator"):
+            use_context_generation = VECTORSTORE_CONFIG.get("use_context_generation", False)
+            if use_context_generation:
+                print("Configurando generador de contexto para Milvus...")
+                self.vectorstore_handler.set_context_generator(self.llm)
+                print("Generador de contexto configurado correctamente")
+        
         # Crear cadenas
         self.rag_chain = create_rag_chain(self.llm)
         self.retrieval_grader = create_retrieval_grader(self.llm2)
@@ -415,6 +428,10 @@ class LangChainAgent:
         
         # Crear un router de preguntas que determine qué cubo usar y si es una consulta
         self.question_router = create_question_router(self.llm2)
+        
+        # Crear un reescritor de consultas para mejorar la recuperación
+        # Usamos el LLM principal para mejor calidad en la reescritura
+        self.query_rewriter = create_query_rewriter(self.llm)
         
         # Verificar si tenemos al menos un retriever disponible
         if not self.retrievers:
@@ -448,17 +465,25 @@ class LangChainAgent:
         
         # Crear flujo de trabajo
         print("Creando flujo de trabajo...")
-        self.workflow = create_workflow(
-            self.retrievers, 
-            self.rag_chain, 
-            self.retrieval_grader, 
-            self.hallucination_grader, 
-            self.answer_grader, 
-            self.question_router
-        )
+        self._create_workflow()
         
         # Compilar workflow
         self.app = self.workflow.compile()
+    
+    def _create_workflow(self):
+        """
+        Crea el flujo de trabajo del agente utilizando LangGraph.
+        """
+        # Crear el flujo de trabajo
+        self.workflow = create_workflow(
+            retrievers=self.retrievers,
+            rag_chain=self.rag_chain,
+            retrieval_grader=self.retrieval_grader,
+            hallucination_grader=self.hallucination_grader,
+            answer_grader=self.answer_grader,
+            question_router=self.question_router,
+            query_rewriter=self.query_rewriter  # Pasar el reescritor de consultas
+        )
     
     def run(self, query):
         """
@@ -605,14 +630,7 @@ class LangChainAgent:
             
             # Recompilar el workflow
             print("Recompilando workflow...")
-            self.workflow = create_workflow(
-                self.retrievers, 
-                self.rag_chain, 
-                self.retrieval_grader, 
-                self.hallucination_grader, 
-                self.answer_grader, 
-                self.question_router
-            )
+            self._create_workflow()
             self.app = self.workflow.compile()
             
             print_title("¡Colección recreada con éxito!")
