@@ -106,7 +106,7 @@ class LangChainAgent:
                 try:
                     # Primero creamos el generador de contexto con el LLM principal
                     print(f"Usando modelo {self.llm.model} para generación de contexto")
-                    context_generator = create_context_generator(self.llm2)
+                    context_generator = create_context_generator(self.llm)
                     
                     # Verificar que se creó correctamente
                     if context_generator is not None:
