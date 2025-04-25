@@ -748,7 +748,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             print(f"---RETRY ATTEMPT {retry_count}---")
         
         return {
-            "documents": documents,
+            "documents": context_docs,
             "question": question,
             "rewritten_question": rewritten_question,
             "generation": response_json,  # Devolver el objeto JSON completo
