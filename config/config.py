@@ -18,8 +18,8 @@ LLM_CONFIG = {
     "max_tokens": 2048,        # Límite de tokens para las respuestas generadas
     "model_format": "json",    # Formato de salida (json, text, etc.)
     "default_model": "mistral-small-3.1:24b",  # Modelo predeterminado para el LLM principal
-    "default_model2": "llama3.2:3b", # Modelo predeterminado para el LLM secundario (routing)
-    "default_model3": "qwen2.5:1.5b" # Modelo predeterminado para el LLM tercero (eavluation)
+    "default_model2": "qwen2.5:1.5b", # Modelo predeterminado para el LLM secundario (routing)
+    "default_model3": "llama3.2:3b" # Modelo predeterminado para el LLM tercero (eavluation)
 }
 
 # Configuración de Vector Store
