@@ -93,11 +93,17 @@ def create_rag_sql_chain(llm, db_uri, dialect="sqlite"):
         Contexto: {context}
         Pregunta: {question}
         
-        Consulta SQL:
+        IMPORTANTE: Tu respuesta debe ser un objeto JSON válido con este formato exacto:
+        {{
+            "explanation": "Una explicación breve de lo que hace esta consulta SQL",
+            "query": "SELECT ... FROM ... WHERE ..."
+        }}
+        
+        Asegúrate de que el JSON sea válido y que tanto "explanation" como "query" estén presentes:
         """
     )
     
-    # Crear la cadena para generar consultas SQL
+    # Crear la cadena para generar consultas SQL con JsonOutputParser
     sql_query_chain = (
         {
             "dialect": lambda _: dialect,
@@ -107,7 +113,7 @@ def create_rag_sql_chain(llm, db_uri, dialect="sqlite"):
         }
         | sql_prompt
         | llm
-        | (lambda x: x.content)
+        | JsonOutputParser()
     )
     
     # Crear la cadena RAG normal (para generar respuestas basadas en contexto)

@@ -754,17 +754,42 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             if is_consulta and rag_sql_chain:
                 print("Se detectó que es una consulta SQL. Generando consulta SQL...")
                 # Generar consulta SQL utilizando sql_query_chain
-                sql_query = rag_sql_chain["sql_query_chain"].invoke({
+                sql_response = rag_sql_chain["sql_query_chain"].invoke({
                     "context": context,
                     "question": rewritten_question
                 })
                 
-                # Guardar la consulta SQL generada
-                state["sql_query"] = sql_query
-                print(f"Consulta SQL generada: {sql_query}")
-                
-                # La respuesta será generada después con el resultado de la consulta SQL
-                response_json = sql_query
+                # Validar que la respuesta tenga el formato esperado
+                if isinstance(sql_response, dict) and "query" in sql_response:
+                    # Extraer la consulta SQL y la explicación
+                    sql_query = sql_response["query"]
+                    explanation = sql_response.get("explanation", "")
+                    
+                    # Guardar la consulta SQL generada
+                    state["sql_query"] = sql_query
+                    print(f"Consulta SQL generada: {sql_query}")
+                    
+                    # Devolver el objeto completo como respuesta
+                    response_json = sql_response
+                else:
+                    # Si no tiene el formato esperado, intentar extraer la consulta
+                    print("Advertencia: Formato de respuesta SQL inesperado.")
+                    if isinstance(sql_response, str):
+                        # Asumir que es la consulta directamente
+                        sql_query = sql_response
+                        state["sql_query"] = sql_query
+                        response_json = {
+                            "query": sql_query,
+                            "explanation": "Consulta SQL generada por el sistema."
+                        }
+                    else:
+                        # Convertir a string como último recurso
+                        sql_query = str(sql_response)
+                        state["sql_query"] = sql_query
+                        response_json = {
+                            "query": sql_query,
+                            "explanation": "Consulta SQL generada por el sistema."
+                        }
             else:
                 # Usar la cadena RAG estándar para preguntas regulares
                 print("Generando respuesta con RAG estándar...")

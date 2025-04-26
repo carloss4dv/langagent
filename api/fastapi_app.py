@@ -66,13 +66,35 @@ def create_api(agent=None):
             payload (Dict): Payload del token verificado.
             
         Returns:
-            dict: Respuesta generada.
+            dict: Respuesta generada, que puede incluir resultados SQL.
         """
         try:
             # Ejecutar el agente con la pregunta
             result = agent.run(request.question)
             
-            # Extraer la respuesta de la generación
+            # Verificar si la consulta fue de tipo SQL
+            is_sql_query = result.get("is_consulta", False)
+            sql_query = result.get("sql_query")
+            sql_result = result.get("sql_result")
+            
+            # Si es una consulta SQL con resultados, devolver formato SQL
+            if is_sql_query and sql_query:
+                # Obtener la explicación de la generación si está en el formato esperado
+                explanation = ""
+                generation = result.get("generation")
+                
+                if isinstance(generation, dict) and "explanation" in generation:
+                    explanation = generation.get("explanation", "")
+                
+                # Construir y devolver la respuesta en formato estructurado
+                return {
+                    "type": "sql",
+                    "query": sql_query,
+                    "result": sql_result or "No se pudo ejecutar la consulta SQL.",
+                    "explanation": explanation
+                }
+            
+            # Extraer la respuesta de la generación para consultas no SQL
             answer = None
             
             # Intentar extraer la respuesta del campo generation
@@ -116,8 +138,11 @@ def create_api(agent=None):
             if answer is None:
                 answer = "No se pudo generar una respuesta."
             
-            # Devolver solamente la respuesta como solicitado
-            return answer
+            # Devolver respuesta con formato para texto normal
+            return {
+                "type": "text",
+                "answer": answer
+            }
             
         except Exception as e:
             raise HTTPException(

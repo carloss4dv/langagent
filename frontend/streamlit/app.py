@@ -6,6 +6,7 @@ import streamlit as st
 import requests
 import json
 import os
+import pandas as pd
 
 # Configuración de la API
 API_URL = os.environ.get("API_URL", "http://localhost:8000")
@@ -39,6 +40,19 @@ st.markdown("""
         border-radius: 10px;
         padding: 20px;
         margin-top: 20px;
+    }
+    .sql-container {
+        background-color: #e9f5e9;
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 20px;
+    }
+    .sql-query {
+        background-color: #f0f2f6;
+        border-radius: 5px;
+        padding: 10px;
+        font-family: monospace;
+        overflow-x: auto;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -78,16 +92,97 @@ def query_agent(question, token):
         )
         
         if response.status_code == 200:
-            return response.text  # La API ya devuelve directamente la respuesta
+            try:
+                # Intentar parsear como JSON primero
+                return response.json()
+            except:
+                # Si no es JSON, devolver el texto directamente (retrocompatibilidad)
+                return {"type": "text", "answer": response.text}
         else:
             st.error(f"Error en la consulta: {response.status_code}")
             try:
                 error_detail = response.json().get("detail", "Sin detalles")
-                return f"Error: {error_detail}"
+                return {"type": "error", "message": f"Error: {error_detail}"}
             except:
-                return f"Error: Código {response.status_code}"
+                return {"type": "error", "message": f"Error: Código {response.status_code}"}
     except Exception as e:
-        return f"Error de conexión: {str(e)}"
+        return {"type": "error", "message": f"Error de conexión: {str(e)}"}
+
+# Función para mostrar la respuesta según su tipo
+def display_response(response):
+    if not response:
+        return
+    
+    # Si la respuesta es un string, asumimos que es texto plano (retrocompatibilidad)
+    if isinstance(response, str):
+        st.markdown("<div class='answer-container'>", unsafe_allow_html=True)
+        st.markdown("### Respuesta:")
+        st.write(response)
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+    
+    # Obtener el tipo de respuesta
+    response_type = response.get("type", "text")
+    
+    if response_type == "sql":
+        # Mostrar resultado SQL
+        sql_query = response.get("query", "")
+        sql_result = response.get("result", "")
+        explanation = response.get("explanation", "")
+        
+        st.markdown("<div class='sql-container'>", unsafe_allow_html=True)
+        
+        # Mostrar explicación si está disponible
+        if explanation:
+            st.markdown("### Explicación:")
+            st.write(explanation)
+        
+        st.markdown("### Consulta SQL generada:")
+        st.markdown(f"<div class='sql-query'>{sql_query}</div>", unsafe_allow_html=True)
+        
+        st.markdown("### Resultado:")
+        
+        # Intentar convertir el resultado a un dataframe si es posible
+        try:
+            # Verificar si es un string que parece una tabla
+            if isinstance(sql_result, str) and "|" in sql_result and "\n" in sql_result:
+                # Intentar convertir a dataframe
+                lines = sql_result.strip().split('\n')
+                if len(lines) > 2:  # Al menos encabezado, separador y una fila
+                    # Extraer encabezados de la primera línea
+                    headers = [h.strip() for h in lines[0].split('|')]
+                    # Saltar la línea de separación (línea 1)
+                    # Crear filas desde la línea 2 en adelante
+                    data = []
+                    for line in lines[2:]:
+                        if line.strip():  # Ignorar líneas vacías
+                            row = [cell.strip() for cell in line.split('|')]
+                            data.append(row)
+                    
+                    df = pd.DataFrame(data, columns=headers)
+                    st.dataframe(df)
+                else:
+                    st.write(sql_result)  # Mostrar como texto si no se puede parsear
+            else:
+                # Si no tiene formato de tabla, mostrar como texto
+                st.write(sql_result)
+        except Exception as e:
+            # Si falla la conversión, mostrar como texto plano
+            st.write(sql_result)
+            st.caption(f"No se pudo formatear como tabla: {str(e)}")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    elif response_type == "error":
+        # Mostrar mensaje de error
+        st.error(response.get("message", "Error desconocido"))
+    
+    else:
+        # Mostrar respuesta de texto normal
+        st.markdown("<div class='answer-container'>", unsafe_allow_html=True)
+        st.markdown("### Respuesta:")
+        st.write(response.get("answer", "No se pudo obtener una respuesta"))
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # Verificar si ya hay un token en la sesión
 if "token" not in st.session_state:
@@ -114,13 +209,10 @@ if "token" in st.session_state:
         if question:
             with st.spinner("Generando respuesta..."):
                 # Hacer la consulta al agente
-                answer = query_agent(question, st.session_state.token)
+                response = query_agent(question, st.session_state.token)
                 
-                # Mostrar la respuesta
-                st.markdown("<div class='answer-container'>", unsafe_allow_html=True)
-                st.markdown("### Respuesta:")
-                st.write(answer)
-                st.markdown("</div>", unsafe_allow_html=True)
+                # Mostrar la respuesta según su tipo
+                display_response(response)
         else:
             st.warning("Por favor, introduce una pregunta.")
     
@@ -150,11 +242,10 @@ if "token" in st.session_state:
         question = st.session_state.last_question
         del st.session_state.last_question
         with st.spinner("Generando respuesta..."):
-            answer = query_agent(question, st.session_state.token)
+            response = query_agent(question, st.session_state.token)
             
-            # Mostrar la respuesta
-            st.markdown("<div class='answer-container'>", unsafe_allow_html=True)
+            # Mostrar la pregunta
             st.markdown(f"### Pregunta: {question}")
-            st.markdown("### Respuesta:")
-            st.write(answer)
-            st.markdown("</div>", unsafe_allow_html=True) 
+            
+            # Mostrar la respuesta según su tipo
+            display_response(response) 
