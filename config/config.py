@@ -56,7 +56,7 @@ VECTORSTORE_CONFIG = {
 
 # Configuración de SQL
 SQL_CONFIG = {
-    "db_uri": "sqlite:///sqlite/pdi_database.db",  # URI de conexión a la base de datos
+    "db_uri": "sqlite:///langagent/sqlite/pdi_database.db",  # URI de conexión a la base de datos
     "dialect": "sqlite",                           # Dialecto SQL (sqlite, postgres, etc.)
     "enable_sql_queries": True,                    # Habilitar consultas SQL
     "max_results": 20,                             # Número máximo de resultados por consulta

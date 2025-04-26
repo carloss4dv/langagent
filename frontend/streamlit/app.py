@@ -196,7 +196,7 @@ if "token" not in st.session_state:
             if token:
                 st.session_state.token = token
                 st.success("¡Sesión iniciada correctamente!")
-                st.experimental_rerun()
+                st.rerun()
 
 # Si ya hay un token, mostrar la interfaz de consulta
 if "token" in st.session_state:
@@ -219,7 +219,7 @@ if "token" in st.session_state:
     # Botón para cerrar sesión
     if st.sidebar.button("Cerrar sesión"):
         del st.session_state.token
-        st.experimental_rerun()
+        st.rerun()
     
     # Mostrar algunas preguntas de ejemplo
     with st.sidebar:
@@ -235,7 +235,7 @@ if "token" in st.session_state:
         for q in example_questions:
             if st.button(q, key=f"q_{q[:20]}"):
                 st.session_state.last_question = q
-                st.experimental_rerun()
+                st.rerun()
         
     # Si hay una pregunta seleccionada, ejecutarla
     if "last_question" in st.session_state:

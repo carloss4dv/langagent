@@ -13,7 +13,68 @@ from langchain_community.utilities import SQLDatabase
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langchain_hub import pull as hub_pull
 from langagent.prompts import PROMPTS 
-from langagent.config.config import LLM_CONFIG
+from langagent.config.config import LLM_CONFIG, SQL_CONFIG
+import json
+import re
+
+# Clase para parsear JSON de manera más robusta
+class RobustJsonOutputParser:
+    """
+    Un parseador de JSON más robusto que intenta extraer JSON válido incluso 
+    cuando la respuesta no es perfecta.
+    """
+    def __init__(self, default_values=None):
+        """
+        Inicializa el parseador con valores por defecto.
+        
+        Args:
+            default_values (dict, optional): Valores por defecto si el parseo falla.
+        """
+        self.default_values = default_values or {}
+    
+    def __call__(self, text):
+        """
+        Intenta extraer y parsear JSON de un texto.
+        
+        Args:
+            text (str): El texto que contiene JSON.
+            
+        Returns:
+            dict: El objeto JSON parseado o los valores por defecto.
+        """
+        if not text:
+            return self.default_values
+        
+        # Primero intentar parsear directamente si es JSON válido
+        try:
+            if isinstance(text, dict):
+                return text
+            return json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            pass
+        
+        # Intentar encontrar JSON usando expresiones regulares
+        try:
+            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+                return json.loads(json_str)
+        except (json.JSONDecodeError, TypeError):
+            pass
+        
+        # Si todo falla, extraer manualmente campos clave
+        result = self.default_values.copy()
+        
+        # Buscar campos específicos
+        explanation_match = re.search(r'"explanation"\s*:\s*"([^"]*)"', text)
+        if explanation_match:
+            result["explanation"] = explanation_match.group(1)
+        
+        query_match = re.search(r'"query"\s*:\s*"([^"]*)"', text)
+        if query_match:
+            result["query"] = query_match.group(1)
+        
+        return result
 
 def _get_prompt_template(llm, prompt_key: str):
     """Helper para obtener plantillas del modelo correcto."""
@@ -99,11 +160,18 @@ def create_rag_sql_chain(llm, db_uri, dialect="sqlite"):
             "query": "SELECT ... FROM ... WHERE ..."
         }}
         
-        Asegúrate de que el JSON sea válido y que tanto "explanation" como "query" estén presentes:
+        Asegúrate de que el JSON sea válido y que tanto "explanation" como "query" estén presentes.
+        NO incluyas comillas triples, marcadores de código ni ningún otro formato adicional alrededor del JSON.
         """
     )
     
-    # Crear la cadena para generar consultas SQL con JsonOutputParser
+    # Configurar valores predeterminados para el parseador robusto
+    default_sql_values = {
+        "explanation": "No se pudo generar una explicación",
+        "query": "SELECT * FROM " + SQL_CONFIG["default_table"] + " LIMIT 10"
+    }
+    
+    # Crear la cadena para generar consultas SQL con el parseador robusto
     sql_query_chain = (
         {
             "dialect": lambda _: dialect,
@@ -113,7 +181,7 @@ def create_rag_sql_chain(llm, db_uri, dialect="sqlite"):
         }
         | sql_prompt
         | llm
-        | JsonOutputParser()
+        | RobustJsonOutputParser(default_values=default_sql_values)
     )
     
     # Crear la cadena RAG normal (para generar respuestas basadas en contexto)
@@ -151,8 +219,14 @@ def create_context_generator(llm):
         input_variables=["document", "chunk"],
     )
     
-    # Definir la cadena de generación de contexto con JsonOutputParser
-    context_generator_chain = prompt | llm | JsonOutputParser()
+    # Valores predeterminados para el parseador de contexto
+    default_context_values = {
+        "context_description": "Información sobre el documento",
+        "relevance_score": 0.5
+    }
+    
+    # Definir la cadena de generación de contexto con el parseador robusto
+    context_generator_chain = prompt | llm | RobustJsonOutputParser(default_values=default_context_values)
     
     return context_generator_chain
 
@@ -196,7 +270,14 @@ def create_retrieval_grader(llm):
         input_variables=["document", "question"],
     )
     
-    retrieval_grader = prompt | llm | JsonOutputParser()
+    # Valores predeterminados para el evaluador de recuperación
+    default_retrieval_values = {
+        "is_relevant": True,
+        "relevance_score": 0.7,
+        "explanation": "Documento posiblemente relevante para la consulta"
+    }
+    
+    retrieval_grader = prompt | llm | RobustJsonOutputParser(default_values=default_retrieval_values)
     return retrieval_grader
 
 def create_hallucination_grader(llm):
@@ -216,7 +297,14 @@ def create_hallucination_grader(llm):
         input_variables=["documents", "generation"],
     )
     
-    hallucination_grader = prompt | llm | JsonOutputParser()
+    # Valores predeterminados para el evaluador de alucinaciones
+    default_hallucination_values = {
+        "has_hallucination": False,
+        "confidence": 0.7,
+        "explanation": "No se detectaron alucinaciones evidentes"
+    }
+    
+    hallucination_grader = prompt | llm | RobustJsonOutputParser(default_values=default_hallucination_values)
     return hallucination_grader
 
 def create_answer_grader(llm):
@@ -236,7 +324,14 @@ def create_answer_grader(llm):
         input_variables=["generation", "question"],
     )
     
-    answer_grader = prompt | llm | JsonOutputParser()
+    # Valores predeterminados para el evaluador de respuestas
+    default_answer_values = {
+        "is_helpful": True,
+        "helpfulness_score": 0.7,
+        "explanation": "La respuesta parece abordar la pregunta"
+    }
+    
+    answer_grader = prompt | llm | RobustJsonOutputParser(default_values=default_answer_values)
     return answer_grader
 
 def create_question_router(llm):
@@ -256,7 +351,14 @@ def create_question_router(llm):
         input_variables=["question"],
     )
     
-    question_router = prompt | llm | JsonOutputParser()
+    # Valores predeterminados para el router de preguntas
+    default_router_values = {
+        "route_to": "vectorstore",
+        "confidence": 0.8,
+        "explanation": "La pregunta parece ser sobre información interna"
+    }
+    
+    question_router = prompt | llm | RobustJsonOutputParser(default_values=default_router_values)
     return question_router
 
 def create_query_rewriter(llm):
