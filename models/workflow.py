@@ -178,9 +178,14 @@ def execute_query(state):
             # Intentar parsear como JSON
             if sql_query.strip().startswith('{'):
                 query_data = json.loads(sql_query)
-                if isinstance(query_data, dict) and "query" in query_data:
-                    sql_query = query_data["query"]
-                    print("Consulta SQL extraída del objeto JSON.")
+                if isinstance(query_data, dict):
+                    # Buscar la consulta en diferentes claves posibles
+                    if "query" in query_data:
+                        sql_query = query_data["query"]
+                        print("Consulta SQL extraída del objeto JSON (clave 'query').")
+                    elif "sql" in query_data:
+                        sql_query = query_data["sql"]
+                        print("Consulta SQL extraída del objeto JSON (clave 'sql').")
         except json.JSONDecodeError:
             # Si no es JSON válido, usar el string como está
             pass
