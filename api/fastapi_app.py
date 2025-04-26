@@ -50,7 +50,7 @@ def create_api(agent=None):
             request (TokenRequest): Solicitud con nombre de usuario.
             
         Returns:
-            dict: Token generado.
+            dict: Token generado correctmanete.
         """
         # En un entorno real, verificaríamos credenciales aquí
         token = create_token(data={"sub": request.username})
