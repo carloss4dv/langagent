@@ -164,12 +164,27 @@ def execute_query(state):
     Returns:
         dict: Estado actualizado con el resultado de la consulta SQL.
     """
+    # Obtener la consulta SQL del estado
     sql_query = state.get("sql_query")
     if not sql_query:
         print("No hay consulta SQL para ejecutar.")
         return state
     
     print("---EXECUTE QUERY---")
+    
+    # Comprobar si sql_query es un string JSON 
+    if isinstance(sql_query, str):
+        try:
+            # Intentar parsear como JSON
+            if sql_query.strip().startswith('{'):
+                query_data = json.loads(sql_query)
+                if isinstance(query_data, dict) and "query" in query_data:
+                    sql_query = query_data["query"]
+                    print("Consulta SQL extraída del objeto JSON.")
+        except json.JSONDecodeError:
+            # Si no es JSON válido, usar el string como está
+            pass
+    
     print(f"Ejecutando consulta SQL: {sql_query}")
     
     try:
