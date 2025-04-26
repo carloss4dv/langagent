@@ -10,10 +10,12 @@ from typing import List, Dict, Any, Optional, Tuple
 from typing_extensions import TypedDict
 from langchain_core.documents import Document
 from langgraph.graph import StateGraph, END
+from langchain_community.utilities import SQLDatabase
+from langchain_community.tools.sql_database.tool import QuerySQLDatabaseTool
 import json
 import re
 
-from langagent.config.config import WORKFLOW_CONFIG, VECTORSTORE_CONFIG
+from langagent.config.config import WORKFLOW_CONFIG, VECTORSTORE_CONFIG, SQL_CONFIG
 from langagent.models.constants import (
     AMBITOS_CUBOS, CUBO_TO_AMBITO, AMBITO_KEYWORDS, 
     AMBITO_EN_ES, CUBO_EN_ES
@@ -28,12 +30,17 @@ class GraphState(TypedDict):
         rewritten_question: pregunta reescrita con términos técnicos de SEGEDA
         generation: generación del LLM
         documents: lista de documentos
+        retrieved_documents: lista de documentos recuperados
         retry_count: contador de reintentos
+        hallucination_score: puntuación de alucinaciones
+        answer_score: puntuación de la respuesta
         relevant_cubos: lista de cubos relevantes para la pregunta
         ambito: ámbito identificado para la pregunta
         retrieval_details: detalles de recuperación por cubo
-        is_consulta: indica si la pregunta es sobre una consulta guardada
+        is_consulta: indica si la pregunta es sobre una consulta guardada o SQL
         consulta_documents: documentos de consultas guardadas recuperados
+        sql_query: consulta SQL generada
+        sql_result: resultado de la consulta SQL
     """
     question: str
     rewritten_question: str
@@ -48,6 +55,8 @@ class GraphState(TypedDict):
     retrieval_details: Dict[str, Dict[str, Any]]
     is_consulta: bool
     consulta_documents: List[Document]
+    sql_query: Optional[str]
+    sql_result: Optional[str]
 
 def normalize_name(name: str) -> str:
     """
@@ -145,10 +154,58 @@ def find_relevant_cubos_by_keywords(query: str, available_cubos: List[str]) -> T
     # Si no encontramos nada, devolver todos los cubos disponibles
     return list(available_cubos), None
 
-def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grader, answer_grader, question_router, query_rewriter=None):
+def execute_query(state):
+    """
+    Ejecuta la consulta SQL generada.
+    
+    Args:
+        state (dict): Estado actual del grafo.
+        
+    Returns:
+        dict: Estado actualizado con el resultado de la consulta SQL.
+    """
+    sql_query = state.get("sql_query")
+    if not sql_query:
+        print("No hay consulta SQL para ejecutar.")
+        return state
+    
+    print("---EXECUTE QUERY---")
+    print(f"Ejecutando consulta SQL: {sql_query}")
+    
+    try:
+        # Crear la conexión a la base de datos y herramienta de consulta
+        if SQL_CONFIG.get("db_uri"):
+            db = SQLDatabase.from_uri(SQL_CONFIG.get("db_uri"))
+            execute_query_tool = QuerySQLDatabaseTool(db=db)
+            
+            # Ejecutar la consulta
+            result = execute_query_tool.invoke(sql_query)
+            print("Consulta ejecutada con éxito.")
+            
+            # Actualizar el estado con el resultado
+            return {
+                **state,
+                "sql_result": result
+            }
+        else:
+            error = "No se ha configurado la conexión a la base de datos."
+            print(error)
+            return {
+                **state,
+                "sql_result": error
+            }
+    except Exception as e:
+        error = f"Error al ejecutar la consulta SQL: {str(e)}"
+        print(error)
+        return {
+            **state,
+            "sql_result": error
+        }
+
+def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grader, answer_grader, question_router, query_rewriter=None, rag_sql_chain=None):
     """
     Crea un flujo de trabajo para el agente utilizando LangGraph.
-    Soporta múltiples vectorstores organizados en cubos.
+    Soporta múltiples vectorstores organizados en cubos y consultas a bases de datos SQL.
     
     Args:
         retrievers(dict): Diccionario de retrievers por cubo.
@@ -158,6 +215,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         answer_grader: Evaluador de utilidad de respuestas.
         question_router: Router de preguntas para determinar cubos relevantes.
         query_rewriter: Reescritor de consultas para mejorar la recuperación.
+        rag_sql_chain: Cadena para consultas SQL cuando se detecta que es una consulta de base de datos.
         
     Returns:
         StateGraph: Grafo de estado configurado.
@@ -632,6 +690,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
     def generate(state):
         """
         Genera una respuesta basada en los documentos recuperados.
+        Puede generar una consulta SQL si el sistema determina que es una consulta a base de datos.
         
         Args:
             state (dict): Estado actual del grafo.
@@ -645,6 +704,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         retry_count = state.get("retry_count", 0)
         relevant_cubos = state.get("relevant_cubos", [])
         retrieval_details = state.get("retrieval_details", {})
+        is_consulta = state.get("is_consulta", False)
         
         print("---GENERATE---")
         if not documents:
@@ -660,7 +720,9 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                 "answer_score": None,
                 "relevant_cubos": relevant_cubos,
                 "ambito": state.get("ambito"),
-                "retrieval_details": retrieval_details
+                "retrieval_details": retrieval_details,
+                "sql_query": None,
+                "sql_result": None
             }
         
         try:
@@ -687,46 +749,72 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             context = "\n".join(context_docs)
             
             print("Generando respuesta...")
-            # Generar respuesta utilizando la cadena RAG
-            response = rag_chain.invoke({
-                "context": context,
-                "question": rewritten_question  # Usamos la consulta reescrita para mejorar la respuesta
-            })
             
-            # La respuesta es un string
-            if not isinstance(response, str):
-                print(f"Advertencia: La respuesta no es un string: {type(response)}")
-                response_json = str(response)
-            else:
-                response_json = response
+            # Determinar si usar SQL o RAG basado en si es una consulta
+            if is_consulta and rag_sql_chain:
+                print("Se detectó que es una consulta SQL. Generando consulta SQL...")
+                # Generar consulta SQL utilizando sql_query_chain
+                sql_query = rag_sql_chain["sql_query_chain"].invoke({
+                    "context": context,
+                    "question": rewritten_question
+                })
                 
-            print("Evaluando si la respuesta contiene alucinaciones...")
-            # Verificar si la respuesta contiene alucinaciones
-            hallucination_eval = hallucination_grader.invoke({
-                "documents": context,
-                "generation": response_json
-            })
-            
-            if isinstance(hallucination_eval, dict) and "score" in hallucination_eval:
-                is_grounded = hallucination_eval["score"].lower() == "yes"
-                print(f"¿Respuesta fundamentada en los documentos? {'Sí' if is_grounded else 'No'}")
+                # Guardar la consulta SQL generada
+                state["sql_query"] = sql_query
+                print(f"Consulta SQL generada: {sql_query}")
+                
+                # La respuesta será generada después con el resultado de la consulta SQL
+                response_json = sql_query
             else:
-                print(f"Advertencia: Evaluación de alucinaciones no válida: {hallucination_eval}")
-                is_grounded = True  # Por defecto, asumir que está fundamentada
+                # Usar la cadena RAG estándar para preguntas regulares
+                print("Generando respuesta con RAG estándar...")
+                response = rag_chain.invoke({
+                    "context": context,
+                    "question": rewritten_question
+                })
+                
+                # La respuesta es un string
+                if not isinstance(response, str):
+                    print(f"Advertencia: La respuesta no es un string: {type(response)}")
+                    response_json = str(response)
+                else:
+                    response_json = response
             
-            print("Evaluando calidad de la respuesta...")
-            # Verificar si la respuesta es útil
-            answer_eval = answer_grader.invoke({
-                "generation": response_json,
-                "question": rewritten_question  # Usamos la consulta reescrita para evaluar mejor la respuesta
-            })
-            
-            if isinstance(answer_eval, dict) and "score" in answer_eval:
-                is_useful = answer_eval["score"].lower() == "yes"
-                print(f"¿Respuesta útil para la pregunta? {'Sí' if is_useful else 'No'}")
+            # Evaluar la respuesta solo si no es una consulta SQL
+            if not is_consulta or not rag_sql_chain:
+                print("Evaluando si la respuesta contiene alucinaciones...")
+                # Verificar si la respuesta contiene alucinaciones
+                hallucination_eval = hallucination_grader.invoke({
+                    "documents": context,
+                    "generation": response_json
+                })
+                
+                if isinstance(hallucination_eval, dict) and "score" in hallucination_eval:
+                    is_grounded = hallucination_eval["score"].lower() == "yes"
+                    print(f"¿Respuesta fundamentada en los documentos? {'Sí' if is_grounded else 'No'}")
+                else:
+                    print(f"Advertencia: Evaluación de alucinaciones no válida: {hallucination_eval}")
+                    is_grounded = True  # Por defecto, asumir que está fundamentada
+                
+                print("Evaluando calidad de la respuesta...")
+                # Verificar si la respuesta es útil
+                answer_eval = answer_grader.invoke({
+                    "generation": response_json,
+                    "question": rewritten_question
+                })
+                
+                if isinstance(answer_eval, dict) and "score" in answer_eval:
+                    is_useful = answer_eval["score"].lower() == "yes"
+                    print(f"¿Respuesta útil para la pregunta? {'Sí' if is_useful else 'No'}")
+                else:
+                    print(f"Advertencia: Evaluación de utilidad no válida: {answer_eval}")
+                    is_useful = True  # Por defecto, asumir que es útil
             else:
-                print(f"Advertencia: Evaluación de utilidad no válida: {answer_eval}")
-                is_useful = True  # Por defecto, asumir que es útil
+                # Para consultas SQL, asumimos que son útiles y fundamentadas
+                is_grounded = True
+                is_useful = True
+                hallucination_eval = {"score": "yes"}
+                answer_eval = {"score": "yes"}
             
             # Función auxiliar para extraer el valor del "score" de la respuesta
             def extract_score(response) -> bool:
@@ -751,42 +839,54 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             "documents": context_docs,
             "question": question,
             "rewritten_question": rewritten_question,
-            "generation": response_json,  # Devolver el objeto JSON completo
+            "generation": response_json,
             "retry_count": retry_count,
             "hallucination_score": hallucination_eval,
             "answer_score": answer_eval,
             "relevant_cubos": relevant_cubos,
             "ambito": state.get("ambito"),
-            "retrieval_details": retrieval_details
+            "retrieval_details": retrieval_details,
+            "sql_query": state.get("sql_query"),
+            "sql_result": state.get("sql_result")
         }
     
     # Añadir nodos al grafo
     workflow.add_node("route_question", route_question)
     workflow.add_node("retrieve", retrieve)
     workflow.add_node("generate", generate)
+    workflow.add_node("execute_query", execute_query)
     
     # Definir bordes - flujo simplificado
     workflow.set_entry_point("route_question")
     workflow.add_edge("route_question", "retrieve")
     workflow.add_edge("retrieve", "generate")
     
-    # Definir condiciones para reintentos o finalización
-    def should_retry(state):
+    # Definir condición para ejecución de consulta SQL o verificación de reintento
+    def route_after_generate(state):
         """
-        Determina si se debe reintentar la generación de respuesta.
+        Determina qué hacer después de generar la respuesta:
+        - Ejecutar SQL si es una consulta
+        - Reintentar si la respuesta no es buena
+        - Finalizar si todo está bien
         
         Args:
             state (dict): Estado actual del grafo.
             
         Returns:
-            str: "retrieve" si se debe reintentar, "END" si no.
+            str: Siguiente nodo a ejecutar
         """
-        # Extraer información del estado
+        # Verificar si es una consulta SQL
+        is_consulta = state.get("is_consulta", False)
+        sql_query = state.get("sql_query")
+        
+        if is_consulta and sql_query:
+            print("Se detectó una consulta SQL válida. Procediendo a ejecutarla.")
+            return "execute_query"
+        
+        # Si no es consulta, verificar si necesita reintento
         retry_count = state.get("retry_count", 0)
         hallucination_score = state.get("hallucination_score")
         answer_score = state.get("answer_score")
-        question = state.get("question", "")
-        rewritten_question = state.get("rewritten_question", question)
         
         # Función para extraer score de diferentes formatos
         def extract_score(response):
@@ -815,13 +915,18 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                 print("Generación exitosa. Finalizando.")
             return "END"
     
+    # Añadir borde condicional para la decisión después de generar
     workflow.add_conditional_edges(
         "generate",
-        should_retry,
+        route_after_generate,
         {
+            "execute_query": "execute_query",
             "retrieve": "retrieve",
             "END": END
         }
     )
+    
+    # Añadir borde desde execute_query a END
+    workflow.add_edge("execute_query", END)
     
     return workflow

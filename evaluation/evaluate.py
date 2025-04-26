@@ -417,8 +417,7 @@ class AgentEvaluator:
                 "ambito": ambito,
                 "is_consulta": is_consulta,
                 "model_info": token_info.get("model", "unknown"),
-                "token_info": token_info,
-                "retrieval_details": retrieval_details
+                
             }
         )
         

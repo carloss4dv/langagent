@@ -9,6 +9,9 @@ from langchain_ollama import ChatOllama
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
+from langchain_community.utilities import SQLDatabase
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough
+from langchain_hub import pull as hub_pull
 from langagent.prompts import PROMPTS 
 from langagent.config.config import LLM_CONFIG
 
@@ -49,6 +52,78 @@ def create_llm(model_name: str = None, temperature: float = None, format: str = 
         temperature=temperature,
         max_tokens=max_tokens
     )
+
+
+def create_rag_sql_chain(llm, db_uri, dialect="sqlite"):
+    """
+    Crea una cadena combinada RAG + SQL que genera tanto una respuesta como una consulta SQL.
+    
+    Esta cadena utiliza primero un enfoque RAG para entender el contexto y luego genera
+    una consulta SQL basada en la pregunta. La consulta se puede ejecutar posteriormente.
+    
+    Args:
+        llm: Modelo de lenguaje a utilizar.
+        db_uri: URI de conexión a la base de datos SQL.
+        dialect: Dialecto SQL a utilizar (por defecto: sqlite).
+        
+    Returns:
+        dict: Diccionario con dos cadenas - 'answer_chain' para RAG y 'sql_query_chain' para generar SQL.
+    """
+    # Crear la conexión a la base de datos
+    db = SQLDatabase.from_uri(db_uri)
+    
+    # Obtener información del esquema
+    table_info = db.get_table_info()
+    
+    # Crear plantilla para generar consultas SQL
+    sql_prompt = PromptTemplate.from_template(
+        """
+        Dado el contexto y la pregunta, crea una consulta SQL sintácticamente correcta para {dialect}.
+        A menos que se especifique un número de resultados, limita a 10 resultados máximo.
+        Puedes ordenar los resultados por una columna relevante para mostrar los ejemplos más interesantes.
+        
+        Nunca consultes todas las columnas de una tabla, solo selecciona las columnas relevantes para la pregunta.
+        
+        Presta atención a usar solo los nombres de columnas que puedes ver en la descripción del esquema.
+        Ten cuidado de no consultar columnas que no existen. También, presta atención a qué columna está en qué tabla.
+        
+        Solo usa las siguientes tablas:
+        {table_info}
+        
+        Contexto: {context}
+        Pregunta: {question}
+        
+        Consulta SQL:
+        """
+    )
+    
+    # Crear la cadena para generar consultas SQL
+    sql_query_chain = (
+        {
+            "dialect": lambda _: dialect,
+            "table_info": lambda _: table_info,
+            "context": RunnablePassthrough(),
+            "question": RunnablePassthrough()
+        }
+        | sql_prompt
+        | llm
+        | (lambda x: x.content)
+    )
+    
+    # Crear la cadena RAG normal (para generar respuestas basadas en contexto)
+    rag_prompt_template = _get_prompt_template(llm, "rag")
+    prompt = PromptTemplate.from_template(rag_prompt_template)
+    
+    answer_chain = (
+        {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
+        | prompt
+        | llm
+    )
+    
+    return {
+        "answer_chain": answer_chain,
+        "sql_query_chain": sql_query_chain
+    }
 
 def create_context_generator(llm):
     """

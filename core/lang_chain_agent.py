@@ -24,7 +24,8 @@ from langagent.models.llm import (
     create_answer_grader, 
     create_question_router,
     create_query_rewriter,
-    create_context_generator
+    create_context_generator,
+    create_rag_sql_chain
 )
 from langagent.models.workflow import create_workflow
 from langagent.utils.terminal_visualization import (
@@ -36,7 +37,8 @@ from langagent.utils.terminal_visualization import (
 from langagent.config.config import (
     LLM_CONFIG,
     VECTORSTORE_CONFIG,
-    PATHS_CONFIG
+    PATHS_CONFIG,
+    SQL_CONFIG
 )
 
 class LangChainAgent:
@@ -73,6 +75,7 @@ class LangChainAgent:
         self.llm = None
         self.llm2 = None
         self.rag_chain = None
+        self.rag_sql_chain = None
         self.retrieval_grader = None
         self.hallucination_grader = None
         self.answer_grader = None
@@ -500,6 +503,19 @@ class LangChainAgent:
         # Usamos el LLM principal para mejor calidad en la reescritura
         self.query_rewriter = create_query_rewriter(self.llm)
         
+        # Crear cadena SQL si está habilitada
+        if SQL_CONFIG.get("enable_sql_queries", False):
+            print("Configurando cadena SQL...")
+            self.rag_sql_chain = create_rag_sql_chain(
+                self.llm,
+                SQL_CONFIG["db_uri"],
+                SQL_CONFIG.get("dialect", "sqlite")
+            )
+            print(f"Cadena SQL configurada con dialecto: {SQL_CONFIG.get('dialect', 'sqlite')}")
+        else:
+            print("Consultas SQL deshabilitadas en la configuración")
+            self.rag_sql_chain = None
+        
         # Verificar si tenemos al menos un retriever disponible
         if not self.retrievers:
             print("¡ADVERTENCIA! No se ha creado ningún retriever. Creando un retriever predeterminado...")
@@ -549,7 +565,8 @@ class LangChainAgent:
             hallucination_grader=self.hallucination_grader,
             answer_grader=self.answer_grader,
             question_router=self.question_router,
-            query_rewriter=self.query_rewriter  # Pasar el reescritor de consultas
+            query_rewriter=self.query_rewriter,  # Pasar el reescritor de consultas
+            rag_sql_chain=self.rag_sql_chain     # Pasar la cadena SQL
         )
     
     def run(self, query):

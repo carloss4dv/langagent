@@ -54,6 +54,15 @@ VECTORSTORE_CONFIG = {
     "log_context_generation": True,  # Mostrar logs detallados de la generación de contexto
 }
 
+# Configuración de SQL
+SQL_CONFIG = {
+    "db_uri": "sqlite:///sqlite/pdi_database.db",  # URI de conexión a la base de datos
+    "dialect": "sqlite",                           # Dialecto SQL (sqlite, postgres, etc.)
+    "enable_sql_queries": True,                    # Habilitar consultas SQL
+    "max_results": 20,                             # Número máximo de resultados por consulta
+    "default_table": "pdi_docencia"                # Tabla por defecto para consultas
+}
+
 # Configuración de API
 API_CONFIG = {
     "token_expiration_minutes": 15,  # Tiempo de expiración de tokens JWT

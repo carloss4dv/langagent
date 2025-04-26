@@ -115,7 +115,7 @@ PROMPTS = {
         2. If the question mentions a cube name (e.g., "cubo MATRÍCULA"), identify its corresponding scope precisely
         3. If multiple scopes/cubes are mentioned, select the one that appears to be the main focus
         4. Consider the specific metrics and dimensions available in each SEGEDA cube
-        5. If the question asks about saved queries, reports, dashboards, visualizations, or predefined analyses in SEGEDA, set is_query field to true
+        5. If the question asks about queries, reports, dashboards, visualizations, or predefined analyses in SEGEDA, set is_query field to true
         
         Available scopes (ámbitos) and their cubes in SEGEDA:
 
@@ -359,7 +359,7 @@ PROMPTS = {
         "rag": """<|im_start|>system
         You are a specialized assistant for the SEGEDA (DATUZ: Open Data and Transparency UZ) system at Universidad de Zaragoza (UZ).
         Use the provided context from UZ data sources to answer questions accurately and precisely.
-        Always reference the official names of data cubes (e.g., "MATRÍCULA", "RENDIMIENTO"), scopes (e.g., "ACADÉMICO", "MOVILIDAD"), and institutional metrics.
+        Do not use markdown formatting like **, *, or # in your answers.
         If unsure about any Universidad de Zaragoza information, state "I don't have sufficient data from SEGEDA to answer this question."
         Be concise (3 sentences maximum) and technically precise with institutional terminology.
         
