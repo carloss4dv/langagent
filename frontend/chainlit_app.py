@@ -11,6 +11,7 @@ import sys
 import time
 import re
 import ast
+import json
 from typing import Dict, Any, List, Tuple, Union
 
 # Añadir el directorio raíz al path para importar los módulos
@@ -153,6 +154,70 @@ def format_sql_result(result_str: Union[str, List[Tuple]]) -> pd.DataFrame:
     # Si todo falla, devolver un DataFrame vacío
     return pd.DataFrame()
 
+def df_to_markdown(df):
+    """
+    Convierte un DataFrame a formato markdown para mostrar como tabla.
+    
+    Args:
+        df: DataFrame de pandas
+        
+    Returns:
+        str: Tabla en formato markdown
+    """
+    if df.empty:
+        return "No hay datos disponibles."
+    
+    # Convertir DataFrame a tabla markdown
+    markdown = "| " + " | ".join(str(col) for col in df.columns) + " |\n"
+    markdown += "| " + " | ".join(["---"] * len(df.columns)) + " |\n"
+    
+    # Añadir filas
+    for _, row in df.iterrows():
+        markdown += "| " + " | ".join(str(val) for val in row.values) + " |\n"
+    
+    return markdown
+
+def df_to_html(df):
+    """
+    Convierte un DataFrame a HTML para mostrar como tabla.
+    
+    Args:
+        df: DataFrame de pandas
+        
+    Returns:
+        str: Tabla en formato HTML
+    """
+    if df.empty:
+        return "<p>No hay datos disponibles.</p>"
+    
+    # Usar el método to_html de pandas con estilo básico
+    html = df.to_html(index=False, border=0, classes="table table-striped table-hover")
+    return f"""
+    <style>
+    .table {{
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1em;
+    }}
+    .table-striped tbody tr:nth-of-type(odd) {{
+        background-color: rgba(0, 0, 0, 0.05);
+    }}
+    .table-hover tbody tr:hover {{
+        background-color: rgba(0, 0, 0, 0.075);
+    }}
+    .table th, .table td {{
+        padding: 8px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+    }}
+    .table th {{
+        background-color: #f2f2f2;
+        font-weight: bold;
+    }}
+    </style>
+    {html}
+    """
+
 @cl.on_chat_start
 async def on_chat_start():
     """
@@ -199,11 +264,11 @@ async def on_message(message: cl.Message):
                     elif "Fondos" in col and "Porcentaje" not in col:
                         df[col] = df[col].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
                 
-                # Mostrar tabla directamente
-                await cl.Message(
-                    content="",
-                    elements=[cl.Pandas(value=df, name="Datos")]
-                ).send()
+                # Convertir DataFrame a formato markdown para mostrar directamente
+                markdown_table = df_to_markdown(df)
+                
+                # Mostrar tabla directamente como markdown
+                await cl.Message(content=markdown_table).send()
                 return
         except Exception as e:
             print(f"Error al procesar tuplas: {str(e)}")
@@ -241,11 +306,11 @@ async def on_message(message: cl.Message):
             
             # Construir mensaje solo con la tabla si tenemos datos
             if not df.empty:
-                # Enviar solo la tabla de resultados, sin el texto crudo
-                await cl.Message(
-                    content="Resultados:",
-                    elements=[cl.Pandas(value=df, name="Resultados")]
-                ).send()
+                # Convertir a markdown o html para mostrar directamente
+                markdown_table = df_to_markdown(df)
+                
+                # Mostrar los resultados como tabla markdown
+                await cl.Message(content=f"### Resultados:\n\n{markdown_table}").send()
             else:
                 # Si no pudimos formatear como tabla, mostrar el texto original
                 await cl.Message(content=f"### Resultados:\n\n{sql_result}").send()
@@ -294,8 +359,14 @@ async def on_message(message: cl.Message):
         except Exception as err:
             print(f"Error al eliminar mensaje de procesamiento: {str(err)}")
         
-        # En caso de error, enviar mensaje de error
+        # En caso de error, enviar mensaje de error detallado
         error_message = f"Error al generar respuesta: {str(e)}"
+        print(f"Error detallado: {e}")
+        
+        import traceback
+        trace = traceback.format_exc()
+        print(f"Traceback: {trace}")
+        
         await cl.Message(content=error_message).send()
 
 def run_chainlit(port=8000):
