@@ -137,7 +137,11 @@ async def on_message(message: cl.Message):
         response_time = time.time() - start_time
         
         # Eliminar el mensaje de procesamiento
-        await processing_msg.update(content="", silent=True)
+        # El método update() no acepta content, así que eliminamos el mensaje
+        try:
+            await processing_msg.remove()
+        except Exception as e:
+            print(f"Error al eliminar mensaje de procesamiento: {str(e)}")
         
         # Verificar si fue una consulta SQL
         is_sql_query = result.get("is_consulta", False)
@@ -198,7 +202,10 @@ async def on_message(message: cl.Message):
             
     except Exception as e:
         # Eliminar el mensaje de procesamiento en caso de error
-        await processing_msg.update(content="", silent=True)
+        try:
+            await processing_msg.remove()
+        except Exception as err:
+            print(f"Error al eliminar mensaje de procesamiento: {str(err)}")
         
         # En caso de error, enviar mensaje de error
         error_message = f"Error al generar respuesta: {str(e)}"

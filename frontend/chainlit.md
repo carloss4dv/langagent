@@ -1,4 +1,4 @@
-# Asistente SEGEDA
+# SEGEDA - Asistente Inteligente
 
 ¡Bienvenido al asistente inteligente de SEGEDA!
 
@@ -17,4 +17,9 @@ Puedo responder a preguntas sobre la Universidad de Zaragoza utilizando la base 
 - ¿Qué métricas permiten evaluar el rendimiento de los estudiantes?
 - ¿Qué información se recoge sobre los estudiantes extranjeros?
 - Muestra los programas de movilidad con más estudiantes
-- ¿Cuáles son los tipos de plazas disponibles para docentes? 
+- ¿Cuáles son los tipos de plazas disponibles para docentes?
+
+---
+
+favicon: /logos/favicon.ico
+title: SEGEDA - Asistente Inteligente 
