@@ -11,7 +11,6 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_community.utilities import SQLDatabase
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
-from langchain_hub import pull as hub_pull
 from langagent.prompts import PROMPTS 
 from langagent.config.config import LLM_CONFIG
 
