@@ -128,15 +128,8 @@ def display_response(response):
         # Mostrar resultado SQL
         sql_query = response.get("query", "")
         sql_result = response.get("result", "")
-        explanation = response.get("explanation", "")
         
         st.markdown("<div class='sql-container'>", unsafe_allow_html=True)
-        
-        # Mostrar explicación si está disponible
-        if explanation:
-            st.markdown("### Explicación:")
-            st.write(explanation)
-        
         st.markdown("### Consulta SQL generada:")
         st.markdown(f"<div class='sql-query'>{sql_query}</div>", unsafe_allow_html=True)
         
@@ -229,7 +222,8 @@ if "token" in st.session_state:
             "¿Cómo puedo saber si una universidad de destino pertenece a la alianza UNITA?",
             "¿Qué métricas permiten evaluar el rendimiento de los estudiantes?",
             "¿Qué información se recoge sobre los estudiantes extranjeros que vienen a la Universidad de Zaragoza?",
-            "¿Cómo se contabilizan las renuncias a movilidad en el sistema?"
+            "Muestra los 5 programas de movilidad con más estudiantes",
+            "Consulta SQL: ¿Cuáles son los estudiantes con mayor nota media?"
         ]
         
         for q in example_questions:

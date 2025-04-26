@@ -50,7 +50,7 @@ def create_api(agent=None):
             request (TokenRequest): Solicitud con nombre de usuario.
             
         Returns:
-            dict: Token generado correctmanete.
+            dict: Token generado.
         """
         # En un entorno real, verificaríamos credenciales aquí
         token = create_token(data={"sub": request.username})
@@ -78,20 +78,11 @@ def create_api(agent=None):
             sql_result = result.get("sql_result")
             
             # Si es una consulta SQL con resultados, devolver formato SQL
-            if is_sql_query and sql_query:
-                # Obtener la explicación de la generación si está en el formato esperado
-                explanation = ""
-                generation = result.get("generation")
-                
-                if isinstance(generation, dict) and "explanation" in generation:
-                    explanation = generation.get("explanation", "")
-                
-                # Construir y devolver la respuesta en formato estructurado
+            if is_sql_query and sql_query and sql_result:
                 return {
                     "type": "sql",
                     "query": sql_query,
-                    "result": sql_result or "No se pudo ejecutar la consulta SQL.",
-                    "explanation": explanation
+                    "result": sql_result
                 }
             
             # Extraer la respuesta de la generación para consultas no SQL

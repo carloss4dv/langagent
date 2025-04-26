@@ -14,8 +14,6 @@ from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langchain_hub import pull as hub_pull
 from langagent.prompts import PROMPTS 
 from langagent.config.config import LLM_CONFIG
-import json
-import re
 
 def _get_prompt_template(llm, prompt_key: str):
     """Helper para obtener plantillas del modelo correcto."""
@@ -55,66 +53,6 @@ def create_llm(model_name: str = None, temperature: float = None, format: str = 
         max_tokens=max_tokens
     )
 
-def parse_sql_response(llm_output):
-    """
-    Parsea la respuesta del LLM para extraer la consulta SQL y la explicación.
-    
-    Este enfoque personalizado intenta extraer los datos JSON incluso cuando
-    la respuesta no está perfectamente formateada.
-    
-    Args:
-        llm_output (str): Texto de salida del modelo LLM.
-        
-    Returns:
-        dict: Diccionario con 'explanation' y 'query'.
-    """
-    # Intenta analizar como JSON directamente primero
-    try:
-        return json.loads(llm_output)
-    except json.JSONDecodeError:
-        pass
-    
-    # Si no es JSON válido, intenta extraer mediante expresiones regulares
-    result = {"explanation": "", "query": ""}
-    
-    # Buscar patrones como "explanation": "texto" o "query": "texto"
-    explanation_match = re.search(r'"explanation"\s*:\s*"([^"]*)"', llm_output)
-    query_match = re.search(r'"query"\s*:\s*"([^"]*)"', llm_output)
-    
-    # Si no se encuentran con comillas dobles, intenta con comillas simples
-    if not explanation_match:
-        explanation_match = re.search(r'"explanation"\s*:\s*\'([^\']*)\'', llm_output)
-    if not query_match:
-        query_match = re.search(r'"query"\s*:\s*\'([^\']*)\'', llm_output)
-    
-    # Si aún no se encuentran, busca contenido después de los marcadores
-    if not explanation_match:
-        explanation_match = re.search(r'"explanation"\s*:\s*([^,}]*)[,}]', llm_output)
-    if not query_match:
-        query_match = re.search(r'"query"\s*:\s*([^,}]*)[,}]', llm_output)
-    
-    # Extraer consulta SQL directamente si todo lo demás falla
-    if not query_match:
-        # Buscar patrones comunes de consultas SQL
-        sql_patterns = [
-            r'SELECT\s+.+\s+FROM\s+.+', 
-            r'INSERT\s+INTO\s+.+', 
-            r'UPDATE\s+.+\s+SET\s+.+',
-            r'DELETE\s+FROM\s+.+'
-        ]
-        for pattern in sql_patterns:
-            match = re.search(pattern, llm_output, re.IGNORECASE)
-            if match:
-                result["query"] = match.group(0)
-                break
-    
-    # Asignar valores encontrados
-    if explanation_match:
-        result["explanation"] = explanation_match.group(1).strip()
-    if query_match:
-        result["query"] = query_match.group(1).strip()
-    
-    return result
 
 def create_rag_sql_chain(llm, db_uri, dialect="sqlite"):
     """
@@ -155,17 +93,11 @@ def create_rag_sql_chain(llm, db_uri, dialect="sqlite"):
         Contexto: {context}
         Pregunta: {question}
         
-        IMPORTANTE: Tu respuesta debe ser un objeto JSON válido con este formato exacto:
-        {{
-            "explanation": "Una explicación breve de lo que hace esta consulta SQL",
-            "query": "SELECT ... FROM ... WHERE ..."
-        }}
-        
-        Asegúrate de que el JSON sea válido y que tanto "explanation" como "query" estén presentes:
+        Consulta SQL:
         """
     )
     
-    # Crear la cadena para generar consultas SQL con parser personalizado
+    # Crear la cadena para generar consultas SQL
     sql_query_chain = (
         {
             "dialect": lambda _: dialect,
@@ -175,7 +107,7 @@ def create_rag_sql_chain(llm, db_uri, dialect="sqlite"):
         }
         | sql_prompt
         | llm
-        | (lambda x: parse_sql_response(x.content))
+        | (lambda x: x.content)
     )
     
     # Crear la cadena RAG normal (para generar respuestas basadas en contexto)
