@@ -9,7 +9,9 @@ import pandas as pd
 import os
 import sys
 import time
-from typing import Dict, Any
+import re
+import ast
+from typing import Dict, Any, List, Tuple, Union
 
 # Añadir el directorio raíz al path para importar los módulos
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -20,34 +22,98 @@ from core.lang_chain_agent import LangChainAgent
 # Instanciar el agente
 agent = LangChainAgent()
 
-def format_sql_result(result_str):
+def extract_tuples_from_text(text: str) -> List[Tuple]:
     """
-    Formatea el resultado SQL como una tabla si es posible.
+    Extrae tuplas de un texto que podría ser una representación de lista de tuplas
     
     Args:
-        result_str (str): String con el resultado SQL
+        text (str): Texto con posibles tuplas
         
     Returns:
-        pd.DataFrame: DataFrame con los resultados si se puede parsear, None en caso contrario
+        List[Tuple]: Lista de tuplas extraídas o lista vacía si no se encuentra el patrón
     """
     try:
-        # Si es una lista de tuplas (como los datos que compartió el usuario), convertirla a DataFrame
-        if isinstance(result_str, list) and all(isinstance(item, tuple) for item in result_str):
-            # Extraer los datos
-            data = result_str
+        # Intentar evaluar directamente si tiene formato Python válido
+        if text.strip().startswith('[') and text.strip().endswith(']'):
+            data = ast.literal_eval(text)
+            if isinstance(data, list) and all(isinstance(item, tuple) for item in data):
+                return data
+        
+        # Si falla, intentar extraer con regex
+        pattern = r'\(\s*([^)]+)\s*\)'
+        matches = re.findall(pattern, text)
+        
+        result = []
+        for match in matches:
+            # Separar elementos de la tupla
+            elements = []
+            parts = match.split(',')
             
-            # Inferir nombres de columnas según los datos
-            # El ejemplo compartido parece tener: Categoría, Cantidad, Porcentaje, etc.
+            for part in parts:
+                part = part.strip()
+                # Intentar convertir a número si es posible
+                try:
+                    # Si es un número entero
+                    if part.isdigit():
+                        elements.append(int(part))
+                    # Si es un número decimal
+                    elif part.replace('.', '', 1).isdigit():
+                        elements.append(float(part))
+                    # Si es un string con comillas
+                    elif (part.startswith("'") and part.endswith("'")) or (part.startswith('"') and part.endswith('"')):
+                        elements.append(part[1:-1])
+                    # Otros casos, dejarlo como string sin comillas
+                    else:
+                        elements.append(part)
+                except:
+                    elements.append(part)
+            
+            result.append(tuple(elements))
+        
+        return result
+    except:
+        return []
+
+def format_sql_result(result_str: Union[str, List[Tuple]]) -> pd.DataFrame:
+    """
+    Formatea el resultado SQL como una tabla.
+    
+    Args:
+        result_str: String con el resultado SQL o lista de tuplas
+        
+    Returns:
+        pd.DataFrame: DataFrame con los resultados
+    """
+    try:
+        # Si ya es una lista de tuplas
+        if isinstance(result_str, list) and all(isinstance(item, tuple) for item in result_str):
+            data = result_str
+        else:
+            # Intentar extraer tuplas del texto
+            data = extract_tuples_from_text(result_str)
+        
+        if data:
+            # Inferir nombres de columnas según los datos del ejemplo de personal docente
             columns = None
             if len(data) > 0 and len(data[0]) == 8:
                 columns = [
                     "Categoría", "Cantidad", "Porcentaje", 
                     "Proyectos Internacionales", "Proyectos Nacionales", 
-                    "Proyectos Autonómicos", "Total Fondos", "Porcentaje Fondos"
+                    "Proyectos Autonómicos", "Total Fondos (K€)", "Porcentaje Fondos"
                 ]
             
-            # Crear un DataFrame con nombres de columnas
+            # Crear un DataFrame 
             df = pd.DataFrame(data, columns=columns)
+            
+            # Aplicar formato a los números
+            for col in df.columns:
+                # Si la columna parece contener porcentajes
+                if "Porcentaje" in col:
+                    df[col] = df[col].apply(lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x)
+                # Si la columna parece contener valores monetarios
+                elif "Fondos" in col and "Porcentaje" not in col:
+                    df[col] = df[col].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
+            
             return df
         
         # Verificar si es un string que parece una tabla
@@ -56,21 +122,36 @@ def format_sql_result(result_str):
             lines = result_str.strip().split('\n')
             if len(lines) > 2:  # Al menos encabezado, separador y una fila
                 # Extraer encabezados de la primera línea
-                headers = [h.strip() for h in lines[0].split('|')]
+                headers = [h.strip() for h in lines[0].split('|') if h.strip()]
                 # Saltar la línea de separación (línea 1)
                 # Crear filas desde la línea 2 en adelante
                 data = []
                 for line in lines[2:]:
                     if line.strip():  # Ignorar líneas vacías
-                        row = [cell.strip() for cell in line.split('|')]
-                        data.append(row)
+                        row = [cell.strip() for cell in line.split('|') if cell.strip()]
+                        if row:  # Solo añadir si hay datos
+                            data.append(row)
                 
-                df = pd.DataFrame(data, columns=headers)
-                return df
+                if headers and data:
+                    # Asegurar que todas las filas tengan la misma longitud que los headers
+                    clean_data = []
+                    for row in data:
+                        if len(row) == len(headers):
+                            clean_data.append(row)
+                        elif len(row) < len(headers):
+                            # Rellenar con valores vacíos
+                            clean_data.append(row + [''] * (len(headers) - len(row)))
+                        else:
+                            # Recortar
+                            clean_data.append(row[:len(headers)])
+                    
+                    df = pd.DataFrame(clean_data, columns=headers)
+                    return df
     except Exception as e:
         print(f"Error al formatear resultado SQL: {str(e)}")
     
-    return None
+    # Si todo falla, devolver un DataFrame vacío
+    return pd.DataFrame()
 
 @cl.on_chat_start
 async def on_chat_start():
@@ -96,31 +177,37 @@ async def on_message(message: cl.Message):
     # Detectar si el mensaje tiene un formato específico que podría ser datos
     if "[(" in msg_content and ")]" in msg_content:
         try:
-            # Intentar evaluar el contenido como estructura de datos Python
-            data = eval(msg_content)
+            # Extraer datos
+            data = extract_tuples_from_text(msg_content)
             
-            # Verificar si es una lista de tuplas
-            if isinstance(data, list) and all(isinstance(item, tuple) for item in data):
-                # Crear DataFrame
+            if data:
+                # Crear DataFrame con nombres de columnas apropiados
                 columns = None
                 if len(data) > 0 and len(data[0]) == 8:
                     columns = [
                         "Categoría", "Cantidad", "Porcentaje", 
                         "Proyectos Internacionales", "Proyectos Nacionales", 
-                        "Proyectos Autonómicos", "Total Fondos", "Porcentaje Fondos"
+                        "Proyectos Autonómicos", "Total Fondos (K€)", "Porcentaje Fondos"
                     ]
                 
                 df = pd.DataFrame(data, columns=columns)
                 
+                # Aplicar formato
+                for col in df.columns:
+                    if "Porcentaje" in col:
+                        df[col] = df[col].apply(lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x)
+                    elif "Fondos" in col and "Porcentaje" not in col:
+                        df[col] = df[col].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
+                
                 # Mostrar tabla directamente
-                await cl.Message(content="He detectado datos en formato tabular. Aquí está la tabla formateada:").send()
                 await cl.Message(
-                    content="Datos formateados:",
+                    content="",
                     elements=[cl.Pandas(value=df, name="Datos")]
                 ).send()
                 return
-        except:
-            # Si falla la evaluación, continuar con el procesamiento normal
+        except Exception as e:
+            print(f"Error al procesar tuplas: {str(e)}")
+            # Si falla, continuar con el procesamiento normal
             pass
     
     # Mostrar que estamos procesando
@@ -137,7 +224,6 @@ async def on_message(message: cl.Message):
         response_time = time.time() - start_time
         
         # Eliminar el mensaje de procesamiento
-        # El método update() no acepta content, así que eliminamos el mensaje
         try:
             await processing_msg.remove()
         except Exception as e:
@@ -148,31 +234,32 @@ async def on_message(message: cl.Message):
         sql_query = result.get("sql_query")
         sql_result = result.get("sql_result")
         
-        # Elementos para mostrar información adicional
-        elements = []
-        
         # Si es una consulta SQL con resultados
         if is_sql_query and sql_query and sql_result:
-            # Formatear el resultado SQL como DataFrame si es posible
+            # Formatear el resultado SQL como DataFrame
             df = format_sql_result(sql_result)
             
-            # Construir mensaje con la consulta SQL
-            sql_message = f"### Consulta SQL generada:\n```sql\n{sql_query}\n```\n\n"
-            
-            if df is not None:
-                # Añadir tabla al mensaje
-                elements.append(
-                    cl.Pandas(value=df, name="Resultados de la consulta")
-                )
-                sql_message += "### Resultados:\n\nLos resultados se muestran en la tabla adjunta."
+            # Construir mensaje solo con la tabla si tenemos datos
+            if not df.empty:
+                # Enviar solo la tabla de resultados, sin el texto crudo
+                await cl.Message(
+                    content="Resultados:",
+                    elements=[cl.Pandas(value=df, name="Resultados")]
+                ).send()
             else:
-                # Si no se pudo convertir a DataFrame, mostrar como texto
-                sql_message += f"### Resultados:\n\n{sql_result}"
+                # Si no pudimos formatear como tabla, mostrar el texto original
+                await cl.Message(content=f"### Resultados:\n\n{sql_result}").send()
             
-            # Enviar el mensaje con la consulta SQL y resultados
+            # Mensaje con tiempo de respuesta (enviar antes de la consulta SQL)
             await cl.Message(
-                content=sql_message,
-                elements=elements
+                content=f"_Tiempo de respuesta: {response_time:.2f} segundos_",
+                author="Sistema"
+            ).send()
+            
+            # Mensaje con la consulta SQL al final
+            await cl.Message(
+                content=f"```sql\n{sql_query}\n```",
+                author="Consulta SQL"
             ).send()
         else:
             # Para respuestas normales, extraer la respuesta del campo generation
@@ -193,12 +280,12 @@ async def on_message(message: cl.Message):
             
             # Enviar la respuesta al usuario
             await cl.Message(content=answer).send()
-        
-        # Mensaje con tiempo de respuesta
-        await cl.Message(
-            content=f"_Tiempo de respuesta: {response_time:.2f} segundos_",
-            author="Sistema"
-        ).send()
+            
+            # Mensaje con tiempo de respuesta
+            await cl.Message(
+                content=f"_Tiempo de respuesta: {response_time:.2f} segundos_",
+                author="Sistema"
+            ).send()
             
     except Exception as e:
         # Eliminar el mensaje de procesamiento en caso de error

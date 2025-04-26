@@ -1,0 +1,107 @@
+{
+  "conversation": {
+    "title": "Conversación",
+    "noMessages": "No hay mensajes",
+    "messageTooLong": "Mensaje demasiado largo",
+    "sendButton": "Enviar",
+    "inputPlaceholder": "Escribe un mensaje...",
+    "connecting": "Conectando...",
+    "reconnecting": "Conexión perdida. Reconectando...",
+    "tryAgain": "Intentar de nuevo",
+    "showPrompt": "Mostrar prompt",
+    "hidePrompt": "Ocultar prompt",
+    "enableMic": "Habilitar micrófono",
+    "disableMic": "Deshabilitar micrófono",
+    "uploadFile": "Subir archivo",
+    "tryAgainReasonConnecting": "porque estamos conectando",
+    "tryAgainReasonFirstChunk": "porque el primer fragmento no ha llegado",
+    "tryAgainReasonMaxToken": "porque se ha superado el límite de tokens",
+    "stopGeneration": "Detener generación",
+    "darkMode": "Tema oscuro",
+    "lightMode": "Tema claro",
+    "retryWithDifferentMaxTokens": "Reintentar con diferentes tokens máximos",
+    "continueGeneration": "Continuar generación",
+    "autoScrollDisabled": "Auto-scroll desactivado"
+  },
+  "settings": {
+    "title": "Configuración",
+    "clearConversation": "Limpiar conversación",
+    "clearConversationConfirm": "¿Estás seguro de que quieres limpiar esta conversación?",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "loading": "Cargando...",
+    "errorOccurred": "Ha ocurrido un error"
+  },
+  "chatSettings": {
+    "title": "Ajustes del chat",
+    "temperature": "Temperatura",
+    "temperatureDescription": "Controla la aleatoriedad de la respuesta. Valores bajos son más deterministas, valores altos son más creativos.",
+    "maxTokens": "Tokens máximos",
+    "maxTokensDescription": "Controla el número máximo de tokens generados. Si las respuestas se cortan, aumenta este valor."
+  },
+  "userSettings": {
+    "title": "Configuración del usuario",
+    "email": "Email",
+    "userMessageColor": "Color de los mensajes de usuario",
+    "assistantMessageColor": "Color de los mensajes del asistente",
+    "reset": "Resetear",
+    "save": "Guardar"
+  },
+  "auth": {
+    "title": "Autenticación",
+    "login": "Iniciar sesión",
+    "loginWithEmail": "Iniciar sesión con email",
+    "logout": "Cerrar sesión",
+    "authCode": "Código de autenticación",
+    "loginPrompt": "Por favor, inicia sesión para continuar",
+    "emailPlaceholder": "nombre@correo.com",
+    "codePlaceholder": "Código de 6 dígitos",
+    "codeInputTitle": "Introduce el código de autenticación",
+    "passwordPlaceholder": "Contraseña",
+    "loginTitle": "Iniciar sesión",
+    "emailRequiredError": "Email es requerido",
+    "invalidEmail": "Email inválido",
+    "codeRequiredError": "Código es requerido",
+    "passwordRequiredError": "Contraseña es requerida",
+    "passwordMinLengthError": "La contraseña debe tener al menos {{length}} caracteres",
+    "tokenRequiredError": "Token es requerido",
+    "next": "Siguiente",
+    "back": "Atrás",
+    "submitCode": "Enviar código",
+    "sendingCode": "Enviando código...",
+    "continuingWithEmail": "Continuando con email...",
+    "emailSent": "Email enviado",
+    "loginError": "Error de inicio de sesión",
+    "emailPrompt": "Ingresa tu correo electrónico",
+    "rememberMe": "Recordarme"
+  },
+  "elements": {
+    "expandTables": "Expandir tablas",
+    "copied": "Copiado",
+    "copy": "Copiar",
+    "download": "Descargar",
+    "more": "Más",
+    "less": "Menos",
+    "step": "Paso"
+  },
+  "audioPlayer": {
+    "stop": "Detener",
+    "play": "Reproducir"
+  },
+  "chatProfiles": {
+    "title": "Perfiles de chat",
+    "currentProfilePrefix": "Chat actual:",
+    "select": "Seleccionar perfil"
+  },
+  "feedbackModal": {
+    "title": "Valorar respuesta",
+    "good": "Buena",
+    "bad": "Mala",
+    "commentPlaceholder": "¿Por qué evalúas así la respuesta?",
+    "submitGood": "Enviar valoración positiva",
+    "submitBad": "Enviar valoración negativa",
+    "submitting": "Enviando...",
+    "submitted": "Valoración enviada",
+    "errorOccurred": "Ha ocurrido un error"
+  }
+} 
