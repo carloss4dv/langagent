@@ -79,6 +79,9 @@ class LangChainAgent:
         self.workflow = None
         self.app = None
         
+        # Inicializar vectorstore handler
+        self.vectorstore_handler = VectorStoreFactory.create_handler(self.vector_db_type)
+        
         # Para compatibilidad con código existente
         if self.vector_db_type == "chroma":
             self.chroma_base_dir = PATHS_CONFIG.get("default_chroma_dir", "./chroma")
