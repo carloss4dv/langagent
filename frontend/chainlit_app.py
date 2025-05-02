@@ -379,52 +379,53 @@ def parse_tabulated_data(text):
 
 @cl.on_chat_start
 async def on_chat_start():
-    """
-    Inicializa el chat cuando un usuario se conecta.
-    """
-    # Mensaje de bienvenida
+    # Configurar la interfaz
     await cl.Message(
         content="👋 ¡Hola! Soy el asistente de SEGEDA. ¿En qué puedo ayudarte?",
+        elements=[
+            cl.Button(name="explorar_cubo", label="Explorar Cubo", variant="primary"),
+            cl.Button(name="cruzar_datos", label="Cruzar Datos", variant="secondary"),
+            cl.Button(name="generar_reporte", label="Generar Reporte", variant="secondary")
+        ]
     ).send()
 
 @cl.on_message
 async def on_message(message: cl.Message):
-    """
-    Procesa cada mensaje enviado por el usuario.
+    # Procesar el mensaje con el selector SEGEDA
+    respuesta = await segeda_selector.procesar_consulta(message.content)
     
-    Args:
-        message: Mensaje del usuario
-    """
-    # Primero, procesar con el selector SEGEDA
-    selector_response = await segeda_selector.procesar_consulta(message.content)
+    # Crear elementos interactivos basados en la respuesta
+    elements = []
+    
+    if respuesta["tipo"] == "ambito_sugerido":
+        # Añadir botones para cada cubo disponible
+        for cubo in respuesta["cubos"]:
+            elements.append(
+                cl.Button(
+                    name=f"explorar_cubo_{cubo}",
+                    label=f"Explorar {cubo}",
+                    variant="primary"
+                )
+            )
+        
+        # Si es una consulta de reporte, añadir botón de generación
+        if respuesta.get("is_consulta", False):
+            elements.append(
+                cl.Button(
+                    name="generar_reporte",
+                    label="Generar Reporte",
+                    variant="secondary"
+                )
+            )
+    
+    # Enviar la respuesta con los elementos interactivos
+    await cl.Message(
+        content=respuesta["mensaje"],
+        elements=elements
+    ).send()
     
     # Si el selector sugiere un ámbito, mostrarlo primero
-    if selector_response["tipo"] == "ambito_sugerido":
-        # Crear botones para los cubos disponibles
-        elements = []
-        for cubo in selector_response["cubos"]:
-            elements.append(cl.Button(
-                name=f"explorar_cubo_{cubo}",
-                label=f"Explorar {cubo}",
-                value=cubo,
-                action="explorar_cubo"
-            ))
-        
-        # Añadir botón para cruzar datos si hay más de un cubo
-        if len(selector_response["cubos"]) > 1:
-            elements.append(cl.Button(
-                name="cruzar_datos",
-                label="Cruzar Datos",
-                value=",".join(selector_response["cubos"]),
-                action="cruzar_datos"
-            ))
-        
-        await cl.Message(
-            content=f"### Ámbito Sugerido: {selector_response['ambito']}\n\n{selector_response['mensaje']}",
-            author="SEGEDA Selector",
-            elements=elements
-        ).send()
-        
+    if respuesta["tipo"] == "ambito_sugerido":
         # Ejecutar el agente con la información del selector
         try:
             # Mostrar que estamos procesando
@@ -436,9 +437,9 @@ async def on_message(message: cl.Message):
             # Ejecutar el agente con los parámetros del selector
             result = agent.run(
                 query=message.content,
-                ambito=selector_response["ambito"],
-                cubos=selector_response["cubos"],
-                is_consulta=selector_response.get("is_consulta", False)
+                ambito=respuesta["ambito"],
+                cubos=respuesta["cubos"],
+                is_consulta=respuesta.get("is_consulta", False)
             )
             
             # Calcular tiempo de respuesta
@@ -526,23 +527,23 @@ async def on_message(message: cl.Message):
             await cl.Message(content=error_message).send()
     
     # Si es una exploración de cubo
-    elif selector_response["tipo"] == "exploracion_cubo":
+    elif respuesta["tipo"] == "exploracion_cubo":
         await cl.Message(
-            content=f"### Explorando Cubo: {selector_response['cubo']}\n\n{selector_response['mensaje']}",
+            content=f"### Explorando Cubo: {respuesta['cubo']}\n\n{respuesta['mensaje']}",
             author="SEGEDA Selector"
         ).send()
     
     # Si es un cruce de datos
-    elif selector_response["tipo"] == "cruce_datos":
+    elif respuesta["tipo"] == "cruce_datos":
         await cl.Message(
-            content=f"### Cruzando Datos\n\nÁmbito: {selector_response['ambito']}\nCubos: {', '.join(selector_response['cubos'])}\n\n{selector_response['mensaje']}",
+            content=f"### Cruzando Datos\n\nÁmbito: {respuesta['ambito']}\nCubos: {', '.join(respuesta['cubos'])}\n\n{respuesta['mensaje']}",
             author="SEGEDA Selector"
         ).send()
     
     # Si es una pregunta de clarificación
-    elif selector_response["tipo"] == "pregunta_clarificacion":
+    elif respuesta["tipo"] == "pregunta_clarificacion":
         await cl.Message(
-            content=selector_response["mensaje"],
+            content=respuesta["mensaje"],
             author="SEGEDA Selector"
         ).send()
     
