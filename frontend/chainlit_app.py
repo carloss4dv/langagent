@@ -1,6 +1,6 @@
 """
 Aplicación Chainlit para interactuar con el agente de respuesta a preguntas.
-No requiere FastAPI y se comunica directamente con el agente.
+Integra el selector de ámbitos con Rasa.
 """
 
 import chainlit as cl
@@ -20,8 +20,14 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Importar el agente
 from core.lang_chain_agent import LangChainAgent
 
+# Importar el cliente de Rasa
+from frontend.rasa_integration import RasaClient
+
 # Instanciar el agente
 agent = LangChainAgent()
+
+# Instanciar el cliente de Rasa
+rasa_client = RasaClient()
 
 def extract_column_names_from_sql(sql_query: str) -> List[str]:
     """
@@ -292,10 +298,9 @@ def format_sql_result(result_str: Union[str, List[Tuple]], sql_query: str = None
     # Si todo falla, devolver un DataFrame vacío
     return pd.DataFrame()
 
-def df_to_markdown(df):
+def create_markdown_table(df):
     """
-    Convierte un DataFrame a formato markdown para mostrar como tabla.
-    La tabla se formatea para ocupar el ancho completo disponible.
+    Crea una tabla en formato markdown a partir de un DataFrame
     
     Args:
         df: DataFrame de pandas
@@ -306,252 +311,135 @@ def df_to_markdown(df):
     if df.empty:
         return "No hay datos disponibles."
     
-    # Determinar si la tabla es lo suficientemente amplia para necesitar scroll horizontal
-    needs_scroll = len(df.columns) > 5 or df.shape[1] * df.shape[0] > 50
-    
-    # Iniciar la tabla con un contenedor de overflow cuando sea necesario
-    if needs_scroll:
-        markdown = '<div class="overflow-container">\n\n'
-    else:
-        markdown = ""
-    
-    # Convertir DataFrame a tabla markdown
-    markdown += "| " + " | ".join(str(col) for col in df.columns) + " |\n"
+    # Crear encabezados
+    markdown = "| " + " | ".join(str(col) for col in df.columns) + " |\n"
     markdown += "| " + " | ".join(["---"] * len(df.columns)) + " |\n"
     
-    # Añadir filas y truncar contenido muy largo
+    # Añadir filas
     for _, row in df.iterrows():
         row_values = []
         for val in row.values:
-            # Convertir el valor a string y truncar si es muy largo
+            # Convertir el valor a string
             str_val = str(val)
-            if len(str_val) > 50:  # Limitar longitud para evitar celdas muy anchas
-                str_val = str_val[:47] + "..."
             row_values.append(str_val)
         
         markdown += "| " + " | ".join(row_values) + " |\n"
     
-    # Cerrar el div si se abrió
-    if needs_scroll:
-        markdown += "\n</div>"
-    
     return markdown
 
-def df_to_html(df):
+def parse_tabulated_data(text):
     """
-    Convierte un DataFrame a HTML para mostrar como tabla.
+    Parsea datos en formato de tabla con separación por tabulaciones.
     
     Args:
-        df: DataFrame de pandas
+        text: Texto con datos tabulados
         
     Returns:
-        str: Tabla en formato HTML
+        pd.DataFrame: DataFrame con los datos parseados
     """
-    if df.empty:
-        return "<p>No hay datos disponibles.</p>"
+    lines = text.strip().split('\n')
+    if len(lines) < 2:
+        return pd.DataFrame()
     
-    # Determinar si la tabla es lo suficientemente amplia para necesitar scroll horizontal
-    needs_scroll = len(df.columns) > 5 or df.shape[1] * df.shape[0] > 50
+    # Primera línea como cabecera
+    headers = [h.strip() for h in lines[0].split('\t')]
     
-    # Contenedor con scroll si es necesario
-    container_start = '<div class="overflow-container">' if needs_scroll else ''
-    container_end = '</div>' if needs_scroll else ''
+    # Resto de líneas como datos
+    data = []
+    for i in range(1, len(lines)):
+        if lines[i].strip():
+            cells = [c.strip() for c in lines[i].split('\t')]
+            # Asegurar que la fila tiene el mismo número de columnas que los encabezados
+            if len(cells) < len(headers):
+                cells.extend([''] * (len(headers) - len(cells)))
+            elif len(cells) > len(headers):
+                cells = cells[:len(headers)]
+            data.append(cells)
     
-    # Usar el método to_html de pandas con estilo personalizado
-    html = df.to_html(index=False, border=0, classes="data-table")
+    # Crear DataFrame
+    df = pd.DataFrame(data, columns=headers)
     
-    return f"{container_start}{html}{container_end}"
+    # Convertir columnas numéricas
+    for col in df.columns:
+        try:
+            # Verificar si la columna contiene valores numéricos
+            if df[col].str.replace('.', '', 1).str.replace('%', '', 1).str.isdigit().all():
+                # Si la columna contiene porcentajes
+                if df[col].str.contains('%').any():
+                    df[col] = df[col].str.replace('%', '').astype(float)
+                    df[col] = df[col].apply(lambda x: f"{x:.2f}%")
+                else:
+                    # Convertir a numérico
+                    df[col] = pd.to_numeric(df[col], errors='ignore')
+                    
+                    # Si es decimal, formatear con 2 decimales
+                    if df[col].dtype == float:
+                        df[col] = df[col].apply(lambda x: f"{x:.2f}" if isinstance(x, float) else x)
+        except:
+            # Si hay error, mantener como está
+            pass
+    
+    return df
 
 @cl.on_chat_start
 async def on_chat_start():
-    """
-    Inicializa el chat cuando un usuario se conecta.
-    """
-    # Mensaje de bienvenida
-    await cl.Message(
-        content="👋 ¡Hola! Soy el asistente de SEGEDA. ¿En qué puedo ayudarte?",
-    ).send()
+    """Inicializa la conversación y muestra los ámbitos disponibles."""
+    # Obtener los ámbitos disponibles
+    ambitos = rasa_client.get_ambitos()
+    
+    if not ambitos:
+        await cl.Message(
+            content="No se pudieron obtener los ámbitos disponibles. Por favor, intente más tarde."
+        ).send()
+        return
+    
+    # Crear el mensaje con los ámbitos
+    message = "Bienvenido al selector de ámbitos. Los ámbitos disponibles son:\n\n"
+    for ambito, descripcion in ambitos.items():
+        message += f"- **{ambito}**: {descripcion}\n"
+    message += "\n¿Qué ámbito te interesa consultar?"
+    
+    await cl.Message(content=message).send()
 
 @cl.on_message
 async def on_message(message: cl.Message):
-    """
-    Procesa cada mensaje enviado por el usuario.
+    """Procesa los mensajes del usuario y maneja la selección de ámbitos y cubos."""
+    user_message = message.content
     
-    Args:
-        message: Mensaje del usuario
-    """
-    # Comprobar si el mensaje contiene datos en formato de lista de tuplas
-    msg_content = message.content
-    
-    # Verificar si el mensaje contiene una consulta SQL en JSON
-    sql_query = None
-    if "{" in msg_content and "sql" in msg_content:
-        try:
-            # Intentar extraer la consulta SQL
-            match = re.search(r'\{[^}]*"sql"\s*:\s*"([^"]*)"[^}]*\}', msg_content)
-            if match:
-                sql_query = match.group(1)
-        except:
-            pass
-    
-    # Detectar si el mensaje tiene un formato específico que podría ser datos
-    if "[(" in msg_content and ")]" in msg_content:
-        try:
-            # Extraer datos
-            data = extract_tuples_from_text(msg_content)
-            
-            if data:
-                # Crear DataFrame con nombres de columnas apropiados
-                columns = None
-                
-                # Si tenemos una consulta SQL, intentar extraer los nombres de columnas
-                if sql_query:
-                    columns = extract_column_names_from_sql(sql_query)
-                    if columns and len(columns) != len(data[0]):
-                        columns = None  # Descartar si no coincide el número de columnas
-                
-                # Si no tenemos columnas de la consulta, usar nombres inferidos
-                if not columns and len(data) > 0:
-                    if len(data[0]) == 8:
-                        # Detectar si la consulta contiene palabras clave específicas
-                        if sql_query and "horas_impartidas" in sql_query:
-                            columns = [
-                                "Categoría PDI", "Cantidad", "Porcentaje", 
-                                "Profesores Primer Curso", "Sexenios Acumulados", 
-                                "Quinquenios Acumulados", "Horas Impartidas", "Porcentaje Horas"
-                            ]
-                        else:
-                            columns = [
-                                "Categoría", "Cantidad", "Porcentaje", 
-                                "Proyectos Internacionales", "Proyectos Nacionales", 
-                                "Proyectos Autonómicos", "Total Fondos (K€)", "Porcentaje Fondos"
-                            ]
-                
-                # Crear DataFrame
-                df = pd.DataFrame(data, columns=columns)
-                
-                # Aplicar formato
-                for col in df.columns:
-                    col_name = str(col).lower()
-                    if "porcentaje" in col_name:
-                        df[col] = df[col].apply(lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x)
-                    elif "fondos" in col_name and "porcentaje" not in col_name:
-                        df[col] = df[col].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
-                    elif df[col].dtype == float:
-                        df[col] = df[col].apply(lambda x: f"{x:.2f}" if isinstance(x, float) else x)
-                
-                # Convertir DataFrame a formato markdown para mostrar directamente
-                markdown_table = df_to_markdown(df)
-                
-                # Mostrar tabla directamente como markdown
-                await cl.Message(content=markdown_table).send()
-                
-                # Si hay una consulta SQL, mostrarla
-                if sql_query:
-                    await cl.Message(
-                        content=f"```sql\n{sql_query}\n```",
-                        author="Consulta SQL"
-                    ).send()
-                
-                return
-        except Exception as e:
-            print(f"Error al procesar tuplas: {str(e)}")
-            # Si falla, continuar con el procesamiento normal
-            pass
-    
-    # Mostrar que estamos procesando
-    processing_msg = await cl.Message(content="Procesando tu consulta...").send()
-    
-    # Iniciar el temporizador para medir el tiempo de respuesta
-    start_time = time.time()
-    
-    try:
-        # Ejecutar el agente con la pregunta del usuario
-        result = agent.run(message.content)
+    # Verificar si es una selección de ámbito
+    if user_message.upper() in ["ACADÉMICO", "ADMISIÓN", "DOCTORADO", "ESTUDIOS PROPIOS", 
+                              "DOCENCIA", "I+D+i", "MOVILIDAD", "RRHH"]:
+        ambito = user_message.upper()
+        cubos = rasa_client.get_cubos(ambito)
         
-        # Calcular tiempo de respuesta
-        response_time = time.time() - start_time
-        
-        # Eliminar el mensaje de procesamiento
-        try:
-            await processing_msg.remove()
-        except Exception as e:
-            print(f"Error al eliminar mensaje de procesamiento: {str(e)}")
-        
-        # Verificar si fue una consulta SQL
-        is_sql_query = result.get("is_consulta", False)
-        sql_query = result.get("sql_query")
-        sql_result = result.get("sql_result")
-        
-        # Si es una consulta SQL con resultados
-        if is_sql_query and sql_query and sql_result:
-            # Formatear el resultado SQL como DataFrame usando los nombres de columnas de la consulta
-            df = format_sql_result(sql_result, sql_query)
-            
-            # Construir mensaje solo con la tabla si tenemos datos
-            if not df.empty:
-                # Convertir a markdown para mostrar directamente
-                markdown_table = df_to_markdown(df)
-                
-                # Mostrar los resultados como tabla markdown
-                await cl.Message(content=f"### Resultados:\n\n{markdown_table}").send()
-            else:
-                # Si no pudimos formatear como tabla, mostrar el texto original
-                await cl.Message(content=f"### Resultados:\n\n{sql_result}").send()
-            
-            # Mensaje con tiempo de respuesta (enviar antes de la consulta SQL)
+        if not cubos:
             await cl.Message(
-                content=f"_Tiempo de respuesta: {response_time:.2f} segundos_",
-                author="Sistema"
+                content=f"No se encontraron cubos para el ámbito {ambito}. Por favor, intente con otro ámbito."
             ).send()
-            
-            # Mensaje con la consulta SQL al final
-            await cl.Message(
-                content=f"```sql\n{sql_query}\n```",
-                author="Consulta SQL"
-            ).send()
-        else:
-            # Para respuestas normales, extraer la respuesta del campo generation
-            answer = None
-            
-            if "generation" in result:
-                generation = result["generation"]
-                if isinstance(generation, dict) and "answer" in generation:
-                    answer = generation["answer"]
-                else:
-                    answer = generation
-            
-            if answer is None and "response" in result:
-                answer = result["response"]
-                
-            if answer is None:
-                answer = "No se pudo generar una respuesta."
-            
-            # Enviar la respuesta al usuario
-            await cl.Message(content=answer).send()
-            
-            # Mensaje con tiempo de respuesta
-            await cl.Message(
-                content=f"_Tiempo de respuesta: {response_time:.2f} segundos_",
-                author="Sistema"
-            ).send()
-            
-    except Exception as e:
-        # Eliminar el mensaje de procesamiento en caso de error
-        try:
-            await processing_msg.remove()
-        except Exception as err:
-            print(f"Error al eliminar mensaje de procesamiento: {str(err)}")
+            return
         
-        # En caso de error, enviar mensaje de error detallado
-        error_message = f"Error al generar respuesta: {str(e)}"
-        print(f"Error detallado: {e}")
+        # Mostrar los cubos disponibles
+        response = f"Has seleccionado el ámbito {ambito}. Los cubos disponibles son:\n\n"
+        for cubo, descripcion in cubos.items():
+            response += f"- **{cubo}**: {descripcion}\n"
+        response += "\n¿Qué cubo te interesa consultar?"
         
-        import traceback
-        trace = traceback.format_exc()
-        print(f"Traceback: {trace}")
-        
-        await cl.Message(content=error_message).send()
+        await cl.Message(content=response).send()
+        return
+    
+    # Verificar si es una selección de cubo
+    # Aquí deberíamos mantener un estado de la conversación para saber si estamos
+    # en la selección de cubos o en otra parte del flujo
+    # Por ahora, asumimos que cualquier mensaje que no sea un ámbito es una consulta
+    # que se enviará a Rasa
+    
+    response = rasa_client.send_message(user_message)
+    if response and len(response) > 0:
+        await cl.Message(content=response[0].get("text", "")).send()
+    else:
+        await cl.Message(
+            content="Lo siento, no pude procesar tu mensaje. Por favor, intenta de nuevo."
+        ).send()
 
 def run_chainlit(port=8000):
     """

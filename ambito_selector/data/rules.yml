@@ -1,0 +1,52 @@
+version: "3.1"
+
+rules:
+- rule: Saludar
+  steps:
+  - intent: saludar
+  - action: utter_saludar
+
+- rule: Despedir
+  steps:
+  - intent: despedir
+  - action: utter_despedir
+
+- rule: Solicitar ayuda
+  steps:
+  - intent: solicitar_ayuda
+  - action: action_sugerir_ambitos
+
+- rule: Consultar ámbitos disponibles
+  steps:
+  - intent: consultar_ambitos
+  - action: action_sugerir_ambitos
+
+- rule: Seleccionar ámbito
+  steps:
+  - intent: seleccionar_ambito
+  - action: action_confirmar_ambito
+
+- rule: Confirmar ámbito seleccionado
+  steps:
+  - intent: confirmar_ambito
+  - action: action_mostrar_cubos
+
+- rule: Negar ámbito seleccionado
+  steps:
+  - intent: negar_ambito
+  - action: action_sugerir_ambitos
+
+- rule: Consultar cubos disponibles
+  steps:
+  - intent: consultar_cubos
+  - action: action_mostrar_cubos
+
+- rule: Seleccionar cubo
+  steps:
+  - intent: seleccionar_cubo
+  - action: action_confirmar_cubo
+
+- rule: Informar tipo de consulta
+  steps:
+  - intent: informar_consulta
+  - action: action_procesar_consulta 

@@ -72,8 +72,7 @@ def create_rag_sql_chain(llm, db_uri, dialect="sqlite"):
     db = SQLDatabase.from_uri(db_uri)
     
     # Obtener información del esquema
-    table_info = db.get_table_info()
-    
+    table_info = db.get_table_info() 
     # Crear plantilla para generar consultas SQL
     sql_prompt = PromptTemplate.from_template(
         """
@@ -82,6 +81,7 @@ def create_rag_sql_chain(llm, db_uri, dialect="sqlite"):
         Puedes ordenar los resultados por una columna relevante para mostrar los ejemplos más interesantes.
         
         Nunca consultes todas las columnas de una tabla, solo selecciona las columnas relevantes para la pregunta.
+        Es obligatorio usar una referencia temporal en la consulta.
         
         Presta atención a usar solo los nombres de columnas que puedes ver en la descripción del esquema.
         Ten cuidado de no consultar columnas que no existen. También, presta atención a qué columna está en qué tabla.
