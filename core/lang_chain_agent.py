@@ -22,7 +22,6 @@ from langagent.models.llm import (
     create_retrieval_grader, 
     create_hallucination_grader, 
     create_answer_grader, 
-    create_question_router,
     create_query_rewriter,
     create_context_generator,
     create_rag_sql_chain
@@ -42,50 +41,50 @@ from langagent.config.config import (
 )
 
 class LangChainAgent:
-    def __init__(self, data_dir=None, vectorstore_dir=None, vector_db_type=None, local_llm=None, local_llm2=None, local_llm3=None, consultas_dir=None):
+    def __init__(self, config_path=None):
         """
-        Inicializa el agente con todos sus componentes, creando una vectorstore separada
-        para cada cubo identificado en los documentos.
+        Inicializa el agente con la configuración especificada.
         
         Args:
-            data_dir (str, optional): Directorio con los documentos markdown.
-            vectorstore_dir (str, optional): Directorio base para las bases de datos vectoriales.
-            vector_db_type (str, optional): Tipo de vectorstore a utilizar ('chroma' o 'milvus').
-            local_llm (str, optional): Nombre del modelo LLM principal.
-            local_llm2 (str, optional): Nombre del segundo modelo LLM.
-            local_llm3 (str, optional): Nombre del tercer modelo LLM.
-            consultas_dir (str, optional): Directorio con las consultas guardadas.
+            config_path (str, optional): Ruta al archivo de configuración. Si no se proporciona,
+                                        se usará la configuración por defecto.
         """
-        self.data_dir = data_dir or PATHS_CONFIG["default_data_dir"]
-        self.vectorstore_dir = vectorstore_dir or PATHS_CONFIG["default_vectorstore_dir"]
-        self.vector_db_type = vector_db_type or VECTORSTORE_CONFIG.get("vector_db_type", "chroma")
-        self.local_llm = local_llm or LLM_CONFIG["default_model"]
-        self.local_llm2 = local_llm2 or LLM_CONFIG["default_model2"]
-        self.local_llm3 = local_llm3 or LLM_CONFIG["default_model3"]
-        self.consultas_dir = consultas_dir or os.path.join(os.path.dirname(self.data_dir), "consultas_guardadas")
+        # Cargar configuración
+        self.config = load_config(config_path)
+        
+        # Configurar directorios
+        self.data_dir = self.config.get("data_dir", "data")
+        self.vectorstore_dir = self.config.get("vectorstore_dir", "vectorstore")
+        self.consultas_dir = self.config.get("consultas_dir", "consultas")
+        
+        # Configurar modelos
+        self.local_llm = self.config.get("local_llm", "mistral")
+        self.local_llm2 = self.config.get("local_llm2", "mistral")
+        self.local_llm3 = self.config.get("local_llm3", "mistral")
+        
+        # Configurar tipo de vectorstore
+        self.vector_db_type = self.config.get("vector_db_type", "chroma")
+        
+        # Inicializar componentes
+        self.llm = None
+        self.llm2 = None
+        self.llm3 = None
+        self.embeddings = None
+        self.vectorstores = {}
+        self.consultas_vectorstores = {}
+        self.retrievers = {}
+        self.rag_chain = None
+        self.retrieval_grader = None
+        self.hallucination_grader = None
+        self.answer_grader = None
+        self.query_rewriter = None
+        self.rag_sql_chain = None
+        self.workflow = None
+        self.app = None
         
         # Para compatibilidad con código existente
         if self.vector_db_type == "chroma":
             self.chroma_base_dir = PATHS_CONFIG.get("default_chroma_dir", "./chroma")
-        
-        self.embeddings = None
-        self.retrievers = {}
-        self.vectorstores = {}
-        self.consultas_vectorstores = {}
-        self.llm = None
-        self.llm2 = None
-        self.rag_chain = None
-        self.rag_sql_chain = None
-        self.retrieval_grader = None
-        self.hallucination_grader = None
-        self.answer_grader = None
-        self.question_router = None
-        self.workflow = None
-        self.app = None
-        self.query_rewriter = None
-        
-        # Obtener la instancia de vectorstore
-        self.vectorstore_handler = VectorStoreFactory.get_vectorstore_instance(self.vector_db_type)
         
         self.setup_agent()
 
@@ -496,9 +495,6 @@ class LangChainAgent:
         self.hallucination_grader = create_hallucination_grader(self.llm3)
         self.answer_grader = create_answer_grader(self.llm3)
         
-        # Crear un router de preguntas que determine qué cubo usar y si es una consulta
-        self.question_router = create_question_router(self.llm2)
-        
         # Crear un reescritor de consultas para mejorar la recuperación
         # Usamos el LLM principal para mejor calidad en la reescritura
         self.query_rewriter = create_query_rewriter(self.llm)
@@ -555,34 +551,43 @@ class LangChainAgent:
     
     def _create_workflow(self):
         """
-        Crea el flujo de trabajo del agente utilizando LangGraph.
+        Crea el flujo de trabajo del agente.
         """
-        # Crear el flujo de trabajo
         self.workflow = create_workflow(
             retrievers=self.retrievers,
             rag_chain=self.rag_chain,
             retrieval_grader=self.retrieval_grader,
             hallucination_grader=self.hallucination_grader,
             answer_grader=self.answer_grader,
-            question_router=self.question_router,
-            query_rewriter=self.query_rewriter,  # Pasar el reescritor de consultas
-            rag_sql_chain=self.rag_sql_chain     # Pasar la cadena SQL
+            query_rewriter=self.query_rewriter,
+            rag_sql_chain=self.rag_sql_chain
         )
     
-    def run(self, query):
+    def run(self, query, ambito=None, cubos=None, is_consulta=False):
         """
         Ejecuta el agente con una consulta del usuario.
         
         Args:
             query (str): Consulta del usuario.
+            ambito (str, optional): Ámbito de la consulta.
+            cubos (list, optional): Lista de cubos relevantes.
+            is_consulta (bool, optional): Indica si es una consulta guardada o SQL.
             
         Returns:
             Dict: Resultado de la ejecución del agente.
         """
         print_title(f"Consulta: {query}")
         
+        # Crear el estado inicial con los parámetros proporcionados
+        initial_state = {
+            "question": query,
+            "ambito": ambito,
+            "relevant_cubos": cubos or [],
+            "is_consulta": is_consulta
+        }
+        
         # Ejecutar el workflow
-        result = self.app.invoke({"question": query})
+        result = self.app.invoke(initial_state)
         
         # Mostrar documentos recuperados
         if "documents" in result:

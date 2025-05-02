@@ -482,7 +482,7 @@ class MilvusVectorStore(VectorStoreBase):
         
         # Determinar el tipo de búsqueda a utilizar
         # 'hybrid' no es un valor válido para search_type, usar 'similarity' en su lugar
-        search_type = "similarity"  # Valor por defecto permitido
+        search_type = "mmr"  # Valor por defecto permitido
         
         # Crear los parámetros de búsqueda
         search_kwargs = {

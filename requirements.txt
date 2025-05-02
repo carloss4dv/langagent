@@ -70,7 +70,10 @@ pymilvus
 # Frontend Chainlit
 chainlit
 
-# Dependencias para Rasa
-rasa==3.6.2
-rasa-sdk==3.6.2
-requests>=2.31.0
+# Nuevas dependencias de chatterbot
+chatterbot==1.0.4
+chatterbot-corpus==1.2.0
+SQLAlchemy==1.4.23
+chainlit==0.7.700
+python-dotenv==1.0.0
+typing-extensions==4.5.0

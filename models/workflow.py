@@ -88,141 +88,7 @@ def normalize_name(name: str) -> str:
     
     return normalized
 
-def find_relevant_cubos_by_keywords(query: str, available_cubos: List[str]) -> Tuple[List[str], Optional[str]]:
-    """
-    Encuentra cubos relevantes basados en palabras clave y ámbitos en la consulta.
-    Si se identifica un ámbito, devuelve todos los cubos asociados a ese ámbito.
-    
-    Args:
-        query: La consulta del usuario
-        available_cubos: Lista de cubos disponibles
-        
-    Returns:
-        Tuple[List[str], Optional[str]]: (Lista de cubos relevantes, ámbito identificado)
-    """
-    query_lower = query.lower()
-    
-    # Buscar referencias explícitas a ámbitos
-    explicit_ambito_pattern = r"(?:ámbito|ambito)\s+(\w+)"
-    ambito_matches = re.findall(explicit_ambito_pattern, query_lower)
-    
-    # Verificar ámbitos explícitos
-    for match in ambito_matches:
-        ambito_key = match.lower().replace(" ", "_")
-        if ambito_key in AMBITOS_CUBOS:
-            # Devolver todos los cubos disponibles del ámbito
-            relevant_cubos = [
-                cubo for cubo in AMBITOS_CUBOS[ambito_key]["cubos"]
-                if cubo in available_cubos
-            ]
-            return relevant_cubos, ambito_key
-    
-    # Buscar referencias explícitas a cubos
-    explicit_cubo_pattern = r"(?:del|en el|del cubo|en el cubo)\s+(\w+)"
-    cubo_matches = re.findall(explicit_cubo_pattern, query_lower)
-    
-    for match in cubo_matches:
-        if match in available_cubos:
-            # Identificar el ámbito del cubo
-            ambito = CUBO_TO_AMBITO.get(match)
-            if ambito:
-                # Devolver todos los cubos del ámbito
-                relevant_cubos = [
-                    cubo for cubo in AMBITOS_CUBOS[ambito]["cubos"]
-                    if cubo in available_cubos
-                ]
-                return relevant_cubos, ambito
-            return [match], None
-    
-    # Buscar keywords de ámbitos
-    ambito_scores = {}
-    for ambito, keywords in AMBITO_KEYWORDS.items():
-        score = sum(1 for keyword in keywords if keyword in query_lower)
-        if score > 0:
-            ambito_scores[ambito] = score
-    
-    # Si encontramos ámbitos por keywords
-    if ambito_scores:
-        # Seleccionar el ámbito con mayor puntuación
-        selected_ambito = max(ambito_scores.items(), key=lambda x: x[1])[0]
-        relevant_cubos = [
-            cubo for cubo in AMBITOS_CUBOS[selected_ambito]["cubos"]
-            if cubo in available_cubos
-        ]
-        return relevant_cubos, selected_ambito
-    
-    # Si no encontramos nada, devolver todos los cubos disponibles
-    return list(available_cubos), None
-
-def execute_query(state):
-    """
-    Ejecuta la consulta SQL generada.
-    
-    Args:
-        state (dict): Estado actual del grafo.
-        
-    Returns:
-        dict: Estado actualizado con el resultado de la consulta SQL.
-    """
-    # Obtener la consulta SQL del estado
-    sql_query = state.get("sql_query")
-    if not sql_query:
-        print("No hay consulta SQL para ejecutar.")
-        return state
-    
-    print("---EXECUTE QUERY---")
-    
-    # Comprobar si sql_query es un string JSON 
-    if isinstance(sql_query, str):
-        try:
-            # Intentar parsear como JSON
-            if sql_query.strip().startswith('{'):
-                query_data = json.loads(sql_query)
-                if isinstance(query_data, dict):
-                    # Buscar la consulta en diferentes claves posibles
-                    if "query" in query_data:
-                        sql_query = query_data["query"]
-                        print("Consulta SQL extraída del objeto JSON (clave 'query').")
-                    elif "sql" in query_data:
-                        sql_query = query_data["sql"]
-                        print("Consulta SQL extraída del objeto JSON (clave 'sql').")
-        except json.JSONDecodeError:
-            # Si no es JSON válido, usar el string como está
-            pass
-    
-    print(f"Ejecutando consulta SQL: {sql_query}")
-    
-    try:
-        # Crear la conexión a la base de datos y herramienta de consulta
-        if SQL_CONFIG.get("db_uri"):
-            db = SQLDatabase.from_uri(SQL_CONFIG.get("db_uri"))
-            execute_query_tool = QuerySQLDatabaseTool(db=db)
-            
-            # Ejecutar la consulta
-            result = execute_query_tool.invoke(sql_query)
-            print("Consulta ejecutada con éxito.")
-            
-            # Actualizar el estado con el resultado
-            return {
-                **state,
-                "sql_result": result
-            }
-        else:
-            error = "No se ha configurado la conexión a la base de datos."
-            print(error)
-            return {
-                **state,
-                "sql_result": error
-            }
-    except Exception as e:
-        error = f"Error al ejecutar la consulta SQL: {str(e)}"
-        print(error)
-        return {
-            **state,
-            "sql_result": error
-        }
-
-def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grader, answer_grader, question_router, query_rewriter=None, rag_sql_chain=None):
+def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grader, answer_grader, query_rewriter=None, rag_sql_chain=None):
     """
     Crea un flujo de trabajo para el agente utilizando LangGraph.
     Soporta múltiples vectorstores organizados en cubos y consultas a bases de datos SQL.
@@ -233,7 +99,6 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         retrieval_grader: Evaluador de relevancia de documentos.
         hallucination_grader: Evaluador de alucinaciones.
         answer_grader: Evaluador de utilidad de respuestas.
-        question_router: Router de preguntas para determinar cubos relevantes.
         query_rewriter: Reescritor de consultas para mejorar la recuperación.
         rag_sql_chain: Cadena para consultas SQL cuando se detecta que es una consulta de base de datos.
         
@@ -242,220 +107,6 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
     """
     # Definimos el grafo de estado
     workflow = StateGraph(GraphState)
-    
-    # Nodos
-    
-    def route_question(state):
-        """
-        Determines which cubes are relevant for the question and the corresponding scope.
-        Also rewrites the question to improve retrieval if query_rewriter is provided.
-        
-        Args:
-            state (dict): Current graph state.
-            
-        Returns:
-            dict: Updated state with identified relevant cubes, scope, rewritten question, and if it's a query.
-        """
-        print("---ROUTE QUESTION---")
-        question = state["question"]
-        print(f"Pregunta original: {question}")
-        
-        # Inicializar el indicador de consulta y la pregunta reescrita
-        state["is_consulta"] = False
-        state["consulta_documents"] = []
-        state["rewritten_question"] = question  # Por defecto, usar la pregunta original
-        
-        try:
-            # Reescribir la pregunta si tenemos un reescritor
-            if query_rewriter:
-                try:
-                    rewritten_question = query_rewriter.invoke({"question": question})
-                    if rewritten_question and isinstance(rewritten_question, str) and len(rewritten_question.strip()) > 0:
-                        state["rewritten_question"] = rewritten_question.strip()
-                        print(f"Pregunta reescrita: {state['rewritten_question']}")
-                except Exception as e:
-                    print(f"Error al reescribir la pregunta: {e}")
-                    # En caso de error, mantener la pregunta original
-            
-            # Usar la pregunta reescrita para el resto del procesamiento
-            processed_question = state["rewritten_question"]
-            
-            # Determinar si la pregunta es sobre una consulta guardada
-            consulta_keywords = [
-                "consulta guardada", "consultas guardadas", "dashboard", 
-                "visualización", "visualizacion", "reporte", "informe", 
-                "cuadro de mando", "análisis predefinido", "analisis predefinido"
-            ]
-            
-            # Verificar si alguna palabra clave está en la pregunta
-            question_lower = processed_question.lower()
-            es_consulta = any(keyword in question_lower for keyword in consulta_keywords)
-            
-            # Si el router es un retriever de llama-index, usarlo directamente
-            if hasattr(question_router, '_router_query_engine'):
-                # Obtener documentos usando el router retriever con la pregunta reescrita
-                docs = question_router.invoke({"question": processed_question})
-                if docs:
-                    # Extraer el cubo del primer documento
-                    first_doc = docs[0]
-                    cube_name = first_doc.metadata.get('cubo_source', '')
-                    scope = first_doc.metadata.get('ambito', '')
-                    state["relevant_cubos"] = [cube_name] if cube_name else list(retrievers.keys())
-                    state["ambito"] = scope
-                    print(f"Router identified cube: {cube_name}")
-                    print(f"Router identified scope: {scope}")
-                else:
-                    state["relevant_cubos"] = list(retrievers.keys())
-                    state["ambito"] = None
-                    print("No specific cube identified. Using all available cubes.")
-            else:
-                # Usar el router de preguntas estándar con la pregunta reescrita
-                routing_result = question_router.invoke({"question": processed_question})
-                
-                # Router can return a dictionary directly or a JSON string
-                if isinstance(routing_result, dict):
-                    cube_name = routing_result.get("cube", "")
-                    scope = routing_result.get("scope", "")
-                    confidence = routing_result.get("confidence", "LOW")
-                    is_query = routing_result.get("is_query", False)
-                elif isinstance(routing_result, str):
-                    try:
-                        parsed = json.loads(routing_result)
-                        cube_name = parsed.get("cube", "")
-                        scope = parsed.get("scope", "")
-                        confidence = parsed.get("confidence", "LOW")
-                        is_query = parsed.get("is_query", False)
-                    except json.JSONDecodeError:
-                        # Fallback regex parsing if needed
-                        cube_match = re.search(r'"cube"\s*:\s*"([^"]+)"', routing_result)
-                        cube_name = cube_match.group(1) if cube_match else ""
-                        scope_match = re.search(r'"scope"\s*:\s*"([^"]+)"', routing_result)
-                        scope = scope_match.group(1) if scope_match else ""
-                        confidence = "LOW"
-                        is_query = False
-                else:
-                    cube_name = ""
-                    scope = ""
-                    confidence = "LOW"
-                    is_query = False
-                
-                print(f"Router identified cube: {cube_name}")
-                print(f"Router identified scope: {scope}")
-                print(f"Router confidence: {confidence}")
-                print(f"Is query: {is_query}")
-                
-                # Nombres en inglés recibidos del router
-                cube_name_lower = cube_name.lower() if cube_name else ""
-                scope_lower = scope.lower() if scope else ""
-                
-                # Simplemente usamos los nombres originales, ya que están en español
-                es_cube_name = cube_name
-                es_scope = scope
-                
-                # SOLO intentamos traducir cuando realmente tenemos nombres en inglés
-                # Para cubos: comprobamos si el cubo está en las claves de inglés a español, pero NO en las claves español a inglés
-                if es_cube_name:
-                    # Comprobar si es un nombre en inglés conocido: está en CUBO_EN_ES pero no como clave española
-                    nombre_normalizado = normalize_name(es_cube_name)
-                    
-                    # Verificar si el nombre está como clave inglesa pero no como clave española
-                    es_nombre_ingles = False
-                    for en_name in list(CUBO_EN_ES.keys())[:25]:  # Solo las claves inglés->español (primera mitad)
-                        if normalize_name(en_name) == nombre_normalizado:
-                            es_nombre_ingles = True
-                            es_cube_name = CUBO_EN_ES[en_name]
-                            print(f"Traducido cubo (inglés->español): {cube_name} -> {es_cube_name}")
-                            break
-                
-                # Para ámbitos: similar, comprobamos si está en las claves de inglés a español, pero NO es un ámbito en español conocido
-                if es_scope:
-                    # Comprobar si es un nombre en inglés conocido: está en AMBITO_EN_ES pero no como clave española
-                    nombre_normalizado = normalize_name(es_scope)
-                    
-                    # Verificar si el nombre está en las claves inglesas pero no es un ámbito válido en español
-                    if nombre_normalizado not in AMBITOS_CUBOS:
-                        for en_name in list(AMBITO_EN_ES.keys())[:8]:  # Solo las claves inglés->español (primera mitad)
-                            if normalize_name(en_name) == nombre_normalizado:
-                                es_scope = AMBITO_EN_ES[en_name]
-                                print(f"Traducido ámbito (inglés->español): {scope} -> {es_scope}")
-                                break
-                
-                # Normalizar nombres para la búsqueda en retrievers
-                normalized_cube = normalize_name(es_cube_name)
-                normalized_scope = normalize_name(es_scope)
-                
-                # Marcar si es una consulta guardada basado en las palabras clave o el router
-                state["is_consulta"] = es_consulta or is_query
-                
-                # Si tenemos alta confianza y el cubo existe, usarlo directamente
-                if confidence == "HIGH" and normalized_cube in retrievers:
-                    state["relevant_cubos"] = [normalized_cube]
-                    state["ambito"] = normalized_scope
-                    print(f"Using specific cube with high confidence: {normalized_cube}")
-                    
-                    # Si es una consulta y tenemos el ámbito, añadir el retriever de consultas
-                    if state["is_consulta"] and normalized_scope:
-                        consulta_retriever_key = f"consultas_{normalized_scope}"
-                        if consulta_retriever_key in retrievers:
-                            state["relevant_cubos"].append(consulta_retriever_key)
-                            print(f"Adding saved query retriever for scope: {normalized_scope}")
-                
-                # Si tenemos un ámbito válido pero confianza media/baja, usar todos los cubos de ese ámbito
-                elif normalized_scope in AMBITOS_CUBOS:
-                    # Inicializar con el cubo específico si existe
-                    state["relevant_cubos"] = [normalized_cube] if normalized_cube in retrievers else []
-                    
-                    # Añadir todos los cubos del ámbito
-                    cubos_ambito = AMBITOS_CUBOS[normalized_scope]["cubos"]
-                    for cubo in cubos_ambito:
-                        if cubo in retrievers and cubo not in state["relevant_cubos"]:
-                            state["relevant_cubos"].append(cubo)
-                    
-                    # Comprobar si tenemos cubos en la lista
-                    if not state["relevant_cubos"]:
-                        print(f"ADVERTENCIA: No se encontraron cubos disponibles para el ámbito '{normalized_scope}'")
-                        print(f"Cubos definidos en el ámbito: {cubos_ambito}")
-                        print(f"Cubos disponibles en retrievers: {list(retrievers.keys())}")
-                        
-                        # Verificar si hay alguna coincidencia parcial en los retrievers
-                        for retriever_key in retrievers.keys():
-                            for cubo in cubos_ambito:
-                                if cubo in retriever_key:
-                                    state["relevant_cubos"].append(retriever_key)
-                                    print(f"Añadida coincidencia parcial: {retriever_key}")
-                        
-                        # Si aún no hay cubos, usar la colección unificada si existe
-                        if not state["relevant_cubos"] and "unified" in retrievers:
-                            state["relevant_cubos"].append("unified")
-                            print("Usando colección unificada como fallback")
-                    
-                    # Añadir retriever de consultas guardadas si aplica
-                    if state["is_consulta"]:
-                        consulta_retriever_key = f"consultas_{normalized_scope}"
-                        if consulta_retriever_key in retrievers:
-                            state["relevant_cubos"].append(consulta_retriever_key)
-                            print(f"Adding saved query retriever for scope: {normalized_scope}")
-                    
-                    state["ambito"] = normalized_scope
-                    print(f"Using scope {normalized_scope} with cubes: {state['relevant_cubos']}")
-                else:
-                    # Fallback to using all available cubes
-                    state["relevant_cubos"] = list(retrievers.keys()) if isinstance(retrievers, dict) else []
-                    state["ambito"] = None
-                    print("No specific scope identified. Using all available cubes.")
-            
-        except Exception as e:
-            print(f"Error in route_question: {e}")
-            # On error, use all cubes if retrievers is a dict
-            state["relevant_cubos"] = list(retrievers.keys()) if isinstance(retrievers, dict) else []
-            state["ambito"] = None
-            print("Error in router. Using all available cubes.")
-        
-        # Initialize retry counter
-        state["retry_count"] = 0
-        state["retrieval_details"] = {}
-        
-        return state
     
     def retrieve(state):
         """
@@ -468,15 +119,17 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             dict: Updated state with retrieved documents.
         """
         question = state["question"]
-        rewritten_question = state.get("rewritten_question", question)  # Usar pregunta reescrita si existe, sino la original
+        rewritten_question = state.get("rewritten_question", question)
         relevant_cubos = state.get("relevant_cubos", [])
         ambito = state.get("ambito")
         retry_count = state.get("retry_count", 0)
+        is_consulta = state.get("is_consulta", False)
         
         print("---RETRIEVE---")
         print(f"Búsqueda con pregunta: {rewritten_question}")
         print(f"Ámbito identificado: {ambito}")
         print(f"Cubos relevantes: {relevant_cubos}")
+        print(f"Es consulta: {is_consulta}")
         
         # Si no hay cubos relevantes, usar todos disponibles
         if not relevant_cubos and isinstance(retrievers, dict):
@@ -499,7 +152,15 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         if retry_count >= WORKFLOW_CONFIG.get("max_retries", 2) - 1 and combined_retriever_exists:
             try:
                 print("Usando retriever combinado para todos los cubos...")
-                docs = retrievers["combined"].invoke(rewritten_question)
+                # Crear filtros para el retriever combinado
+                filters = {}
+                if ambito:
+                    filters["ambito"] = ambito
+                if is_consulta:
+                    filters["is_consulta"] = "true"
+                
+                # Invocar el retriever con los filtros
+                docs = retrievers["combined"].invoke(rewritten_question, filter=filters)
                 
                 # Comprobar si todos los documentos son relevantes
                 relevant_docs = []
@@ -545,9 +206,18 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                         print(f"ADVERTENCIA: No se encontró retriever para el cubo '{cubo}'")
                         continue
                     
-                    # Obtener documentos del cubo
+                    # Crear filtros para el retriever
+                    filters = {}
+                    if ambito:
+                        filters["ambito"] = ambito
+                    if is_consulta:
+                        filters["is_consulta"] = "true"
+                    if cubo:
+                        filters["cubo_source"] = cubo
+                    
+                    # Obtener documentos del cubo con los filtros
                     print(f"Recuperando documentos del cubo: {cubo}")
-                    docs = retrievers[cubo].invoke(rewritten_question)
+                    docs = retrievers[cubo].invoke(rewritten_question, filter=filters)
                     print(f"Documentos recuperados de {cubo}: {len(docs)}")
                     
                     # Comprobar si todos los documentos son relevantes
@@ -608,7 +278,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                     retrieval_details[cubo] = {
                         "count": len(docs),
                         "relevant_count": len(relevant_docs),
-                    "ambito": ambito,
+                        "ambito": ambito,
                         "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
                     }
                         
@@ -630,7 +300,8 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             "retry_count": retry_count,
             "relevant_cubos": state.get("relevant_cubos", []),
             "ambito": ambito,
-            "retrieval_details": retrieval_details
+            "retrieval_details": retrieval_details,
+            "is_consulta": is_consulta
         }
         
     # Función auxiliar para recuperar documentos de la colección unificada
@@ -645,7 +316,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             dict: Estado actualizado con los documentos recuperados.
         """
         question = state["question"]
-        rewritten_question = state.get("rewritten_question", question)  # Usar pregunta reescrita si existe, sino la original
+        rewritten_question = state.get("rewritten_question", question)
         retry_count = state.get("retry_count", 0)
         ambito = state.get("ambito")
         
@@ -720,7 +391,7 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         """
         documents = state["documents"]
         question = state["question"]
-        rewritten_question = state.get("rewritten_question", question)  # Usar pregunta reescrita si existe, sino la original
+        rewritten_question = state.get("rewritten_question", question)
         retry_count = state.get("retry_count", 0)
         relevant_cubos = state.get("relevant_cubos", [])
         retrieval_details = state.get("retrieval_details", {})
@@ -870,15 +541,81 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             "sql_result": state.get("sql_result")
         }
     
+    def execute_query(state):
+        """
+        Ejecuta la consulta SQL generada.
+        
+        Args:
+            state (dict): Estado actual del grafo.
+            
+        Returns:
+            dict: Estado actualizado con el resultado de la consulta SQL.
+        """
+        # Obtener la consulta SQL del estado
+        sql_query = state.get("sql_query")
+        if not sql_query:
+            print("No hay consulta SQL para ejecutar.")
+            return state
+        
+        print("---EXECUTE QUERY---")
+        
+        # Comprobar si sql_query es un string JSON 
+        if isinstance(sql_query, str):
+            try:
+                # Intentar parsear como JSON
+                if sql_query.strip().startswith('{'):
+                    query_data = json.loads(sql_query)
+                    if isinstance(query_data, dict):
+                        # Buscar la consulta en diferentes claves posibles
+                        if "query" in query_data:
+                            sql_query = query_data["query"]
+                            print("Consulta SQL extraída del objeto JSON (clave 'query').")
+                        elif "sql" in query_data:
+                            sql_query = query_data["sql"]
+                            print("Consulta SQL extraída del objeto JSON (clave 'sql').")
+            except json.JSONDecodeError:
+                # Si no es JSON válido, usar el string como está
+                pass
+        
+        print(f"Ejecutando consulta SQL: {sql_query}")
+        
+        try:
+            # Crear la conexión a la base de datos y herramienta de consulta
+            if SQL_CONFIG.get("db_uri"):
+                db = SQLDatabase.from_uri(SQL_CONFIG.get("db_uri"))
+                execute_query_tool = QuerySQLDatabaseTool(db=db)
+                
+                # Ejecutar la consulta
+                result = execute_query_tool.invoke(sql_query)
+                print("Consulta ejecutada con éxito.")
+                
+                # Actualizar el estado con el resultado
+                return {
+                    **state,
+                    "sql_result": result
+                }
+            else:
+                error = "No se ha configurado la conexión a la base de datos."
+                print(error)
+                return {
+                    **state,
+                    "sql_result": error
+                }
+        except Exception as e:
+            error = f"Error al ejecutar la consulta SQL: {str(e)}"
+            print(error)
+            return {
+                **state,
+                "sql_result": error
+            }
+    
     # Añadir nodos al grafo
-    workflow.add_node("route_question", route_question)
     workflow.add_node("retrieve", retrieve)
     workflow.add_node("generate", generate)
     workflow.add_node("execute_query", execute_query)
     
     # Definir bordes - flujo simplificado
-    workflow.set_entry_point("route_question")
-    workflow.add_edge("route_question", "retrieve")
+    workflow.set_entry_point("retrieve")
     workflow.add_edge("retrieve", "generate")
     
     # Definir condición para ejecución de consulta SQL o verificación de reintento
