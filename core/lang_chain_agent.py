@@ -41,14 +41,18 @@ from langagent.config.config import (
 )
 
 class LangChainAgent:
-    def __init__(self):
+    def __init__(self, config_path=None):
         """
-        Inicializa el agente con la configuración por defecto.
+        Inicializa el agente con la configuración especificada.
+        
+        Args:
+            config_path (str, optional): Ruta al archivo de configuración. Si no se proporciona,
+                                        se usará la configuración por defecto.
         """
         # Configurar directorios
         self.data_dir = PATHS_CONFIG.get("default_data_dir", "data")
         self.vectorstore_dir = PATHS_CONFIG.get("default_vectorstore_dir", "vectorstore")
-        self.consultas_dir = PATHS_CONFIG.get("consultas_dir", "consultas")
+        self.consultas_dir = PATHS_CONFIG.get("default_data_dir", "consultas")
         
         # Configurar modelos
         self.local_llm = LLM_CONFIG.get("default_model", "mistral")
