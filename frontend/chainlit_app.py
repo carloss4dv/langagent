@@ -386,8 +386,8 @@ async def on_chat_start():
     await cl.Message(
         content="👋 ¡Hola! Soy el asistente de SEGEDA. ¿En qué puedo ayudarte?",
         actions=[
-            cl.Action(name="explorar_cubo", label="Explorar Cubo", description="Explorar un cubo específico"),
-            cl.Action(name="cruzar_datos", label="Cruzar Datos", description="Cruzar datos de múltiples cubos")
+            cl.Action(name="explorar_cubo", label="Explorar Cubo", description="Explorar un cubo específico", payload={"action": "explorar_cubo"}),
+            cl.Action(name="cruzar_datos", label="Cruzar Datos", description="Cruzar datos de múltiples cubos", payload={"action": "cruzar_datos"})
         ]
     ).send()
 
@@ -407,8 +407,8 @@ async def on_message(message: cl.Message):
         await cl.Message(
             content=respuesta["mensaje"],
             actions=[
-                cl.Action(name="explorar_cubo", label="Explorar Cubo", description="Explorar un cubo específico"),
-                cl.Action(name="cruzar_datos", label="Cruzar Datos", description="Cruzar datos de múltiples cubos")
+                cl.Action(name="explorar_cubo", label="Explorar Cubo", description="Explorar un cubo específico", payload={"action": "explorar_cubo"}),
+                cl.Action(name="cruzar_datos", label="Cruzar Datos", description="Cruzar datos de múltiples cubos", payload={"action": "cruzar_datos"})
             ]
         ).send()
         
@@ -421,8 +421,8 @@ async def on_message(message: cl.Message):
         await cl.Message(
             content=respuesta["mensaje"],
             actions=[
-                cl.Action(name="explorar_cubo", label="Explorar Cubo", description="Explorar un cubo específico"),
-                cl.Action(name="cruzar_datos", label="Cruzar Datos", description="Cruzar datos de múltiples cubos")
+                cl.Action(name="explorar_cubo", label="Explorar Cubo", description="Explorar un cubo específico", payload={"action": "explorar_cubo"}),
+                cl.Action(name="cruzar_datos", label="Cruzar Datos", description="Cruzar datos de múltiples cubos", payload={"action": "cruzar_datos"})
             ]
         ).send()
 
