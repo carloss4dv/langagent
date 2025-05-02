@@ -320,12 +320,12 @@ class SEGEDASelector:
                 "ambito": ambito_sugerido,
                 "cubos": self.ambitos[ambito_sugerido]["cubos"],
                 "is_consulta": es_reporte,
-                "mensaje": f"¿Te interesa el ámbito de {ambito_sugerido}? Podemos explorar: {', '.join(self.ambitos[ambito_sugerido]['cubos'])}"
+                "mensaje": str(respuesta)
             }
         
         return {
             "tipo": "pregunta_clarificacion",
-            "mensaje": "¿Podrías ser más específico sobre qué información necesitas?"
+            "mensaje": str(respuesta)
         }
     
     def _identificar_ambito(self, mensaje: str) -> Optional[str]:

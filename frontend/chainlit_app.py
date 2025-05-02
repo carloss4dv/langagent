@@ -402,10 +402,16 @@ async def on_message(message: cl.Message):
     # Primero procesar con ChatterBot para identificar el ámbito
     respuesta = await segeda_selector.procesar_consulta(message.content)
     
+    # Mostrar la respuesta del selector
+    await cl.Message(
+        content=respuesta["mensaje"],
+        author="SEGEDA Selector"
+    ).send()
+    
     if respuesta["tipo"] == "ambito_sugerido":
         # Si se identificó un ámbito, mostrar los cubos disponibles
         await cl.Message(
-            content=respuesta["mensaje"],
+            content=f"En el ámbito {respuesta['ambito']} puedes explorar los siguientes cubos: {', '.join(respuesta['cubos'])}",
             actions=[
                 cl.Action(name="explorar_cubo", label="Explorar Cubo", description="Explorar un cubo específico", payload={"action": "explorar_cubo"}),
                 cl.Action(name="cruzar_datos", label="Cruzar Datos", description="Cruzar datos de múltiples cubos", payload={"action": "cruzar_datos"})
