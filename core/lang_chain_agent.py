@@ -62,6 +62,9 @@ class LangChainAgent:
         # Configurar tipo de vectorstore
         self.vector_db_type = VECTORSTORE_CONFIG.get("vector_db_type", "chroma")
         
+        # Inicializar el handler de vectorstore
+        self.vectorstore_handler = VectorStoreFactory.get_vectorstore_instance(self.vector_db_type)
+        
         # Inicializar componentes
         self.llm = None
         self.llm2 = None
@@ -78,9 +81,6 @@ class LangChainAgent:
         self.rag_sql_chain = None
         self.workflow = None
         self.app = None
-        
-        # Inicializar vectorstore handler
-        self.vectorstore_handler = VectorStoreFactory.create_handler(self.vector_db_type)
         
         # Para compatibilidad con código existente
         if self.vector_db_type == "chroma":
