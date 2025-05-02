@@ -3,16 +3,23 @@ from chatterbot.trainers import ListTrainer
 from typing import Dict, List, Optional
 import json
 import os
+import spacy
+from chatterbot.utils import get_model_for_language
 
 class SEGEDASelector:
     def __init__(self):
+        # Configurar el modelo de español para ChatterBot
+        spacy.util.set_data_path(os.path.join(os.path.dirname(spacy.__file__), 'data'))
+        spacy.util.set_lang_data('es', {'model': 'es_core_news_sm'})
+        
         self.chatbot = ChatBot(
             'SEGEDA_Selector',
             storage_adapter='chatterbot.storage.SQLStorageAdapter',
             logic_adapters=[
                 'chatterbot.logic.BestMatch',
                 'chatterbot.logic.MathematicalEvaluation'
-            ]
+            ],
+            language='es'
         )
         
         # Estructura de ámbitos y cubos
