@@ -12,7 +12,8 @@ class SEGEDASelector:
             logic_adapters=[
                 'chatterbot.logic.BestMatch',
                 'chatterbot.logic.MathematicalEvaluation'
-            ]
+            ],
+            tagger_language='es'  # Especificar español como idioma
         )
         
         # Estructura de ámbitos y cubos
