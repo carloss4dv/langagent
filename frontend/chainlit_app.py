@@ -22,6 +22,73 @@ from core.lang_chain_agent import LangChainAgent
 # Instanciar el agente
 agent = LangChainAgent()
 
+def get_ambitos_info() -> str:
+    """
+    Retorna la información de los ámbitos y sus cubos en formato markdown.
+    
+    Returns:
+        str: Texto en formato markdown con la información de los ámbitos
+    """
+    ambitos_info = """
+# 👋 ¡Bienvenido al Asistente de SEGEDA!
+
+Soy tu asistente especializado en datos de SEGEDA Estoy aquí para ayudarte a obtener información precisa y relevante del sistema SEGEDA (DATUZ: Open Data and Transparency UZ).
+
+## 🤖 ¿Cómo funciona?
+
+1. Puedes hacerme preguntas sobre cualquier aspecto de la Universidad de Zaragoza
+2. Analizaré tu consulta y determinaré automáticamente el ámbito más relevante
+3. Utilizaré los cubos de datos apropiados para proporcionarte la información más precisa
+4. Si necesitas información específica, puedes mencionar directamente el ámbito o cubo en tu pregunta
+
+## 📊 Ámbitos y Cubos Disponibles en SEGEDA
+
+### ADMISIÓN
+- **ADMISIÓN**: Información sobre procesos y requisitos de admisión en la Universidad de Zaragoza
+- **OFERTA DE PLAZAS**: Información sobre plazas y capacidad en los programas de la UZ
+
+### ACADÉMICO
+- **COHORTE**: Análisis de cohortes y seguimiento de la progresión de estudiantes
+- **EGRESADOS**: Información sobre graduados y exalumnos de la Universidad de Zaragoza
+- **MATRÍCULA**: Datos de matriculación y registro de estudiantes de la UZ
+- **RENDIMIENTO**: Métricas de rendimiento académico en los programas
+
+### DOCTORADO
+- **DOCTORADO RD 99/2011**: Información sobre estudios doctorales en la UZ (modificado por RD 576/2023)
+
+### ESTUDIOS PROPIOS
+- **MATRÍCULA DE ESTUDIOS PROPIOS**: Programas de grado específicos en la Universidad de Zaragoza
+
+### DOCENCIA
+- **DOCENCIA ASIGNATURA**: Datos de cursos y asignaturas en la Universidad de Zaragoza
+- **DOCENCIA PDI**: Información sobre la docencia del personal docente e investigador
+
+### I+D+i
+- **GRUPOS DE INVESTIGACIÓN**: Datos de grupos de investigación en la Universidad de Zaragoza
+- **ÍNDICES BIBLIOMÉTRICOS**: Indicadores bibliométricos para la investigación en la UZ
+- **MOVILIDAD DE ENTRADA**: Programas de movilidad de investigadores
+- **PRODUCCIÓN CIENTÍFICA**: Métricas de producción científica para la UZ
+- **PROYECTOS Y CONTRATOS**: Proyectos de investigación y contratos en la Universidad de Zaragoza
+- **RECURSOS HUMANOS DE I+D+i**: Asignación de recursos humanos en I+D+i
+- **SOLICITUD CONVOCATORIA**: Solicitudes de subvenciones de investigadores de la UZ
+
+### MOVILIDAD
+- **ACUERDOS BILATERALES**: Acuerdos internacionales con la Universidad de Zaragoza
+- **ESTUDIANTES IN**: Movilidad de estudiantes entrantes a la UZ
+- **ESTUDIANTES OUT**: Movilidad de estudiantes salientes de la Universidad de Zaragoza
+- **SOLICITUDES DE MOVILIDAD OUT**: Datos de solicitudes de movilidad saliente de estudiantes de la UZ
+
+### RRHH
+- **CARGO**: Posiciones administrativas en la Universidad de Zaragoza
+- **PDI**: Detalles del personal docente e investigador
+- **PTGAS**: Personal de administración y servicios en la UZ
+- **PUESTO**: Roles laborales dentro de la estructura universitaria
+
+---
+*💡 **Consejo**: Puedes preguntarme sobre cualquier aspecto de SEGEDA. Si necesitas información específica, menciona el ámbito o cubo directamente en tu pregunta. Por ejemplo: "¿Cuántos estudiantes hay matriculados en el ámbito ACADÉMICO?" o "¿Qué información hay disponible en el cubo MATRÍCULA?"*
+"""
+    return ambitos_info
+
 def extract_column_names_from_sql(sql_query: str) -> List[str]:
     """
     Extrae los nombres de las columnas de una consulta SQL.
@@ -376,9 +443,13 @@ def parse_tabulated_data(text):
 
 @cl.on_chat_start
 async def on_chat_start():
-    """Inicializa la conversación."""
+    """
+    Inicializa la conversación mostrando la información de los ámbitos disponibles.
+    """
+    # Mostrar información de los ámbitos
     await cl.Message(
-        content="👋 ¡Hola! Soy el asistente de SEGEDA. ¿En qué ámbito te gustaría consultar información?",
+        content=get_ambitos_info(),
+        author="Sistema"
     ).send()
 
 @cl.on_message
