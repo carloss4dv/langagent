@@ -281,7 +281,12 @@ class SEGEDASelector:
             ["Necesito un análisis de la distribución de personal", "¿Te interesa el ámbito RRHH? Podemos generar un reporte del cubo CARGO"]
         ]
         
-        trainer.train(conversaciones)
+        # Convertir las conversaciones a una lista plana de strings
+        conversaciones_planas = []
+        for conversacion in conversaciones:
+            conversaciones_planas.extend(conversacion)
+        
+        trainer.train(conversaciones_planas)
     
     def _es_reporte(self, mensaje: str) -> bool:
         """
