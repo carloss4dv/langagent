@@ -4,20 +4,15 @@ Define la estructura de ámbitos y sus cubos asociados.
 """
 
 AMBITOS_CUBOS = {
+    "admision": {
+        "nombre": "ADMISIÓN",
+        "cubos": ["admision", "ofertaplazas"],
+        "descripcion": "Procesos de admisión y oferta de plazas"
+    },
     "academico": {
         "nombre": "ACADÉMICO",
         "cubos": ["cohorte", "egresados", "matricula", "rendimiento"],
         "descripcion": "Información académica general, incluyendo matrículas, rendimiento y egresados"
-    },
-    "admision": {
-        "nombre": "ADMISIÓN",
-        "cubos": ["admision", "oferta_plazas"],
-        "descripcion": "Procesos de admisión y oferta de plazas"
-    },
-    "docencia": {
-        "nombre": "DOCENCIA",
-        "cubos": ["docenciaAsignatura", "docenciaPDI"],
-        "descripcion": "Información sobre docencia, asignaturas y personal docente"
     },
     "doctorado": {
         "nombre": "DOCTORADO",
@@ -26,19 +21,24 @@ AMBITOS_CUBOS = {
     },
     "estudios_propios": {
         "nombre": "ESTUDIOS PROPIOS",
-        "cubos": ["matricula_estudios_propios"],
+        "cubos": ["matriEEPP"],
         "descripcion": "Información sobre estudios propios y títulos específicos"
+    },
+    "docencia": {
+        "nombre": "DOCENCIA",
+        "cubos": ["docenciaAsignatura", "docenciaPDI"],
+        "descripcion": "Información sobre docencia, asignaturas y personal docente"
     },
     "idi": {
         "nombre": "I+D+i",
         "cubos": [
             "grupos",
             "indicesBibliometricos",
-            "movilidad_entrada",
-            "produccion_cientifica",
-            "proyectos_contratos",
-            "recursos_humanos_idi",
-            "solicitud_convocatoria"
+            "movilidad_idi",
+            "produccionCientifica",
+            "proyectos",
+            "RRHHidi",
+            "solicitudConvocatoria"
         ],
         "descripcion": "Investigación, desarrollo e innovación"
     },
@@ -48,22 +48,44 @@ AMBITOS_CUBOS = {
             "acuerdos_bilaterales",
             "estudiantesIN",
             "estudiantesOUT",
-            "solicitudes_movilidad_out"
+            "solicitudes_movilidad_OUT"
         ],
         "descripcion": "Movilidad internacional de estudiantes y acuerdos"
     },
     "rrhh": {
         "nombre": "RRHH",
-        "cubos": ["cargo", "pdi", "ptgas", "puesto"],
+        "cubos": ["cargo", "PDI", "PTGAS", "puesto"],
         "descripcion": "Recursos humanos y personal"
     }
 }
 
 # Mapeo inverso de cubos a ámbitos
 CUBO_TO_AMBITO = {
-    cubo: ambito_key
-    for ambito_key, ambito_data in AMBITOS_CUBOS.items()
-    for cubo in ambito_data["cubos"]
+    "admision": "admision",
+    "ofertaplazas": "admision",
+    "cohorte": "academico",
+    "egresados": "academico",
+    "matricula": "academico",
+    "rendimiento": "academico",
+    "doctorado": "doctorado",
+    "matriEEPP": "estudios_propios",
+    "docenciaAsignatura": "docencia",
+    "docenciaPDI": "docencia",
+    "grupos": "idi",
+    "indicesBibliometricos": "idi",
+    "movilidad_idi": "idi",
+    "produccionCientifica": "idi",
+    "proyectos": "idi",
+    "RRHHidi": "idi",
+    "solicitudConvocatoria": "idi",
+    "acuerdos_bilaterales": "movilidad",
+    "estudiantesIN": "movilidad",
+    "estudiantesOUT": "movilidad",
+    "solicitudes_movilidad_OUT": "movilidad",
+    "cargo": "rrhh",
+    "PDI": "rrhh",
+    "PTGAS": "rrhh",
+    "puesto": "rrhh"
 }
 
 # Keywords por ámbito para búsqueda
@@ -134,25 +156,25 @@ CUBO_EN_ES = {
     "enrollment": "matricula",
     "performance": "rendimiento",
     "admission": "admision",
-    "available_places": "oferta_plazas",
+    "available_places": "ofertaplazas",
     "course_teaching": "docenciaAsignatura",
     "faculty_teaching": "docenciaPDI",
     "doctorate_rd": "doctorado",
-    "specific_programs_enrollment": "matricula_estudios_propios",
+    "specific_programs_enrollment": "matriEEPP",
     "research_groups": "grupos",
     "bibliometric_indices": "indicesBibliometricos",
-    "incoming_mobility": "movilidad_entrada",
-    "scientific_production": "produccion_cientifica",
-    "research_projects": "proyectos_contratos",
-    "rd_human_resources": "recursos_humanos_idi",
-    "grant_applications": "solicitud_convocatoria",
+    "incoming_mobility": "movilidad_idi",
+    "scientific_production": "produccionCientifica",
+    "research_projects": "proyectos",
+    "rd_human_resources": "RRHHidi",
+    "grant_applications": "solicitudConvocatoria",
     "bilateral_agreements": "acuerdos_bilaterales",
     "incoming_students": "estudiantesIN",
     "outgoing_students": "estudiantesOUT",
-    "outgoing_mobility_applications": "solicitudes_movilidad_out",
+    "outgoing_mobility_applications": "solicitudes_movilidad_OUT",
     "positions": "cargo",
-    "teaching_staff": "pdi",
-    "admin_staff": "ptgas",
+    "teaching_staff": "PDI",
+    "admin_staff": "PTGAS",
     "job_positions": "puesto",
     
     # Español -> Inglés
@@ -161,24 +183,24 @@ CUBO_EN_ES = {
     "matricula": "enrollment",
     "rendimiento": "performance",
     "admision": "admission",
-    "oferta_plazas": "available_places",
+    "ofertaplazas": "available_places",
     "docenciaAsignatura": "course_teaching",
     "docenciaPDI": "faculty_teaching",
     "doctorado": "doctorate_rd",
-    "matricula_estudios_propios": "specific_programs_enrollment",
+    "matriEEPP": "specific_programs_enrollment",
     "grupos": "research_groups",
     "indicesBibliometricos": "bibliometric_indices",
-    "movilidad_entrada": "incoming_mobility",
-    "produccion_cientifica": "scientific_production",
-    "proyectos_contratos": "research_projects",
-    "recursos_humanos_idi": "rd_human_resources",
-    "solicitud_convocatoria": "grant_applications",
+    "movilidad_idi": "incoming_mobility",
+    "produccionCientifica": "scientific_production",
+    "proyectos": "research_projects",
+    "RRHHidi": "rd_human_resources",
+    "solicitudConvocatoria": "grant_applications",
     "acuerdos_bilaterales": "bilateral_agreements",
     "estudiantesIN": "incoming_students",
     "estudiantesOUT": "outgoing_students",
-    "solicitudes_movilidad_out": "outgoing_mobility_applications",
+    "solicitudes_movilidad_OUT": "outgoing_mobility_applications",
     "cargo": "positions",
-    "pdi": "teaching_staff",
-    "ptgas": "admin_staff",
+    "PDI": "teaching_staff",
+    "PTGAS": "admin_staff",
     "puesto": "job_positions"
 } 

@@ -1,6 +1,5 @@
 """
 Aplicación Chainlit para interactuar con el agente de respuesta a preguntas.
-Integra el selector de ámbitos con Rasa.
 """
 
 import chainlit as cl
@@ -20,14 +19,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Importar el agente
 from core.lang_chain_agent import LangChainAgent
 
-# Importar el cliente de Rasa
-from frontend.rasa_integration import RasaClient
-
 # Instanciar el agente
 agent = LangChainAgent()
-
-# Instanciar el cliente de Rasa
-rasa_client = RasaClient()
 
 def extract_column_names_from_sql(sql_query: str) -> List[str]:
     """
@@ -383,63 +376,67 @@ def parse_tabulated_data(text):
 
 @cl.on_chat_start
 async def on_chat_start():
-    """Inicializa la conversación y muestra los ámbitos disponibles."""
-    # Obtener los ámbitos disponibles
-    ambitos = rasa_client.get_ambitos()
-    
-    if not ambitos:
-        await cl.Message(
-            content="No se pudieron obtener los ámbitos disponibles. Por favor, intente más tarde."
-        ).send()
-        return
-    
-    # Crear el mensaje con los ámbitos
-    message = "Bienvenido al selector de ámbitos. Los ámbitos disponibles son:\n\n"
-    for ambito, descripcion in ambitos.items():
-        message += f"- **{ambito}**: {descripcion}\n"
-    message += "\n¿Qué ámbito te interesa consultar?"
-    
-    await cl.Message(content=message).send()
+    """Inicializa la conversación."""
+    await cl.Message(
+        content="👋 ¡Hola! Soy el asistente de SEGEDA. ¿En qué ámbito te gustaría consultar información?",
+    ).send()
 
 @cl.on_message
 async def on_message(message: cl.Message):
     """Procesa los mensajes del usuario y maneja la selección de ámbitos y cubos."""
     user_message = message.content
     
-    # Verificar si es una selección de ámbito
-    if user_message.upper() in ["ACADÉMICO", "ADMISIÓN", "DOCTORADO", "ESTUDIOS PROPIOS", 
-                              "DOCENCIA", "I+D+i", "MOVILIDAD", "RRHH"]:
-        ambito = user_message.upper()
-        cubos = rasa_client.get_cubos(ambito)
-        
-        if not cubos:
-            await cl.Message(
-                content=f"No se encontraron cubos para el ámbito {ambito}. Por favor, intente con otro ámbito."
-            ).send()
-            return
-        
-        # Mostrar los cubos disponibles
-        response = f"Has seleccionado el ámbito {ambito}. Los cubos disponibles son:\n\n"
-        for cubo, descripcion in cubos.items():
-            response += f"- **{cubo}**: {descripcion}\n"
-        response += "\n¿Qué cubo te interesa consultar?"
-        
-        await cl.Message(content=response).send()
+    # Procesar la consulta con el agente
+    result = agent.run(user_message)
+    
+    # Si necesitamos clarificación sobre el ámbito
+    if result.get("type") == "clarification_needed":
+        await cl.Message(
+            content=result["question"]
+        ).send()
         return
     
-    # Verificar si es una selección de cubo
-    # Aquí deberíamos mantener un estado de la conversación para saber si estamos
-    # en la selección de cubos o en otra parte del flujo
-    # Por ahora, asumimos que cualquier mensaje que no sea un ámbito es una consulta
-    # que se enviará a Rasa
+    # Si tenemos un ámbito identificado
+    if "ambito" in result:
+        # Mostrar el ámbito y cubos identificados
+        ambito_info = f"""
+        📊 **Ámbito identificado**: {result['ambito']}
+        📦 **Cubos relevantes**: {', '.join(result['cubos'])}
+        """
+        if result.get("is_visualization", False):
+            ambito_info += "\n🎨 **Tipo de consulta**: Visualización"
+        
+        await cl.Message(content=ambito_info).send()
     
-    response = rasa_client.send_message(user_message)
-    if response and len(response) > 0:
-        await cl.Message(content=response[0].get("text", "")).send()
-    else:
-        await cl.Message(
-            content="Lo siento, no pude procesar tu mensaje. Por favor, intenta de nuevo."
-        ).send()
+    # Mostrar la respuesta
+    if "generation" in result:
+        await cl.Message(content=result["generation"]).send()
+    
+    # Si hay documentos recuperados, mostrarlos
+    if "documents" in result:
+        docs_content = "\n\n".join(result["documents"])
+        await cl.Message(content=f"📚 **Documentos recuperados**:\n{docs_content}").send()
+    
+    # Si hay una consulta SQL, mostrarla
+    if "sql_query" in result:
+        await cl.Message(content=f"🔍 **Consulta SQL generada**:\n```sql\n{result['sql_query']}\n```").send()
+    
+    # Si hay resultados SQL, mostrarlos
+    if "sql_result" in result:
+        # Si es una visualización, intentar crear un gráfico
+        if result.get("is_visualization", False):
+            try:
+                df = format_sql_result(result["sql_result"], result.get("sql_query"))
+                if not df.empty:
+                    # Crear un gráfico usando los datos del DataFrame
+                    chart = cl.Chart(df)
+                    await chart.send()
+            except Exception as e:
+                print(f"Error al crear visualización: {str(e)}")
+                # Si falla la visualización, mostrar la tabla
+                await cl.Message(content=f"📊 **Resultados SQL**:\n{result['sql_result']}").send()
+        else:
+            await cl.Message(content=f"📊 **Resultados SQL**:\n{result['sql_result']}").send()
 
 def run_chainlit(port=8000):
     """

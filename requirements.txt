@@ -69,8 +69,3 @@ pymilvus
 
 # Frontend Chainlit
 chainlit
-
-# Dependencias para Rasa
-rasa==3.6.2
-rasa-sdk==3.6.2
-requests>=2.31.0

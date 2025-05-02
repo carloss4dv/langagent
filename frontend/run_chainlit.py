@@ -1,5 +1,5 @@
 """
-Script para iniciar tanto el servidor Rasa como la aplicación Chainlit.
+Script para iniciar la aplicación Chainlit.
 """
 
 import subprocess
@@ -8,36 +8,10 @@ import os
 import time
 import signal
 import webbrowser
-from threading import Thread
-
-def run_rasa():
-    """Ejecuta el servidor Rasa."""
-    rasa_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ambito_selector")
-    os.chdir(rasa_dir)
-    
-    # Iniciar el servidor Rasa
-    rasa_process = subprocess.Popen(
-        ["rasa", "run", "--enable-api"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-    
-    # Esperar a que el servidor esté listo
-    while True:
-        line = rasa_process.stdout.readline()
-        if "Rasa server is up and running" in line:
-            print("Servidor Rasa iniciado correctamente")
-            break
-        if rasa_process.poll() is not None:
-            print("Error al iniciar el servidor Rasa")
-            sys.exit(1)
-    
-    return rasa_process
 
 def run_chainlit():
     """Ejecuta la aplicación Chainlit."""
-    # Volver al directorio frontend
+    # Asegurarse de estar en el directorio frontend
     os.chdir(os.path.dirname(__file__))
     
     # Iniciar Chainlit
@@ -64,35 +38,25 @@ def run_chainlit():
     return chainlit_process
 
 def main():
-    """Función principal que inicia ambos servicios."""
+    """Función principal que inicia la aplicación."""
     try:
-        # Iniciar Rasa
-        rasa_process = run_rasa()
-        
-        # Dar tiempo para que Rasa se inicialice completamente
-        time.sleep(5)
-        
         # Iniciar Chainlit
         chainlit_process = run_chainlit()
         
         # Mantener el script en ejecución
         while True:
-            if rasa_process.poll() is not None:
-                print("El servidor Rasa se ha detenido")
-                break
             if chainlit_process.poll() is not None:
                 print("La aplicación Chainlit se ha detenido")
                 break
             time.sleep(1)
             
     except KeyboardInterrupt:
-        print("\nDeteniendo servicios...")
+        print("\nDeteniendo servicio...")
     finally:
-        # Detener los procesos
-        for process in [rasa_process, chainlit_process]:
-            if process and process.poll() is None:
-                process.terminate()
-                process.wait()
+        # Detener el proceso
+        if chainlit_process and chainlit_process.poll() is None:
+            chainlit_process.terminate()
+            chainlit_process.wait()
 
 if __name__ == "__main__":
     main() 
