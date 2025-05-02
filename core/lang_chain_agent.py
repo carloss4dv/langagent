@@ -41,29 +41,22 @@ from langagent.config.config import (
 )
 
 class LangChainAgent:
-    def __init__(self, config_path=None):
+    def __init__(self):
         """
-        Inicializa el agente con la configuración especificada.
-        
-        Args:
-            config_path (str, optional): Ruta al archivo de configuración. Si no se proporciona,
-                                        se usará la configuración por defecto.
+        Inicializa el agente con la configuración por defecto.
         """
-        # Cargar configuración
-        self.config = load_config(config_path)
-        
         # Configurar directorios
-        self.data_dir = self.config.get("data_dir", "data")
-        self.vectorstore_dir = self.config.get("vectorstore_dir", "vectorstore")
-        self.consultas_dir = self.config.get("consultas_dir", "consultas")
+        self.data_dir = PATHS_CONFIG.get("default_data_dir", "data")
+        self.vectorstore_dir = PATHS_CONFIG.get("default_vectorstore_dir", "vectorstore")
+        self.consultas_dir = PATHS_CONFIG.get("consultas_dir", "consultas")
         
         # Configurar modelos
-        self.local_llm = self.config.get("local_llm", "mistral")
-        self.local_llm2 = self.config.get("local_llm2", "mistral")
-        self.local_llm3 = self.config.get("local_llm3", "mistral")
+        self.local_llm = LLM_CONFIG.get("default_model", "mistral")
+        self.local_llm2 = LLM_CONFIG.get("default_model2", "mistral")
+        self.local_llm3 = LLM_CONFIG.get("default_model3", "mistral")
         
         # Configurar tipo de vectorstore
-        self.vector_db_type = self.config.get("vector_db_type", "chroma")
+        self.vector_db_type = VECTORSTORE_CONFIG.get("vector_db_type", "chroma")
         
         # Inicializar componentes
         self.llm = None

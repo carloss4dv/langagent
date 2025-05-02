@@ -20,6 +20,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Importar el agente y el selector
 from core.lang_chain_agent import LangChainAgent
 from agents.segeda_selector import SEGEDASelector
+from config.config import (
+    LLM_CONFIG,
+    VECTORSTORE_CONFIG,
+    PATHS_CONFIG,
+    SQL_CONFIG
+)
 
 # Instanciar el agente y el selector
 agent = LangChainAgent()
