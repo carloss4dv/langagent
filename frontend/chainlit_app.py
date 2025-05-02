@@ -25,13 +25,6 @@ from agents.segeda_selector import SEGEDASelector
 agent = LangChainAgent()
 segeda_selector = SEGEDASelector()
 
-# Estado de la conversación
-conversation_state = {
-    "ambito_identificado": False,
-    "ambito_actual": None,
-    "cubos_disponibles": []
-}
-
 def extract_column_names_from_sql(sql_query: str) -> List[str]:
     """
     Extrae los nombres de las columnas de una consulta SQL.
@@ -386,99 +379,16 @@ def parse_tabulated_data(text):
 
 @cl.on_chat_start
 async def on_chat_start():
-    # Crear botones para cada ámbito
-    actions = []
-    for ambito in segeda_selector.ambitos.keys():
-        actions.append(
-            cl.Action(name=f"ambito_{ambito}", label=ambito, description=f"Seleccionar ámbito {ambito}")
-        )
-    
-    # Enviar mensaje de bienvenida con los botones
-    await cl.Message(
-        content="👋 ¡Hola! Soy el asistente de SEGEDA. ¿En qué ámbito te gustaría buscar información?",
-        actions=actions
-    ).send()
-
-@cl.action_callback(re.compile(r"ambito_.*"))
-async def on_ambito_selected(action):
-    # Extraer el nombre del ámbito del nombre de la acción
-    ambito = action.name.replace("ambito_", "")
-    
-    # Actualizar el estado
-    conversation_state["ambito_identificado"] = True
-    conversation_state["ambito_actual"] = ambito
-    conversation_state["cubos_disponibles"] = segeda_selector.ambitos[ambito]["cubos"]
-    
-    # Crear botones para los cubos disponibles
-    actions = []
-    for cubo in conversation_state["cubos_disponibles"]:
-        actions.append(
-            cl.Action(name=f"cubo_{cubo}", label=cubo, description=f"Explorar cubo {cubo}")
-        )
-    
-    # Enviar mensaje de confirmación con los cubos disponibles
-    await cl.Message(
-        content=f"Has seleccionado el ámbito {ambito}. ¿Qué cubo te gustaría explorar?",
-        actions=actions
-    ).send()
-
-@cl.on_message
-async def on_message(message: cl.Message):
-    if not conversation_state["ambito_identificado"]:
-        # Si no se ha identificado el ámbito, usar el selector
-        respuesta = await segeda_selector.procesar_consulta(message.content)
-        
-        if respuesta["tipo"] == "ambito_sugerido":
-            # Crear botones para los cubos sugeridos
-            actions = []
-            for cubo in respuesta["cubos"]:
-                actions.append(
-                    cl.Action(name=f"cubo_{cubo}", label=cubo, description=f"Explorar cubo {cubo}")
-                )
-            
-            # Actualizar el estado
-            conversation_state["ambito_identificado"] = True
-            conversation_state["ambito_actual"] = respuesta["ambito"]
-            conversation_state["cubos_disponibles"] = respuesta["cubos"]
-            
-            await cl.Message(
-                content=respuesta["mensaje"],
-                actions=actions
-            ).send()
-        else:
-            # Si no se puede identificar el ámbito, mostrar los botones de ámbitos
-            actions = []
-            for ambito in segeda_selector.ambitos.keys():
-                actions.append(
-                    cl.Action(name=f"ambito_{ambito}", label=ambito, description=f"Seleccionar ámbito {ambito}")
-                )
-            
-            await cl.Message(
-                content=respuesta["mensaje"],
-                actions=actions
-            ).send()
-    else:
-        # Si ya se ha identificado el ámbito, usar el agente de LangChain
-        respuesta = await agent.process_query(message.content)
-        await cl.Message(content=respuesta).send()
-
-@cl.action_callback(re.compile(r"cubo_.*"))
-async def on_cubo_selected(action):
-    # Extraer el nombre del cubo del nombre de la acción
-    cubo = action.name.replace("cubo_", "")
-    
-    # Usar el agente de LangChain para explorar el cubo
-    respuesta = await agent.process_query(f"Explora el cubo {cubo} en el ámbito {conversation_state['ambito_actual']}")
-    await cl.Message(content=respuesta).send()
-
-@cl.on_chat_start
-async def on_chat_start():
     """
     Inicializa el chat cuando un usuario se conecta.
     """
     # Mensaje de bienvenida
     await cl.Message(
         content="👋 ¡Hola! Soy el asistente de SEGEDA. ¿En qué puedo ayudarte?",
+        actions=[
+            cl.Action(name="explorar_cubo", label="Explorar Cubo", description="Explorar un cubo específico"),
+            cl.Action(name="cruzar_datos", label="Cruzar Datos", description="Cruzar datos de múltiples cubos")
+        ]
     ).send()
 
 @cl.on_message
@@ -489,354 +399,32 @@ async def on_message(message: cl.Message):
     Args:
         message: Mensaje del usuario
     """
-    # Primero, procesar con el selector SEGEDA
-    selector_response = await segeda_selector.procesar_consulta(message.content)
+    # Primero procesar con ChatterBot para identificar el ámbito
+    respuesta = await segeda_selector.procesar_consulta(message.content)
     
-    # Si el selector sugiere un ámbito, mostrarlo primero
-    if selector_response["tipo"] == "ambito_sugerido":
-        # Crear botones para los cubos disponibles
-        elements = []
-        for cubo in selector_response["cubos"]:
-            elements.append(cl.Button(
-                name=f"explorar_cubo_{cubo}",
-                label=f"Explorar {cubo}",
-                value=cubo,
-                action="explorar_cubo"
-            ))
-        
-        # Añadir botón para cruzar datos si hay más de un cubo
-        if len(selector_response["cubos"]) > 1:
-            elements.append(cl.Button(
-                name="cruzar_datos",
-                label="Cruzar Datos",
-                value=",".join(selector_response["cubos"]),
-                action="cruzar_datos"
-            ))
-        
+    if respuesta["tipo"] == "ambito_sugerido":
+        # Si se identificó un ámbito, mostrar los cubos disponibles
         await cl.Message(
-            content=f"### Ámbito Sugerido: {selector_response['ambito']}\n\n{selector_response['mensaje']}",
-            author="SEGEDA Selector",
-            elements=elements
+            content=respuesta["mensaje"],
+            actions=[
+                cl.Action(name="explorar_cubo", label="Explorar Cubo", description="Explorar un cubo específico"),
+                cl.Action(name="cruzar_datos", label="Cruzar Datos", description="Cruzar datos de múltiples cubos")
+            ]
         ).send()
         
-        # Ejecutar el agente con la información del selector
-        try:
-            # Mostrar que estamos procesando
-            processing_msg = await cl.Message(content="Procesando tu consulta...").send()
-            
-            # Iniciar el temporizador para medir el tiempo de respuesta
-            start_time = time.time()
-            
-            # Ejecutar el agente con los parámetros del selector
-            result = agent.run(
-                query=message.content,
-                ambito=selector_response["ambito"],
-                cubos=selector_response["cubos"],
-                is_consulta=selector_response.get("is_consulta", False)
-            )
-            
-            # Calcular tiempo de respuesta
-            response_time = time.time() - start_time
-            
-            # Eliminar el mensaje de procesamiento
-            try:
-                await processing_msg.remove()
-            except Exception as e:
-                print(f"Error al eliminar mensaje de procesamiento: {str(e)}")
-            
-            # Verificar si fue una consulta SQL
-            is_sql_query = result.get("is_consulta", False)
-            sql_query = result.get("sql_query")
-            sql_result = result.get("sql_result")
-            
-            # Si es una consulta SQL con resultados
-            if is_sql_query and sql_query and sql_result:
-                # Formatear el resultado SQL como DataFrame usando los nombres de columnas de la consulta
-                df = format_sql_result(sql_result, sql_query)
-                
-                # Construir mensaje solo con la tabla si tenemos datos
-                if not df.empty:
-                    # Crear tabla markdown directamente
-                    markdown_table = create_markdown_table(df)
-                    
-                    # Mostrar los resultados como tabla markdown
-                    await cl.Message(content=f"### Resultados:\n\n{markdown_table}").send()
-                else:
-                    # Si no pudimos formatear como tabla, mostrar el texto original
-                    await cl.Message(content=f"### Resultados:\n\n{sql_result}").send()
-                
-                # Mensaje con tiempo de respuesta
-                await cl.Message(
-                    content=f"_Tiempo de respuesta: {response_time:.2f} segundos_",
-                    author="Sistema"
-                ).send()
-                
-                # Mensaje con la consulta SQL al final
-                await cl.Message(
-                    content=f"```sql\n{sql_query}\n```",
-                    author="Consulta SQL"
-                ).send()
-            else:
-                # Para respuestas normales, extraer la respuesta del campo generation
-                answer = None
-                
-                if "generation" in result:
-                    generation = result["generation"]
-                    if isinstance(generation, dict) and "answer" in generation:
-                        answer = generation["answer"]
-                    else:
-                        answer = generation
-                
-                if answer is None and "response" in result:
-                    answer = result["response"]
-                    
-                if answer is None:
-                    answer = "No se pudo generar una respuesta."
-                
-                # Enviar la respuesta al usuario
-                await cl.Message(content=answer).send()
-                
-                # Mensaje con tiempo de respuesta
-                await cl.Message(
-                    content=f"_Tiempo de respuesta: {response_time:.2f} segundos_",
-                    author="Sistema"
-                ).send()
-                
-        except Exception as e:
-            # Eliminar el mensaje de procesamiento en caso de error
-            try:
-                await processing_msg.remove()
-            except Exception as err:
-                print(f"Error al eliminar mensaje de procesamiento: {str(err)}")
-            
-            # En caso de error, enviar mensaje de error detallado
-            error_message = f"Error al generar respuesta: {str(e)}"
-            print(f"Error detallado: {e}")
-            
-            import traceback
-            trace = traceback.format_exc()
-            print(f"Traceback: {trace}")
-            
-            await cl.Message(content=error_message).send()
-    
-    # Si es una exploración de cubo
-    elif selector_response["tipo"] == "exploracion_cubo":
+        # Guardar el ámbito y cubos en el contexto de la sesión
+        cl.user_session.set("ambito_actual", respuesta["ambito"])
+        cl.user_session.set("cubos_disponibles", respuesta["cubos"])
+        cl.user_session.set("es_consulta", respuesta["is_consulta"])
+    else:
+        # Si no se identificó un ámbito, pedir más información
         await cl.Message(
-            content=f"### Explorando Cubo: {selector_response['cubo']}\n\n{selector_response['mensaje']}",
-            author="SEGEDA Selector"
+            content=respuesta["mensaje"],
+            actions=[
+                cl.Action(name="explorar_cubo", label="Explorar Cubo", description="Explorar un cubo específico"),
+                cl.Action(name="cruzar_datos", label="Cruzar Datos", description="Cruzar datos de múltiples cubos")
+            ]
         ).send()
-    
-    # Si es un cruce de datos
-    elif selector_response["tipo"] == "cruce_datos":
-        await cl.Message(
-            content=f"### Cruzando Datos\n\nÁmbito: {selector_response['ambito']}\nCubos: {', '.join(selector_response['cubos'])}\n\n{selector_response['mensaje']}",
-            author="SEGEDA Selector"
-        ).send()
-    
-    # Si es una pregunta de clarificación
-    elif selector_response["tipo"] == "pregunta_clarificacion":
-        await cl.Message(
-            content=selector_response["mensaje"],
-            author="SEGEDA Selector"
-        ).send()
-    
-    # Comprobar si el mensaje contiene datos en formato de lista de tuplas
-    msg_content = message.content
-    
-    # Detectar si el mensaje contiene una tabla en texto plano
-    if "<div" in msg_content and "</div>" in msg_content and "\t" in msg_content:
-        try:
-            # Extraer el contenido de la tabla
-            pattern = r'<div[^>]*>(.*?)</div>'
-            match = re.search(pattern, msg_content, re.DOTALL)
-            
-            if match:
-                table_content = match.group(1).strip()
-                
-                # Intentar parsear como datos tabulados
-                df = parse_tabulated_data(table_content)
-                
-                if not df.empty:
-                    # Crear una tabla markdown
-                    markdown_table = create_markdown_table(df)
-                    
-                    # Mostrar la tabla
-                    await cl.Message(content="## Tabla Formateada\n\n" + markdown_table).send()
-                    return
-        except Exception as e:
-            print(f"Error al procesar tabla tabulada: {str(e)}")
-            import traceback
-            print(f"Traceback: {traceback.format_exc()}")
-    
-    # Verificar si el mensaje contiene una consulta SQL en JSON
-    sql_query = None
-    if "{" in msg_content and "sql" in msg_content:
-        try:
-            # Intentar extraer la consulta SQL
-            match = re.search(r'\{[^}]*"sql"\s*:\s*"([^"]*)"[^}]*\}', msg_content)
-            if match:
-                sql_query = match.group(1)
-        except:
-            pass
-    
-    # Detectar si el mensaje tiene un formato específico que podría ser datos
-    if "[(" in msg_content and ")]" in msg_content:
-        try:
-            # Extraer datos
-            data = extract_tuples_from_text(msg_content)
-            
-            if data:
-                # Crear DataFrame con nombres de columnas apropiados
-                columns = None
-                
-                # Si tenemos una consulta SQL, intentar extraer los nombres de columnas
-                if sql_query:
-                    columns = extract_column_names_from_sql(sql_query)
-                    if columns and len(columns) != len(data[0]):
-                        columns = None  # Descartar si no coincide el número de columnas
-                
-                # Si no tenemos columnas de la consulta, usar nombres inferidos
-                if not columns and len(data) > 0:
-                    if len(data[0]) == 8:
-                        # Detectar si la consulta contiene palabras clave específicas
-                        if sql_query and "horas_impartidas" in sql_query:
-                            columns = [
-                                "Categoría PDI", "Cantidad", "Porcentaje", 
-                                "Profesores Primer Curso", "Sexenios Acumulados", 
-                                "Quinquenios Acumulados", "Horas Impartidas", "Porcentaje Horas"
-                            ]
-                        else:
-                            columns = [
-                                "Categoría", "Cantidad", "Porcentaje", 
-                                "Proyectos Internacionales", "Proyectos Nacionales", 
-                                "Proyectos Autonómicos", "Total Fondos (K€)", "Porcentaje Fondos"
-                            ]
-                
-                # Crear DataFrame
-                df = pd.DataFrame(data, columns=columns)
-                
-                # Aplicar formato
-                for col in df.columns:
-                    col_name = str(col).lower()
-                    if "porcentaje" in col_name:
-                        df[col] = df[col].apply(lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x)
-                    elif "fondos" in col_name and "porcentaje" not in col_name:
-                        df[col] = df[col].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
-                    elif df[col].dtype == float:
-                        df[col] = df[col].apply(lambda x: f"{x:.2f}" if isinstance(x, float) else x)
-                
-                # Crear tabla markdown directamente
-                markdown_table = create_markdown_table(df)
-                
-                # Mostrar tabla como markdown
-                await cl.Message(content=markdown_table).send()
-                
-                # Si hay una consulta SQL, mostrarla
-                if sql_query:
-                    await cl.Message(
-                        content=f"```sql\n{sql_query}\n```",
-                        author="Consulta SQL"
-                    ).send()
-                
-                return
-        except Exception as e:
-            print(f"Error al procesar tuplas: {str(e)}")
-            # Si falla, continuar con el procesamiento normal
-            pass
-    
-    # Mostrar que estamos procesando
-    processing_msg = await cl.Message(content="Procesando tu consulta...").send()
-    
-    # Iniciar el temporizador para medir el tiempo de respuesta
-    start_time = time.time()
-    
-    try:
-        # Ejecutar el agente con la pregunta del usuario
-        result = agent.run(message.content)
-        
-        # Calcular tiempo de respuesta
-        response_time = time.time() - start_time
-        
-        # Eliminar el mensaje de procesamiento
-        try:
-            await processing_msg.remove()
-        except Exception as e:
-            print(f"Error al eliminar mensaje de procesamiento: {str(e)}")
-        
-        # Verificar si fue una consulta SQL
-        is_sql_query = result.get("is_consulta", False)
-        sql_query = result.get("sql_query")
-        sql_result = result.get("sql_result")
-        
-        # Si es una consulta SQL con resultados
-        if is_sql_query and sql_query and sql_result:
-            # Formatear el resultado SQL como DataFrame usando los nombres de columnas de la consulta
-            df = format_sql_result(sql_result, sql_query)
-            
-            # Construir mensaje solo con la tabla si tenemos datos
-            if not df.empty:
-                # Crear tabla markdown directamente
-                markdown_table = create_markdown_table(df)
-                
-                # Mostrar los resultados como tabla markdown
-                await cl.Message(content=f"### Resultados:\n\n{markdown_table}").send()
-            else:
-                # Si no pudimos formatear como tabla, mostrar el texto original
-                await cl.Message(content=f"### Resultados:\n\n{sql_result}").send()
-            
-            # Mensaje con tiempo de respuesta
-            await cl.Message(
-                content=f"_Tiempo de respuesta: {response_time:.2f} segundos_",
-                author="Sistema"
-            ).send()
-            
-            # Mensaje con la consulta SQL al final
-            await cl.Message(
-                content=f"```sql\n{sql_query}\n```",
-                author="Consulta SQL"
-            ).send()
-        else:
-            # Para respuestas normales, extraer la respuesta del campo generation
-            answer = None
-            
-            if "generation" in result:
-                generation = result["generation"]
-                if isinstance(generation, dict) and "answer" in generation:
-                    answer = generation["answer"]
-                else:
-                    answer = generation
-            
-            if answer is None and "response" in result:
-                answer = result["response"]
-                
-            if answer is None:
-                answer = "No se pudo generar una respuesta."
-            
-            # Enviar la respuesta al usuario
-            await cl.Message(content=answer).send()
-            
-            # Mensaje con tiempo de respuesta
-            await cl.Message(
-                content=f"_Tiempo de respuesta: {response_time:.2f} segundos_",
-                author="Sistema"
-            ).send()
-            
-    except Exception as e:
-        # Eliminar el mensaje de procesamiento en caso de error
-        try:
-            await processing_msg.remove()
-        except Exception as err:
-            print(f"Error al eliminar mensaje de procesamiento: {str(err)}")
-        
-        # En caso de error, enviar mensaje de error detallado
-        error_message = f"Error al generar respuesta: {str(e)}"
-        print(f"Error detallado: {e}")
-        
-        import traceback
-        trace = traceback.format_exc()
-        print(f"Traceback: {trace}")
-        
-        await cl.Message(content=error_message).send()
 
 @cl.action_callback("explorar_cubo")
 async def on_explorar_cubo(action):
@@ -846,13 +434,25 @@ async def on_explorar_cubo(action):
     Args:
         action: Acción del botón
     """
-    cubo = action.value
-    response = await segeda_selector.explorar_cubo(cubo)
+    # Obtener el ámbito y cubos del contexto
+    ambito = cl.user_session.get("ambito_actual")
+    cubos = cl.user_session.get("cubos_disponibles")
+    es_consulta = cl.user_session.get("es_consulta")
     
-    await cl.Message(
-        content=f"### Explorando Cubo: {cubo}\n\n{response['mensaje']}",
-        author="SEGEDA Selector"
-    ).send()
+    if ambito and cubos:
+        # Si es una consulta, usar el agente de LangChain
+        if es_consulta:
+            # Aquí iría la lógica para usar el agente de LangChain
+            pass
+        else:
+            # Mostrar información sobre los cubos disponibles
+            await cl.Message(
+                content=f"En el ámbito {ambito} puedes explorar los siguientes cubos: {', '.join(cubos)}"
+            ).send()
+    else:
+        await cl.Message(
+            content="Primero necesito saber qué tipo de información buscas. ¿Podrías ser más específico?"
+        ).send()
 
 @cl.action_callback("cruzar_datos")
 async def on_cruzar_datos(action):
@@ -862,13 +462,25 @@ async def on_cruzar_datos(action):
     Args:
         action: Acción del botón
     """
-    cubos = action.value.split(",")
-    response = await segeda_selector.cruzar_datos(cubos)
+    # Obtener el ámbito y cubos del contexto
+    ambito = cl.user_session.get("ambito_actual")
+    cubos = cl.user_session.get("cubos_disponibles")
+    es_consulta = cl.user_session.get("es_consulta")
     
-    await cl.Message(
-        content=f"### Cruzando Datos\n\nÁmbito: {response['ambito']}\nCubos: {', '.join(response['cubos'])}\n\n{response['mensaje']}",
-        author="SEGEDA Selector"
-    ).send()
+    if ambito and cubos:
+        # Si es una consulta, usar el agente de LangChain
+        if es_consulta:
+            # Aquí iría la lógica para usar el agente de LangChain
+            pass
+        else:
+            # Mostrar información sobre cómo cruzar los cubos
+            await cl.Message(
+                content=f"Podemos cruzar datos de los siguientes cubos en el ámbito {ambito}: {', '.join(cubos)}"
+            ).send()
+    else:
+        await cl.Message(
+            content="Primero necesito saber qué tipo de información buscas. ¿Podrías ser más específico?"
+        ).send()
 
 def run_chainlit(port=8000):
     """
