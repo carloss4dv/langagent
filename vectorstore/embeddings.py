@@ -13,32 +13,33 @@ from langchain_milvus.utils.sparse import BM25SparseEmbedding
 
 logger = logging.getLogger(__name__)
 
-def create_embeddings(model_name: str = "intfloat/multilingual-e5-large-instruct", 
-                     device: str = "cuda", **kwargs) -> Tuple[Embeddings, BM25SparseEmbedding]:
+def create_embeddings(model_name: str = "intfloat/multilingual-e5-large-instruct",
+                     device: str = "cpu",
+                     **kwargs) -> Tuple[Embeddings, BM25SparseEmbedding]:
     """
     Crea los modelos de embeddings denso y disperso.
     
     Args:
-        model_name (str): Nombre del modelo de embeddings denso a utilizar.
-        device (str): Dispositivo donde ejecutar el modelo ("cuda" o "cpu").
-        **kwargs: Argumentos adicionales para el modelo.
+        model_name: Nombre del modelo de HuggingFace a utilizar
+        device: Dispositivo donde ejecutar el modelo ('cpu' o 'cuda')
+        **kwargs: Argumentos adicionales para la configuración
         
     Returns:
-        Tuple[Embeddings, BM25SparseEmbedding]: Tupla con el modelo de embeddings denso y el modelo BM25.
+        Tuple[Embeddings, BM25SparseEmbedding]: Tupla con los modelos de embeddings densos y dispersos
     """
     try:
-        model_kwargs = {"device": device}
+        # Crear embeddings densos
+        dense_embeddings = HuggingFaceEmbeddings(
+            model_name=model_name,
+            model_kwargs={"device": device},
+            **kwargs
+        )
         
-        # Añadir argumentos adicionales si se proporcionan
-        if kwargs:
-            model_kwargs.update(kwargs)
+        # Crear embeddings dispersos con un corpus vacío inicialmente
+        # El corpus se actualizará cuando se añadan documentos
+        sparse_embeddings = BM25SparseEmbedding(corpus=[],language="es")
         
-        logger.info(f"Creando modelo de embeddings denso {model_name} en dispositivo {device}")
-        dense_embeddings = HuggingFaceEmbeddings(model_name=model_name, model_kwargs=model_kwargs)
-        
-        logger.info("Creando modelo de embeddings disperso BM25")
-        sparse_embeddings = BM25SparseEmbedding()
-        
+        logger.info(f"Modelos de embeddings creados: {model_name}")
         return dense_embeddings, sparse_embeddings
     except Exception as e:
         # Si falla con cuda, intentar con CPU
