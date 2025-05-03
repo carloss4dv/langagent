@@ -128,7 +128,8 @@ class LangChainAgent:
         
         # Cargar o crear vectorstore
         if self.vector_db_type == "milvus":
-            if self.vectorstore_handler.load_vectorstore(self.embeddings, VECTORSTORE_CONFIG["collection_name"]):
+            self.vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, VECTORSTORE_CONFIG["collection_name"])
+            if self.vectorstore:
                 print("Vectorstore cargado correctamente")
             else:
                 print("Vectorstore no encontrado, creando nueva vectorstore...")
@@ -139,7 +140,7 @@ class LangChainAgent:
                     print("Error al cargar documentos en vectorstore")
         
         # Crear el retriever
-        self.retriever = self.vectorstore_handler.get_retriever()
+        self.retriever = self.vectorstore_handler.create_retriever(self.vectorstore)
         
         # Crear cadenas
         print("Creando cadenas de procesamiento...")

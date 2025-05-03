@@ -20,7 +20,11 @@ from langagent.config.config import VECTORSTORE_CONFIG
 logger = logging.getLogger(__name__)
 
 class ChromaVectorStore(VectorStoreBase):
-    """Implementación de VectorStoreBase para ChromaDB."""
+    """Implementación de VectorStoreBase para Chroma."""
+    
+    def __init__(self):
+        """Inicializa la implementación de Chroma Vector Store."""
+        self.persist_directory = VECTORSTORE_CONFIG.get("persist_directory", "chroma_db")
     
     def create_vectorstore(self, documents: List[Document], embeddings: Embeddings, 
                          collection_name: str, **kwargs) -> Chroma:
@@ -30,26 +34,32 @@ class ChromaVectorStore(VectorStoreBase):
         Args:
             documents: Lista de documentos a indexar
             embeddings: Modelo de embeddings a utilizar
-            collection_name: Nombre de la colección (usado como directorio)
+            collection_name: Nombre de la colección en Chroma
             
         Returns:
             Chroma: Instancia de la vectorstore creada
         """
-        # En Chroma, el collection_name se usa como parte del directorio
-        persist_directory = kwargs.get('persist_directory', None)
-        
-        # Si no se proporciona un directorio, usar el predeterminado
-        if not persist_directory:
-            base_dir = VECTORSTORE_CONFIG.get("default_chroma_dir", "./chroma")
-            persist_directory = os.path.join(base_dir, collection_name)
-        
-        logger.info(f"Creando vectorstore Chroma en {persist_directory}")
-        
-        return Chroma.from_documents(
-            documents=documents, 
-            embedding=embeddings, 
-            persist_directory=persist_directory
-        )
+        if not documents:
+            logger.error("No se pueden crear vectorstores sin documentos.")
+            return None
+            
+        try:
+            # Crear la vectorstore
+            vectorstore = Chroma.from_documents(
+                documents=documents,
+                embedding=embeddings,
+                persist_directory=os.path.join(self.persist_directory, collection_name)
+            )
+            
+            # Persistir la base de datos
+            vectorstore.persist()
+            
+            logger.info(f"Vectorstore Chroma creada correctamente con {len(documents)} documentos")
+            return vectorstore
+            
+        except Exception as e:
+            logger.error(f"Error al crear la vectorstore Chroma: {e}")
+            return None
     
     def load_vectorstore(self, embeddings: Embeddings, collection_name: str, 
                        **kwargs) -> Chroma:
@@ -58,86 +68,129 @@ class ChromaVectorStore(VectorStoreBase):
         
         Args:
             embeddings: Modelo de embeddings a utilizar
-            collection_name: Nombre de la colección (usado como directorio)
+            collection_name: Nombre de la colección en Chroma
             
         Returns:
             Chroma: Instancia de la vectorstore cargada
         """
-        # En Chroma, el collection_name se usa como parte del directorio
-        persist_directory = kwargs.get('persist_directory', None)
-        
-        # Si no se proporciona un directorio, usar el predeterminado
-        if not persist_directory:
-            base_dir = VECTORSTORE_CONFIG.get("default_chroma_dir", "./chroma")
-            persist_directory = os.path.join(base_dir, collection_name)
-        
-        logger.info(f"Cargando vectorstore Chroma desde {persist_directory}")
-        
-        return Chroma(
-            persist_directory=persist_directory,
-            embedding_function=embeddings
-        )
+        try:
+            # Cargar la vectorstore
+            vectorstore = Chroma(
+                persist_directory=os.path.join(self.persist_directory, collection_name),
+                embedding_function=embeddings
+            )
+            
+            logger.info(f"Vectorstore Chroma cargada correctamente")
+            return vectorstore
+            
+        except Exception as e:
+            logger.error(f"Error al cargar la vectorstore Chroma: {e}")
+            return None
     
     def create_retriever(self, vectorstore: Chroma, k: Optional[int] = None, 
                       similarity_threshold: float = 0.7, **kwargs) -> BaseRetriever:
         """
-        Crea un retriever a partir de una vectorstore Chroma.
+        Crea un retriever para una vectorstore Chroma.
         
         Args:
-            vectorstore: Instancia de Chroma
+            vectorstore: Instancia de Chroma vectorstore
             k: Número de documentos a recuperar
-            similarity_threshold: Umbral de similitud para la recuperación
+            similarity_threshold: Umbral mínimo de similitud
             
         Returns:
-            BaseRetriever: Retriever configurado
+            BaseRetriever: Retriever configurado para Chroma
         """
-        if k is None:
-            k = VECTORSTORE_CONFIG.get("k_retrieval", 6)
-        
-        if similarity_threshold is None:
-            similarity_threshold = VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
-        
-        logger.info(f"Creando retriever con k={k} y umbral={similarity_threshold}")
-        
-        return vectorstore.as_retriever(
-            search_type="similarity_score_threshold",
-            search_kwargs={
-                "k": k,
-                "score_threshold": similarity_threshold
-            }
-        )
+        if vectorstore is None:
+            logger.error("No se puede crear un retriever con una vectorstore None")
+            return None
+            
+        try:
+            # Obtener parámetros de búsqueda desde la configuración o parámetros
+            k = k or VECTORSTORE_CONFIG.get("k_retrieval", 4)
+            
+            # Crear el retriever
+            retriever = vectorstore.as_retriever(
+                search_type="mmr",
+                search_kwargs={
+                    "k": k,
+                    "fetch_k": k * 2,  # Buscar más documentos para MMR
+                    "lambda_mult": 0.7  # Balance entre relevancia y diversidad
+                }
+            )
+            
+            logger.info("Retriever Chroma creado correctamente")
+            return retriever
+            
+        except Exception as e:
+            logger.error(f"Error al crear retriever Chroma: {e}")
+            return None
     
-    def retrieve_documents(self, retriever: BaseRetriever, query: str, 
-                         max_retries: int = 3) -> List[Document]:
+    def add_documents_to_collection(self, vectorstore: Chroma, documents: List[Document], 
+                                 source_documents: Dict[str, Document] = None) -> bool:
         """
-        Recupera documentos de un retriever con manejo de errores y reintentos.
+        Añade documentos a una vectorstore Chroma existente.
         
         Args:
-            retriever: Retriever a utilizar
-            query: Consulta para la búsqueda
-            max_retries: Número máximo de reintentos en caso de error
+            vectorstore: Instancia de Chroma vectorstore
+            documents: Lista de documentos a añadir
+            source_documents: Diccionario con los documentos originales completos (opcional)
             
         Returns:
-            List[Document]: Lista de documentos recuperados
+            bool: True si los documentos se añadieron correctamente
         """
-        for attempt in range(max_retries):
-            try:
-                docs = retriever.get_relevant_documents(query)
+        if not documents:
+            logger.warning("No hay documentos para añadir a la colección")
+            return False
+            
+        try:
+            # Añadir documentos
+            vectorstore.add_documents(documents)
+            
+            # Persistir cambios
+            vectorstore.persist()
+            
+            logger.info(f"Se han añadido {len(documents)} documentos correctamente")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error al añadir documentos a la colección Chroma: {str(e)}")
+            return False
+    
+    def load_documents(self, documents: List[Document], embeddings: Embeddings = None, 
+                     source_documents: Dict[str, Document] = None) -> bool:
+        """
+        Carga documentos en la vectorstore Chroma.
+        
+        Args:
+            documents: Lista de documentos a cargar
+            embeddings: Modelo de embeddings a utilizar (opcional)
+            source_documents: Diccionario con los documentos originales completos (opcional)
+            
+        Returns:
+            bool: True si los documentos se cargaron correctamente
+        """
+        if not documents:
+            logger.warning("No hay documentos para cargar")
+            return False
+            
+        # Usar los embeddings proporcionados o los existentes
+        embeddings = embeddings or self.embeddings
+        if not embeddings:
+            logger.error("No se pueden cargar documentos sin embeddings")
+            return False
+            
+        # Obtener el nombre de la colección
+        collection_name = VECTORSTORE_CONFIG.get("collection_name", "default_collection")
+        
+        # Intentar cargar la vectorstore existente
+        vectorstore = self.load_vectorstore(embeddings, collection_name)
+        
+        if vectorstore is None:
+            # Si no existe, crear una nueva
+            vectorstore = self.create_vectorstore(documents, embeddings, collection_name)
+            if vectorstore is None:
+                logger.error("No se pudo crear la vectorstore")
+                return False
                 
-                if not docs:
-                    logger.warning(f"No se encontraron documentos relevantes para la consulta: {query}")
-                    return []
-                
-                # Logging detallado de los documentos recuperados
-                for i, doc in enumerate(docs):
-                    logger.debug(f"Documento {i+1}: Score={doc.metadata.get('score', 'N/A')}, "
-                               f"Fuente={doc.metadata.get('source', 'N/A')}")
-                
-                return docs
-                
-            except Exception as e:
-                logger.error(f"Error en intento {attempt + 1}: {str(e)}")
-                if attempt == max_retries - 1:
-                    logger.error("Se agotaron los reintentos")
-                    return []
-                time.sleep(1)  # Esperar antes de reintentar 
+        # Añadir los documentos a la colección
+        return self.add_documents_to_collection(vectorstore, documents, source_documents) 
