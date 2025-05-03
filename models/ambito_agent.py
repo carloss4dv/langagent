@@ -25,12 +25,12 @@ class AmbitoState(TypedDict):
     clarification_question: Optional[str]
     is_visualization: bool
 
-def create_ambito_workflow(retrievers: Dict[str, any], llm: any):
+def create_ambito_workflow(retriever: any, llm: any):
     """
     Crea un workflow para identificar el ámbito y cubos relevantes.
     
     Args:
-        retrievers: Diccionario de retrievers por cubo
+        retriever: Retriever para recuperar documentos
         llm: Modelo de lenguaje a utilizar
         
     Returns:
@@ -102,14 +102,15 @@ def create_ambito_workflow(retrievers: Dict[str, any], llm: any):
             return state
             
         question = state["question"]
-        relevant_docs = []
         
-        # Buscar en todos los retrievers disponibles
-        for retriever in retrievers.values():
-            docs = retriever.get_relevant_documents(question)
-            relevant_docs.extend(docs)
-        
-        state["context"] = relevant_docs
+        try:
+            # Recuperar documentos usando el retriever
+            docs = retriever.invoke(question)
+            state["context"] = docs
+        except Exception as e:
+            print(f"Error al recuperar contexto: {str(e)}")
+            state["context"] = []
+            
         return state
     
     def generate_clarification(state: AmbitoState) -> AmbitoState:

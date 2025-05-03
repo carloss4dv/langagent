@@ -71,8 +71,8 @@ class LangChainAgent:
         self.llm2 = None
         self.llm3 = None
         self.embeddings = None
-        self.vectorstores = {}
-        self.retrievers = {}
+        self.vectorstore = None
+        self.retriever = None
         self.rag_chain = None
         self.retrieval_grader = None
         self.hallucination_grader = None
@@ -116,28 +116,30 @@ class LangChainAgent:
             chunk_size=VECTORSTORE_CONFIG["chunk_size"],
             chunk_overlap=VECTORSTORE_CONFIG["chunk_overlap"]
         ).split_documents(documents)
+        
         # Cargar consultas guardadas si existe el directorio
         if self.consultas_dir and os.path.exists(self.consultas_dir):
             print("Cargando consultas guardadas...")
             consultas = load_consultas_guardadas(self.consultas_dir)
             documents.extend(consultas)
-            
+        
+        # Crear diccionario de documentos originales para generación de contexto
+        source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents)}
+        
+        # Cargar o crear vectorstore
         if self.vector_db_type == "milvus":
             if self.vectorstore_handler.load_vectorstore(self.embeddings, VECTORSTORE_CONFIG["collection_name"]):
                 print("Vectorstore cargado correctamente")
             else:
                 print("Vectorstore no encontrado, creando nueva vectorstore...")
                 print("Cargando documentos en vectorstore...")
-                self.vectorstore_handler.load_documents(chunked_documents, source_documents=source_documents)
-            # Crear diccionario de documentos originales para generación de contexto
-                source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents)}
-                
                 if self.vectorstore_handler.load_documents(chunked_documents, source_documents=source_documents, embeddings=self.embeddings):
                     print("Documentos cargados en vectorstore correctamente")
                 else:
-                    print("Vectorstore no encontrado, creando nueva vectorstore...")
-                    print("Cargando documentos en vectorstore...")
-                    self.vectorstore_handler.load_documents(chunked_documents, source_documents=source_documents)
+                    print("Error al cargar documentos en vectorstore")
+        
+        # Crear el retriever
+        self.retriever = self.vectorstore_handler.get_retriever()
         
         # Crear cadenas
         print("Creando cadenas de procesamiento...")
@@ -161,7 +163,7 @@ class LangChainAgent:
         """
         # Crear el flujo de trabajo principal
         self.workflow = create_workflow(
-            retrievers=self.retrievers,
+            retriever=self.retriever,
             rag_chain=self.rag_chain,
             retrieval_grader=self.retrieval_grader,
             hallucination_grader=self.hallucination_grader,
@@ -171,7 +173,7 @@ class LangChainAgent:
         
         # Crear el flujo de trabajo del agente de ámbito
         self.ambito_workflow = create_ambito_workflow(
-            retrievers=self.retrievers,
+            retriever=self.retriever,
             llm=self.llm3
         )
     

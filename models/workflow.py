@@ -222,13 +222,12 @@ def execute_query(state):
             "sql_result": error
         }
 
-def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grader, answer_grader, query_rewriter=None, rag_sql_chain=None):
+def create_workflow(retriever, rag_chain, retrieval_grader, hallucination_grader, answer_grader, query_rewriter=None, rag_sql_chain=None):
     """
     Crea un flujo de trabajo para el agente utilizando LangGraph.
-    Soporta múltiples vectorstores organizados en cubos y consultas a bases de datos SQL.
     
     Args:
-        retrievers(dict): Diccionario de retrievers por cubo.
+        retriever: Retriever para recuperar documentos.
         rag_chain: Cadena de RAG.
         retrieval_grader: Evaluador de relevancia de documentos.
         hallucination_grader: Evaluador de alucinaciones.
@@ -242,290 +241,9 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
     # Definimos el grafo de estado
     workflow = StateGraph(GraphState)
     
-    # Nodos
-    
-    def route_question(state):
-        """
-        Determina los cubos relevantes para la pregunta y el ámbito correspondiente.
-        También reescribe la pregunta para mejorar la recuperación si se proporciona query_rewriter.
-        
-        Args:
-            state (dict): Estado actual del grafo.
-            
-        Returns:
-            dict: Estado actualizado con los cubos relevantes identificados, ámbito, pregunta reescrita y si es una consulta.
-        """
-        print("---ROUTE QUESTION---")
-        question = state["question"]
-        print(f"Pregunta original: {question}")
-        
-        # Inicializar el indicador de consulta y la pregunta reescrita
-        state["is_consulta"] = False
-        state["consulta_documents"] = []
-        state["rewritten_question"] = question  # Por defecto, usar la pregunta original
-        
-        try:
-            # Reescribir la pregunta si tenemos un reescritor
-            if query_rewriter:
-                try:
-                    rewritten_question = query_rewriter.invoke({"question": question})
-                    if rewritten_question and isinstance(rewritten_question, str) and len(rewritten_question.strip()) > 0:
-                        state["rewritten_question"] = rewritten_question.strip()
-                        print(f"Pregunta reescrita: {state['rewritten_question']}")
-                except Exception as e:
-                    print(f"Error al reescribir la pregunta: {e}")
-                    # En caso de error, mantener la pregunta original
-            
-            # Usar la pregunta reescrita para el resto del procesamiento
-            processed_question = state["rewritten_question"]
-            
-            # Determinar si la pregunta es sobre una consulta guardada
-            consulta_keywords = [
-                "consulta guardada", "consultas guardadas", "dashboard", 
-                "visualización", "visualizacion", "reporte", "informe", 
-                "cuadro de mando", "análisis predefinido", "analisis predefinido"
-            ]
-            
-            # Verificar si alguna palabra clave está en la pregunta
-            question_lower = processed_question.lower()
-            es_consulta = any(keyword in question_lower for keyword in consulta_keywords)
-            
-            # Usar el ámbito y cubos proporcionados en el estado
-            state["ambito"] = state.get("ambito")
-            state["relevant_cubos"] = state.get("cubos", [])
-            
-            # Si no hay cubos específicos, usar todos los disponibles
-            if not state["relevant_cubos"] and isinstance(retrievers, dict):
-                state["relevant_cubos"] = list(retrievers.keys())
-            
-            # Marcar si es una consulta guardada
-            state["is_consulta"] = es_consulta
-            
-            # Si es una consulta y tenemos el ámbito, añadir el retriever de consultas
-            if state["is_consulta"] and state["ambito"]:
-                consulta_retriever_key = f"consultas_{state['ambito']}"
-                if consulta_retriever_key in retrievers:
-                    state["relevant_cubos"].append(consulta_retriever_key)
-                    print(f"Adding saved query retriever for scope: {state['ambito']}")
-            
-        except Exception as e:
-            print(f"Error in route_question: {e}")
-            # On error, use all cubes if retrievers is a dict
-            state["relevant_cubos"] = list(retrievers.keys()) if isinstance(retrievers, dict) else []
-            state["ambito"] = None
-            print("Error in router. Using all available cubes.")
-        
-        # Initialize retry counter
-        state["retry_count"] = 0
-        state["retrieval_details"] = {}
-        
-        return state
-    
     def retrieve(state):
         """
-        Retrieves documents from the relevant cubes.
-        
-        Args:
-            state (dict): Current graph state.
-            
-        Returns:
-            dict: Updated state with retrieved documents.
-        """
-        question = state["question"]
-        rewritten_question = state.get("rewritten_question", question)  # Usar pregunta reescrita si existe, sino la original
-        relevant_cubos = state.get("relevant_cubos", [])
-        ambito = state.get("ambito")
-        retry_count = state.get("retry_count", 0)
-        is_consulta = state.get("is_consulta", False)
-        
-        print("---RETRIEVE---")
-        print(f"Búsqueda con pregunta: {rewritten_question}")
-        print(f"Ámbito identificado: {ambito}")
-        print(f"Cubos relevantes: {relevant_cubos}")
-        
-        # Si no hay cubos relevantes, usar todos disponibles
-        if not relevant_cubos and isinstance(retrievers, dict):
-            relevant_cubos = list(retrievers.keys())
-            print(f"No se identificaron cubos relevantes. Usando todos: {relevant_cubos}")
-        
-        # Si estamos en el último intento y la estrategia es usar todos los cubos, pasar directamente al retrieve_from_unified
-        unified_retriever_exists = "unified" in retrievers if isinstance(retrievers, dict) else False
-        if retry_count >= WORKFLOW_CONFIG.get("max_retries", 2) and unified_retriever_exists:
-            print(f"Último intento (retry {retry_count}). Usando colección unificada.")
-            return retrieve_from_unified(state)
-        
-        all_docs = []
-        retrieval_details = {}
-        
-        # Comprobar si tenemos un retriever combinado para todos los cubos
-        combined_retriever_exists = "combined" in retrievers if isinstance(retrievers, dict) else False
-        
-        # En el último intento, si hay un retriever combinado, usarlo
-        if retry_count >= WORKFLOW_CONFIG.get("max_retries", 2) - 1 and combined_retriever_exists:
-            try:
-                print("Usando retriever combinado para todos los cubos...")
-                # Preparar filtros para Milvus si hay ámbito identificado
-                filters = {}
-                if ambito:
-                    filters["ambito"] = ambito
-                if is_consulta:
-                    filters["is_consulta"] = "true"
-                
-                # Usar filtros si existen
-                if filters:
-                    docs = retrievers["combined"].invoke(rewritten_question, filter=filters)
-                else:
-                    docs = retrievers["combined"].invoke(rewritten_question)
-                
-                # Comprobar si todos los documentos son relevantes
-                relevant_docs = []
-                for doc in docs:
-                    relevance = retrieval_grader.invoke({
-                        "document": doc.page_content,
-                        "question": rewritten_question
-                    })
-                    
-                    if isinstance(relevance, dict) and relevance.get("score", "").lower() == "yes":
-                        # Añadir metadatos sobre el cubo y ámbito si no existen
-                        if "cubo_source" not in doc.metadata:
-                            doc.metadata["cubo_source"] = "combined"
-                        if "ambito" not in doc.metadata and ambito:
-                            doc.metadata["ambito"] = ambito
-                        relevant_docs.append(doc)
-                
-                # Si no hay documentos relevantes, usar todos
-                if not relevant_docs and docs:
-                    for doc in docs:
-                        if "cubo_source" not in doc.metadata:
-                            doc.metadata["cubo_source"] = "combined"
-                        if "ambito" not in doc.metadata and ambito:
-                            doc.metadata["ambito"] = ambito
-                    relevant_docs = docs
-                
-                retrieval_details["combined"] = {
-                    "count": len(docs),
-                    "relevant_count": len(relevant_docs),
-                    "ambito": ambito,
-                    "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
-                }
-                
-                all_docs.extend(relevant_docs)
-                
-            except Exception as e:
-                print(f"Error al recuperar documentos del retriever combinado: {str(e)}")
-        else:
-            # Si no, iterar sobre los cubos relevantes
-            for cubo in relevant_cubos:
-                try:
-                    if cubo not in retrievers:
-                        print(f"ADVERTENCIA: No se encontró retriever para el cubo '{cubo}'")
-                        continue
-                    
-                    # Obtener documentos del cubo
-                    print(f"Recuperando documentos del cubo: {cubo}")
-                    
-                    # Preparar filtros para Milvus si hay ámbito identificado
-                    filters = {}
-                    if ambito:
-                        filters["ambito"] = ambito
-                    if is_consulta:
-                        filters["is_consulta"] = "true"
-                    
-                    # Usar filtros si existen
-                    if filters:
-                        docs = retrievers[cubo].invoke(rewritten_question, filter=filters)
-                    else:
-                        docs = retrievers[cubo].invoke(rewritten_question)
-                    
-                    print(f"Documentos recuperados de {cubo}: {len(docs)}")
-                    
-                    # Comprobar si todos los documentos son relevantes
-                    relevant_docs = []
-                    
-                    if cubo.startswith("consultas_"):
-                        # Para consultas guardadas, añadir siempre todos los documentos sin evaluar relevancia
-                        for doc in docs:
-                            # Añadir metadatos sobre el cubo y ámbito si no existen
-                            if "cubo_source" not in doc.metadata:
-                                doc.metadata["cubo_source"] = cubo
-                            if "ambito" not in doc.metadata and ambito:
-                                doc.metadata["ambito"] = ambito
-                            # Marcar explícitamente como consulta guardada
-                            doc.metadata["is_consulta"] = "true"
-                            relevant_docs.append(doc)
-                        
-                        # Añadir a la lista de documentos de consultas guardadas
-                        state["consulta_documents"] = relevant_docs
-                    else:
-                        # Para otros cubos, evaluar relevancia
-                        for doc in docs:
-                            relevance = retrieval_grader.invoke({
-                                "document": doc.page_content,
-                                "question": rewritten_question
-                            })
-                            
-                            # Extraer score de la respuesta
-                            if isinstance(relevance, dict) and "score" in relevance:
-                                is_relevant = relevance["score"].lower() == "yes"
-                            else:
-                                # Por defecto, considerar el documento como relevante
-                                is_relevant = True
-                            
-                            if is_relevant:
-                                # Añadir metadatos sobre el cubo y ámbito si no existen
-                                if "cubo_source" not in doc.metadata:
-                                    doc.metadata["cubo_source"] = cubo
-                                if "ambito" not in doc.metadata and ambito:
-                                    doc.metadata["ambito"] = ambito
-                                relevant_docs.append(doc)
-                        
-                        # Si no hay documentos relevantes, usar todos los documentos del cubo
-                        if not relevant_docs and docs:
-                            print(f"No se encontraron documentos relevantes en el cubo {cubo}. Usando todos los documentos recuperados.")
-                            for doc in docs:
-                                # Añadir metadatos sobre el cubo y ámbito si no existen
-                                if "cubo_source" not in doc.metadata:
-                                    doc.metadata["cubo_source"] = cubo
-                                if "ambito" not in doc.metadata and ambito:
-                                    doc.metadata["ambito"] = ambito
-                                relevant_docs.append(doc)
-                        
-                    # Añadir documentos relevantes a la lista
-                    all_docs.extend(relevant_docs)
-                    
-                    # Guardar detalles de este cubo
-                    retrieval_details[cubo] = {
-                        "count": len(docs),
-                        "relevant_count": len(relevant_docs),
-                        "ambito": ambito,
-                        "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
-                    }
-                        
-                except Exception as e:
-                    print(f"Error al recuperar documentos del cubo {cubo}: {str(e)}")
-        
-        # Limitar el número total de documentos para evitar tokens excesivos
-        max_docs = VECTORSTORE_CONFIG.get("max_docs_total", 10)
-        if len(all_docs) > max_docs:
-            print(f"Limitando a {max_docs} documentos (de {len(all_docs)} recuperados)")
-            all_docs = all_docs[:max_docs]
-        
-        print("=== FIN DE RECUPERACIÓN DE DOCUMENTOS ===\n")
-        
-        return {
-            "documents": all_docs,
-            "question": question,
-            "rewritten_question": rewritten_question,
-            "retry_count": retry_count,
-            "relevant_cubos": state.get("relevant_cubos", []),
-            "ambito": ambito,
-            "retrieval_details": retrieval_details
-        }
-        
-    # Función auxiliar para recuperar documentos de la colección unificada
-    def retrieve_from_unified(state):
-        """
-        Recupera documentos de la colección unificada como fallback.
+        Recupera documentos relevantes para la pregunta.
         
         Args:
             state (dict): Estado actual del grafo.
@@ -534,18 +252,28 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
             dict: Estado actualizado con los documentos recuperados.
         """
         question = state["question"]
-        rewritten_question = state.get("rewritten_question", question)  # Usar pregunta reescrita si existe, sino la original
+        rewritten_question = state.get("rewritten_question", question)
         retry_count = state.get("retry_count", 0)
         ambito = state.get("ambito")
+        is_consulta = state.get("is_consulta", False)
+        
+        print("---RETRIEVE---")
+        print(f"Búsqueda con pregunta: {rewritten_question}")
+        print(f"Ámbito identificado: {ambito}")
         
         try:
-            # Usar el retriever unificado sin filtros
-            docs = retrievers["unified"].invoke(rewritten_question)
+            # Preparar filtros si hay ámbito identificado
+            filters = {}
+            if ambito:
+                filters["ambito"] = ambito
+            if is_consulta:
+                filters["is_consulta"] = "true"
             
-            # Procesar los documentos recuperados
-            print(f"Documentos recuperados de la colección unificada (sin filtros): {len(docs)}")
+            # Recuperar documentos
+            docs = retriever.invoke(rewritten_question, filter=filters if filters else None)
+            print(f"Documentos recuperados: {len(docs)}")
             
-            # Filtrar por relevancia
+            # Comprobar si los documentos son relevantes
             relevant_docs = []
             for doc in docs:
                 relevance = retrieval_grader.invoke({
@@ -555,45 +283,42 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
                 
                 if isinstance(relevance, dict) and relevance.get("score", "").lower() == "yes":
                     relevant_docs.append(doc)
-                
+            
             # Si no hay documentos relevantes, usar todos
             if not relevant_docs and docs:
                 relevant_docs = docs
             
-            retrieval_details = {
-                "unified": {
-                    "count": len(docs),
-                    "relevant_count": len(relevant_docs),
-                    "ambito": ambito,
-                    "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
-                }
-            }
-            
             # Limitar el número total de documentos
             max_docs = VECTORSTORE_CONFIG.get("max_docs_total", 10)
             if len(relevant_docs) > max_docs:
+                print(f"Limitando a {max_docs} documentos (de {len(relevant_docs)} recuperados)")
                 relevant_docs = relevant_docs[:max_docs]
+            
+            retrieval_details = {
+                "count": len(docs),
+                "relevant_count": len(relevant_docs),
+                "ambito": ambito,
+                "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
+            }
             
             return {
                 "documents": relevant_docs,
                 "question": question,
                 "rewritten_question": rewritten_question,
                 "retry_count": retry_count,
-                "relevant_cubos": state.get("relevant_cubos", []),
                 "ambito": ambito,
                 "retrieval_details": retrieval_details
             }
             
         except Exception as e:
-            print(f"Error en retrieve_from_unified: {str(e)}")
+            print(f"Error al recuperar documentos: {str(e)}")
             return {
                 "documents": [],
                 "question": question,
                 "rewritten_question": rewritten_question,
                 "retry_count": retry_count,
-                "relevant_cubos": state.get("relevant_cubos", []),
                 "ambito": ambito,
-                "retrieval_details": {"unified": {"error": str(e)}}
+                "retrieval_details": {"error": str(e)}
             }
     
     def generate(state):
@@ -760,14 +485,12 @@ def create_workflow(retrievers, rag_chain, retrieval_grader, hallucination_grade
         }
     
     # Añadir nodos al grafo
-    workflow.add_node("route_question", route_question)
     workflow.add_node("retrieve", retrieve)
     workflow.add_node("generate", generate)
     workflow.add_node("execute_query", execute_query)
     
     # Definir bordes - flujo simplificado
-    workflow.set_entry_point("route_question")
-    workflow.add_edge("route_question", "retrieve")
+    workflow.set_entry_point("retrieve")
     workflow.add_edge("retrieve", "generate")
     
     # Definir condición para ejecución de consulta SQL o verificación de reintento
