@@ -222,7 +222,7 @@ def execute_query(state):
             "sql_result": error
         }
 
-def create_workflow(retriever, rag_chain, retrieval_grader, hallucination_grader, answer_grader, query_rewriter=None, rag_sql_chain=None):
+def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_grader, query_rewriter=None, rag_sql_chain=None):
     """
     Crea un flujo de trabajo para el agente utilizando LangGraph.
     
