@@ -360,21 +360,19 @@ class MilvusVectorStore(VectorStoreBase):
                        **kwargs) -> Milvus:
         """
         Carga una vectorstore Milvus existente.
-        Si la colección no existe, la crea con un documento de inicialización.
         
         Args:
             embeddings: Modelo de embeddings a utilizar
             collection_name: Nombre de la colección en Milvus
             
         Returns:
-            Milvus: Instancia de la vectorstore cargada
+            Milvus: Instancia de la vectorstore cargada o None si no existe
         """
         connection_args = self._get_connection_args()
         logger.info(f"Cargando vectorstore Milvus existente: {collection_name}")
         
         # Determinar si queremos usar búsqueda híbrida
         use_hybrid_search = kwargs.get("use_hybrid_search", self.use_hybrid_search)
-        always_drop_old = kwargs.get("always_drop_old", False)
         
         try:
             # Preparar argumentos para cargar la vectorstore
@@ -391,75 +389,19 @@ class MilvusVectorStore(VectorStoreBase):
                 vs_kwargs["vector_field"] = ["dense", "sparse"]  # 'dense' para embeddings, 'sparse' para BM25
             
             # Intentar cargar la vectorstore
-            milvus_db = None
-            collection_exists = False
+            milvus_db = Milvus(**vs_kwargs)
             
-            try:
-                # Intentar cargar directamente
-                milvus_db = Milvus(**vs_kwargs)
+            # Verificar si la colección existe realmente
+            if hasattr(milvus_db, 'col') and milvus_db.col is not None:
+                logger.info(f"Colección {collection_name} cargada correctamente")
+                return milvus_db
+            else:
+                logger.error(f"La colección {collection_name} no existe")
+                return None
                 
-                # Verificar si la colección existe realmente
-                if hasattr(milvus_db, 'col') and milvus_db.col is not None:
-                    logger.info(f"Colección {collection_name} cargada correctamente")
-                    collection_exists = True
-                    # Si siempre queremos recrear, no devolvemos aquí
-                    if not always_drop_old:
-                        return milvus_db
-                    else:
-                        logger.info(f"La colección {collection_name} existe pero se recreará (always_drop_old=True)")
-            except Exception as load_error:
-                logger.warning(f"Error al cargar colección: {str(load_error)}")
-                collection_exists = False
-            
-            # Si la colección no existe o siempre queremos recrearla, la creamos
-            if not collection_exists or always_drop_old:
-                # Crear una colección nueva con un documento de ejemplo para inicializar
-                logger.info(f"{'Recreando' if collection_exists else 'Creando nueva'} colección {collection_name}")
-                empty_doc = Document(
-                    page_content="Documento de inicialización", 
-                    metadata={"source": "init", "ambito": "general", "cubo_source": "general"}
-                )
-                
-                # Crear la vectorstore con el documento de inicialización
-                return self.create_vectorstore(
-                    documents=[empty_doc],
-                    embeddings=embeddings,
-                    collection_name=collection_name,
-                    drop_old=always_drop_old,  # Solo forzar drop_old si se solicitó
-                    **kwargs
-                )
-            
-            # Si llegamos aquí, la colección existe pero no pudimos cargarla correctamente
-            logger.error(f"La colección {collection_name} existe pero no se pudo cargar correctamente")
-            return None
-            
         except Exception as e:
-            logger.error(f"Error grave al cargar/crear colección {collection_name}: {str(e)}")
-            
-            # Último intento: crear una colección nueva
-            try:
-                logger.info(f"Último intento: creando nueva colección {collection_name}")
-                empty_doc = Document(
-                    page_content="Documento de inicialización (último intento)", 
-                    metadata={"source": "init", "ambito": "general", "cubo_source": "general"}
-                )
-                
-                return self.create_vectorstore(
-                    documents=[empty_doc],
-                    embeddings=embeddings,
-                    collection_name=collection_name,
-                    drop_old=False,  # No forzar drop_old en el último intento
-                    **kwargs
-                )
-                
-            except Exception as create_error:
-                # Si falla la creación, registrar el error y proporcionar información detallada
-                logger.error(f"Error final al crear colección {collection_name}: {str(create_error)}")
-                if "connection" in str(e).lower():
-                    logger.error(f"Problema de conexión a Milvus. Verifique que el servidor esté en ejecución en {connection_args['uri']} " +
-                                f"y que las credenciales sean correctas.")
-                    logger.error("Asegúrese de configurar las variables de entorno ZILLIZ_CLOUD_URI y ZILLIZ_CLOUD_TOKEN correctamente.")
-                raise e
+            logger.error(f"Error al cargar la vectorstore Milvus: {str(e)}")
+            return None
     
     def create_retriever(self, vectorstore: Milvus, k: Optional[int] = None, 
                       similarity_threshold: float = 0.7, **kwargs) -> BaseRetriever:
@@ -483,7 +425,14 @@ class MilvusVectorStore(VectorStoreBase):
         k = k or VECTORSTORE_CONFIG.get("k_retrieval", 4)
         
         try:
-            retriever = vectorstore.as_retriever(search_type= 'mmr', search_kwargs= {'k': k})
+            # Crear el retriever con búsqueda híbrida
+            retriever = vectorstore.as_retriever(
+                search_type="similarity",
+                search_kwargs={
+                    "k": k,
+                    "score_threshold": similarity_threshold
+                }
+            )
             
             logger.info("Retriever híbrido creado correctamente")
             return retriever

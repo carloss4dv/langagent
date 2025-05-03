@@ -71,7 +71,7 @@ class ChromaVectorStore(VectorStoreBase):
             collection_name: Nombre de la colección en Chroma
             
         Returns:
-            Chroma: Instancia de la vectorstore cargada
+            Chroma: Instancia de la vectorstore cargada o None si no existe
         """
         try:
             # Cargar la vectorstore
