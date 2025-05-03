@@ -45,8 +45,10 @@ def create_ambito_workflow(retrievers: Dict[str, any], llm: any):
         question = state["question"]
         question_lower = question.lower()
         
-        # Inicializar is_visualization
+        # Inicializar is_visualization y needs_clarification
         state["is_visualization"] = False
+        state["needs_clarification"] = False
+        state["clarification_question"] = None
         
         # Palabras clave para identificar visualizaciones
         visualization_keywords = [
