@@ -8,6 +8,13 @@ import os
 import time
 import signal
 import webbrowser
+import threading
+
+def print_output(pipe, prefix):
+    """Imprime la salida de un pipe con un prefijo."""
+    for line in iter(pipe.readline, ''):
+        if line:
+            print(f"{prefix}: {line.strip()}")
 
 def run_chainlit():
     """Ejecuta la aplicación Chainlit."""
@@ -24,22 +31,45 @@ def run_chainlit():
             ["chainlit", "run", os.path.join("frontend", "chainlit_app.py")],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
+            bufsize=1,  # Line buffered
+            universal_newlines=True
         )
+        
+        # Crear hilos para mostrar la salida en tiempo real
+        stdout_thread = threading.Thread(target=print_output, args=(chainlit_process.stdout, "OUT"))
+        stderr_thread = threading.Thread(target=print_output, args=(chainlit_process.stderr, "ERR"))
+        
+        # Configurar los hilos como daemon para que se cierren cuando el programa principal termine
+        stdout_thread.daemon = True
+        stderr_thread.daemon = True
+        
+        # Iniciar los hilos
+        stdout_thread.start()
+        stderr_thread.start()
         
         # Esperar a que Chainlit esté listo
         while True:
-            line = chainlit_process.stdout.readline()
-            if "Your app is running at" in line:
+            if chainlit_process.poll() is not None:
+                print("Error: Chainlit se ha detenido inesperadamente")
+                sys.exit(1)
+            
+            # Verificar si hay algún error en stderr
+            error_output = chainlit_process.stderr.readline()
+            if error_output and "error" in error_output.lower():
+                print(f"Error en Chainlit: {error_output.strip()}")
+                sys.exit(1)
+            
+            # Verificar si la aplicación está lista
+            stdout_line = chainlit_process.stdout.readline()
+            if "Your app is running at" in stdout_line:
                 print("Aplicación Chainlit iniciada correctamente")
                 # Extraer la URL y abrir en el navegador
-                url = line.split("http://")[1].strip()
+                url = stdout_line.split("http://")[1].strip()
                 webbrowser.open(f"http://{url}")
                 break
-            if chainlit_process.poll() is not None:
-                error_output = chainlit_process.stderr.read()
-                print(f"Error al iniciar Chainlit: {error_output}")
-                sys.exit(1)
+            
+            time.sleep(0.1)  # Pequeña pausa para no saturar la CPU
         
         return chainlit_process
     except Exception as e:
