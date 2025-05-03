@@ -11,13 +11,17 @@ import webbrowser
 
 def run_chainlit():
     """Ejecuta la aplicación Chainlit."""
-    # Asegurarse de estar en el directorio frontend
-    os.chdir(os.path.dirname(__file__))
+    # Obtener el directorio raíz del proyecto
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.dirname(current_dir)
+    
+    # Cambiar al directorio raíz
+    os.chdir(root_dir)
     
     try:
-        # Iniciar Chainlit
+        # Iniciar Chainlit con la ruta relativa al directorio raíz
         chainlit_process = subprocess.Popen(
-            ["chainlit", "run", "chainlit_app.py"],
+            ["chainlit", "run", os.path.join("frontend", "chainlit_app.py")],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
