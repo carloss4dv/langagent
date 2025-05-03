@@ -536,7 +536,6 @@ class MilvusVectorStore(VectorStoreBase):
             logger.error(f"Error al crear retriever híbrido: {e}")
             return None
     
-    
     def build_filter_expression(self, metadata_filters: Dict[str, Any]) -> str:
         """
         Construye una expresión de filtro para Milvus a partir de un diccionario de filtros.

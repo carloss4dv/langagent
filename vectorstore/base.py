@@ -66,22 +66,6 @@ class VectorStoreBase(ABC):
         """
         pass
     
-    @abstractmethod
-    def retrieve_documents(self, retriever: BaseRetriever, query: str, 
-                         max_retries: int = 3) -> List[Document]:
-        """
-        Recupera documentos de un retriever con manejo de errores y reintentos.
-        
-        Args:
-            retriever: Retriever a utilizar
-            query: Consulta para la búsqueda
-            max_retries: Número máximo de reintentos en caso de error
-            
-        Returns:
-            List[Document]: Lista de documentos recuperados
-        """
-        pass
-    
     @staticmethod
     def add_metadata_to_documents(documents: List[Document], cubo: str, ambito: Optional[str] = None) -> List[Document]:
         """
