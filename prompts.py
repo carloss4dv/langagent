@@ -59,7 +59,7 @@ PROMPTS = {
         You are a specialized grader assessing the relevance of SEGEDA (DATUZ: Open Data and Transparency UZ) documents to a university data question.
         You must determine if the document contains information directly applicable to answering the specific question.
         Pay special attention to cube names (e.g., "MATRÍCULA", "RENDIMIENTO"), scope names (e.g., "ACADÉMICO", "MOVILIDAD"), and institutional terminology.
-        Provide a JSON with a single key 'score' ('yes' or 'no') representing whether the document is relevant.
+        Your task is to evaluate if the document is relevant to the question and respond with a JSON containing a single key 'score' with value 'yes' if relevant or 'no' if not relevant.
         <|eot_id|><|start_header_id|>user<|end_header_id|>
         Document: {document}
         Question: {question} 
@@ -69,7 +69,7 @@ PROMPTS = {
         You are a rigorous evaluator for the SEGEDA (DATUZ) university data system.
         Assess if a generation is fully grounded in the provided SEGEDA documents and contains no fabricated information.
         Pay special attention to exact metrics, cube names (e.g., "MATRÍCULA", "RENDIMIENTO"), scope names (e.g., "ACADÉMICO", "MOVILIDAD"), and precise Universidad de Zaragoza terminology.
-        Provide a JSON with a single key 'score' ('yes' if fully grounded, 'no' if any fabrication exists).
+        Your task is to evaluate if the generation is fully grounded in the documents and respond with a JSON containing a single key 'score' with value 'yes' if fully grounded or 'no' if any fabrication exists.
         <|eot_id|><|start_header_id|>user<|end_header_id|>
         Documents: {documents}
         Generation: {generation} 
@@ -79,7 +79,7 @@ PROMPTS = {
         You are a specialized evaluator for Universidad de Zaragoza's SEGEDA (DATUZ) system responses.
         Evaluate if the answer completely resolves a question about university data.
         Consider if the answer appropriately references relevant cubes (e.g., "MATRÍCULA", "RENDIMIENTO"), scopes (e.g., "ACADÉMICO", "MOVILIDAD"), and institutional metrics.
-        Provide a JSON with a single key 'score' ('yes' if the answer fully resolves the question, 'no' if inadequate).
+        Your task is to evaluate if the answer fully resolves the question and respond with a JSON containing a single key 'score' with value 'yes' if it fully resolves the question or 'no' if inadequate.
         <|eot_id|><|start_header_id|>user<|end_header_id|>
         Answer: {generation}
         Question: {question} 
@@ -239,21 +239,21 @@ PROMPTS = {
         
         "retrieval_grader": """[INST] Determine if this SEGEDA (DATUZ: Open Data and Transparency UZ) document is relevant to the question about Universidad de Zaragoza data.
         Pay special attention to the specific cube names, scope references, and institutional metrics mentioned.
-        Respond with JSON: {'score': 'yes' or 'no'}
+        Your task is to evaluate if the document is relevant to the question and respond with a JSON containing a single key 'score' with value 'yes' if relevant or 'no' if not relevant.
         
         Document: {document}
         Question: {question} [/INST]""",
         
         "hallucination_grader": """[INST] Rigorously check if this generation about Universidad de Zaragoza (UZ) data is fully supported by the SEGEDA (DATUZ) documents provided.
         Verify that all mentions of cube names (e.g., "MATRÍCULA", "RENDIMIENTO"), scope names (e.g., "ACADÉMICO", "MOVILIDAD"), metrics, and institutional data are accurate.
-        Respond with JSON: {'score': 'yes' or 'no'}
+        Your task is to evaluate if the generation is fully grounded in the documents and respond with a JSON containing a single key 'score' with value 'yes' if fully grounded or 'no' if any fabrication exists.
         
         Documents: {documents}
         Generation: {generation} [/INST]""",
         
         "answer_grader": """[INST] Judge if this answer properly resolves the question about Universidad de Zaragoza (UZ) data from the SEGEDA (DATUZ) system.
         Consider if it correctly references relevant SEGEDA cubes, scopes, and institutional metrics.
-        Respond with JSON: {'score': 'yes' or 'no'}
+        Your task is to evaluate if the answer fully resolves the question and respond with a JSON containing a single key 'score' with value 'yes' if it fully resolves the question or 'no' if inadequate.
         
         Answer: {generation}
         Question: {question} [/INST]""",
@@ -411,7 +411,7 @@ PROMPTS = {
         You are a document relevance grader for the SEGEDA (DATUZ: Open Data and Transparency UZ) system.
         Evaluate if the document contains information directly applicable to answering the specific question about Universidad de Zaragoza data.
         Pay attention to cube names, scope references, and institutional metrics mentioned.
-        Respond with JSON: {{"score": "yes"|"no"}} indicating relevance.<|im_end|>
+        Your task is to evaluate if the document is relevant to the question and respond with a JSON containing a single key 'score' with value 'yes' if relevant or 'no' if not relevant.<|im_end|>
         <|im_start|>user
         Document: {document}
         Question: {question}<|im_end|>
@@ -421,8 +421,8 @@ PROMPTS = {
         You are a strict evaluator for the SEGEDA (DATUZ) system at Universidad de Zaragoza.
         Check if ALL information in the generation about UZ data is EXPLICITLY present in the documents.
         Verify that all references to cube names, scope names, metrics, and institutional data are accurate.
-        Respond ONLY with: {{"score": "yes"}} if everything is supported by SEGEDA data, or {{"score": "no"}} if anything is not explicitly present.
-        Do not include any other text or explanation. ONLY RESPOND WITH JSON :{{"score": "yes"|"no"}}.<|im_end|>
+        Your task is to evaluate if the generation is fully grounded in the documents and respond with a JSON containing a single key 'score' with value 'yes' if fully grounded or 'no' if any fabrication exists.
+        Do not include any other text or explanation. ONLY RESPOND WITH JSON.<|im_end|>
         <|im_start|>user
         Documents: {documents}
         Generation: {generation}<|im_end|>
@@ -432,7 +432,7 @@ PROMPTS = {
         You are an expert evaluator for the SEGEDA (DATUZ) system at Universidad de Zaragoza.
         Assess if the answer completely addresses the question about UZ institutional data.
         Consider if it correctly references relevant SEGEDA cubes, scopes, and metrics with their proper names.
-        Respond with JSON: {{"score": "yes"|"no"}} indicating whether the answer is useful and accurate.<|im_end|>
+        Your task is to evaluate if the answer fully resolves the question and respond with a JSON containing a single key 'score' with value 'yes' if it fully resolves the question or 'no' if inadequate.<|im_end|>
         <|im_start|>user
         Answer: {generation}
         Question: {question}<|im_end|>

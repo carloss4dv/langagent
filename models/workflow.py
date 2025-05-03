@@ -273,36 +273,20 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             docs = retriever.invoke(rewritten_question, filter=filters if filters else None)
             print(f"Documentos recuperados: {len(docs)}")
             
-            # Comprobar si los documentos son relevantes
-            relevant_docs = []
-            for doc in docs:
-                relevance = retrieval_grader.invoke({
-                    "document": doc.page_content,
-                    "question": rewritten_question
-                })
-                
-                if isinstance(relevance, dict) and relevance.get("score", "").lower() == "yes":
-                    relevant_docs.append(doc)
-            
-            # Si no hay documentos relevantes, usar todos
-            if not relevant_docs and docs:
-                relevant_docs = docs
-            
             # Limitar el número total de documentos
             max_docs = VECTORSTORE_CONFIG.get("max_docs_total", 10)
-            if len(relevant_docs) > max_docs:
-                print(f"Limitando a {max_docs} documentos (de {len(relevant_docs)} recuperados)")
-                relevant_docs = relevant_docs[:max_docs]
+            if len(docs) > max_docs:
+                print(f"Limitando a {max_docs} documentos (de {len(docs)} recuperados)")
+                docs = docs[:max_docs]
             
             retrieval_details = {
                 "count": len(docs),
-                "relevant_count": len(relevant_docs),
                 "ambito": ambito,
-                "first_doc_snippet": relevant_docs[0].page_content[:100] + "..." if relevant_docs else "No documents retrieved"
+                "first_doc_snippet": docs[0].page_content[:100] + "..." if docs else "No documents retrieved"
             }
             
             return {
-                "documents": relevant_docs,
+                "documents": docs,
                 "question": question,
                 "rewritten_question": rewritten_question,
                 "retry_count": retry_count,
@@ -320,6 +304,62 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 "ambito": ambito,
                 "retrieval_details": {"error": str(e)}
             }
+
+    def grade_relevance(state):
+        """
+        Evalúa la relevancia de los documentos recuperados.
+        
+        Args:
+            state (dict): Estado actual del grafo.
+            
+        Returns:
+            dict: Estado actualizado con los documentos relevantes.
+        """
+        print("---GRADE RELEVANCE---")
+        
+        documents = state["documents"]
+        question = state["question"]
+        rewritten_question = state.get("rewritten_question", question)
+        retrieval_details = state.get("retrieval_details", {})
+        
+        try:
+            # Comprobar si los documentos son relevantes
+            relevant_docs = []
+            for doc in documents:
+                relevance = retrieval_grader.invoke({
+                    "document": doc.page_content,
+                    "question": rewritten_question
+                })
+                
+                if isinstance(relevance, dict) and relevance.get("score", "").lower() == "yes":
+                    relevant_docs.append(doc)
+            
+            # Si no hay documentos relevantes, usar todos
+            if not relevant_docs and documents:
+                print("No se encontraron documentos relevantes. Usando todos los documentos recuperados.")
+                relevant_docs = documents
+            
+            # Actualizar detalles de recuperación
+            retrieval_details.update({
+                "relevant_count": len(relevant_docs),
+                "relevance_checked": True
+            })
+            
+            return {
+                **state,
+                "documents": relevant_docs,
+                "retrieval_details": retrieval_details
+            }
+            
+        except Exception as e:
+            print(f"Error al evaluar relevancia: {str(e)}")
+            return {
+                **state,
+                "retrieval_details": {
+                    **retrieval_details,
+                    "relevance_error": str(e)
+                }
+            }
     
     def generate(state):
         """
@@ -334,7 +374,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         """
         documents = state["documents"]
         question = state["question"]
-        rewritten_question = state.get("rewritten_question", question)  # Usar pregunta reescrita si existe, sino la original
+        rewritten_question = state.get("rewritten_question", question)
         retry_count = state.get("retry_count", 0)
         relevant_cubos = state.get("relevant_cubos", [])
         retrieval_details = state.get("retrieval_details", {})
@@ -350,8 +390,6 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 "rewritten_question": rewritten_question,
                 "generation": response_json,
                 "retry_count": retry_count,
-                "hallucination_score": None,
-                "answer_score": None,
                 "relevant_cubos": relevant_cubos,
                 "ambito": state.get("ambito"),
                 "retrieval_details": retrieval_details,
@@ -414,13 +452,61 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 else:
                     response_json = response
             
+            return {
+                "documents": context_docs,
+                "question": question,
+                "rewritten_question": rewritten_question,
+                "generation": response_json,
+                "retry_count": retry_count,
+                "relevant_cubos": relevant_cubos,
+                "ambito": state.get("ambito"),
+                "retrieval_details": retrieval_details,
+                "sql_query": state.get("sql_query"),
+                "sql_result": state.get("sql_result")
+            }
+            
+        except Exception as e:
+            print(f"Error al generar respuesta: {str(e)}")
+            response_json = f"Se produjo un error al generar la respuesta: {str(e)}"
+            return {
+                "documents": documents,
+                "question": question,
+                "rewritten_question": rewritten_question,
+                "generation": response_json,
+                "retry_count": retry_count,
+                "relevant_cubos": relevant_cubos,
+                "ambito": state.get("ambito"),
+                "retrieval_details": retrieval_details,
+                "sql_query": None,
+                "sql_result": None
+            }
+
+    def evaluate(state):
+        """
+        Evalúa la respuesta generada para determinar su calidad y fundamentación.
+        
+        Args:
+            state (dict): Estado actual del grafo.
+            
+        Returns:
+            dict: Estado actualizado con las evaluaciones.
+        """
+        print("---EVALUATE---")
+        
+        generation = state["generation"]
+        question = state["question"]
+        rewritten_question = state.get("rewritten_question", question)
+        retry_count = state.get("retry_count", 0)
+        is_consulta = state.get("is_consulta", False)
+        
+        try:
             # Evaluar la respuesta solo si no es una consulta SQL
             if not is_consulta or not rag_sql_chain:
                 print("Evaluando si la respuesta contiene alucinaciones...")
                 # Verificar si la respuesta contiene alucinaciones
                 hallucination_eval = hallucination_grader.invoke({
-                    "documents": context,
-                    "generation": response_json
+                    "documents": state["documents"],
+                    "generation": generation
                 })
                 
                 if isinstance(hallucination_eval, dict) and "score" in hallucination_eval:
@@ -433,7 +519,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 print("Evaluando calidad de la respuesta...")
                 # Verificar si la respuesta es útil
                 answer_eval = answer_grader.invoke({
-                    "generation": response_json,
+                    "generation": generation,
                     "question": rewritten_question
                 })
                 
@@ -450,53 +536,44 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 hallucination_eval = {"score": "yes"}
                 answer_eval = {"score": "yes"}
             
-            # Función auxiliar para extraer el valor del "score" de la respuesta
-            def extract_score(response) -> bool:
-                if isinstance(response, dict) and "score" in response:
-                    return response["score"].lower() == "yes"
-                return True  # Por defecto, asumimos que es válido
-        
+            # Si la generación no es exitosa, incrementar contador de reintentos
+            if not (is_grounded and is_useful):
+                retry_count += 1
+                print(f"---RETRY ATTEMPT {retry_count}---")
+            
+            return {
+                **state,
+                "retry_count": retry_count,
+                "hallucination_score": hallucination_eval,
+                "answer_score": answer_eval
+            }
+            
         except Exception as e:
-            print(f"Error al generar respuesta: {str(e)}")
-            response_json = f"Se produjo un error al generar la respuesta: {str(e)}"
-            is_grounded = False
-            is_useful = False
-            hallucination_eval = None
-            answer_eval = None
-        
-        # Si la generación no es exitosa, incrementar contador de reintentos
-        if not (is_grounded and is_useful):
-            retry_count += 1
-            print(f"---RETRY ATTEMPT {retry_count}---")
-        
-        return {
-            "documents": context_docs,
-            "question": question,
-            "rewritten_question": rewritten_question,
-            "generation": response_json,
-            "retry_count": retry_count,
-            "hallucination_score": hallucination_eval,
-            "answer_score": answer_eval,
-            "relevant_cubos": relevant_cubos,
-            "ambito": state.get("ambito"),
-            "retrieval_details": retrieval_details,
-            "sql_query": state.get("sql_query"),
-            "sql_result": state.get("sql_result")
-        }
+            print(f"Error al evaluar respuesta: {str(e)}")
+            return {
+                **state,
+                "retry_count": retry_count,
+                "hallucination_score": None,
+                "answer_score": None
+            }
     
     # Añadir nodos al grafo
     workflow.add_node("retrieve", retrieve)
+    workflow.add_node("grade_relevance", grade_relevance)
     workflow.add_node("generate", generate)
+    workflow.add_node("evaluate", evaluate)
     workflow.add_node("execute_query", execute_query)
     
     # Definir bordes - flujo simplificado
     workflow.set_entry_point("retrieve")
-    workflow.add_edge("retrieve", "generate")
+    workflow.add_edge("retrieve", "grade_relevance")
+    workflow.add_edge("grade_relevance", "generate")
+    workflow.add_edge("generate", "evaluate")
     
     # Definir condición para ejecución de consulta SQL o verificación de reintento
-    def route_after_generate(state):
+    def route_after_evaluate(state):
         """
-        Determina qué hacer después de generar la respuesta:
+        Determina qué hacer después de evaluar la respuesta:
         - Ejecutar SQL si es una consulta
         - Reintentar si la respuesta no es buena
         - Finalizar si todo está bien
@@ -547,13 +624,13 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 print("Generación exitosa. Finalizando.")
             return "END"
     
-    # Añadir borde condicional para la decisión después de generar
+    # Añadir borde condicional para la decisión después de evaluar
     workflow.add_conditional_edges(
-        "generate",
-        route_after_generate,
+        "evaluate",
+        route_after_evaluate,
         {
             "execute_query": "execute_query",
-            "retrieve": "retrieve",
+            "generate": "generate",
             "END": END
         }
     )
