@@ -112,7 +112,10 @@ class LangChainAgent:
         # Cargar documentos
         print("Cargando documentos...")
         documents = load_documents_from_directory(self.data_dir)
-        
+        chunked_documents = RecursiveCharacterTextSplitter(
+            chunk_size=VECTORSTORE_CONFIG["chunk_size"],
+            chunk_overlap=VECTORSTORE_CONFIG["chunk_overlap"]
+        ).split_documents(documents)
         # Cargar consultas guardadas si existe el directorio
         if self.consultas_dir and os.path.exists(self.consultas_dir):
             print("Cargando consultas guardadas...")
@@ -123,12 +126,12 @@ class LangChainAgent:
             # Crear diccionario de documentos originales para generación de contexto
             source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents)}
             
-            if self.vectorstore_handler.load_documents(documents, source_documents=source_documents):
+            if self.vectorstore_handler.load_documents(chunked_documents, source_documents=source_documents, embeddings=self.embeddings):
                 print("Documentos cargados en vectorstore correctamente")
             else:
                 print("Vectorstore no encontrado, creando nueva vectorstore...")
                 print("Cargando documentos en vectorstore...")
-                self.vectorstore_handler.load_documents(documents, source_documents=source_documents)
+                self.vectorstore_handler.load_documents(chunked_documents, source_documents=source_documents)
         
         # Crear cadenas
         print("Creando cadenas de procesamiento...")

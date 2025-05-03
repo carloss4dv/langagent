@@ -960,6 +960,7 @@ class MilvusVectorStore(VectorStoreBase):
         """
         Carga documentos en la vectorstore.
         Si la colección no existe, la crea.
+        Si la generación de contexto está activa, crea una colección vacía primero.
         
         Args:
             documents: Lista de documentos a cargar
@@ -982,15 +983,27 @@ class MilvusVectorStore(VectorStoreBase):
         # Obtener el nombre de la colección
         collection_name = VECTORSTORE_CONFIG.get("collection_name", "default_collection")
         
-        # Intentar cargar la vectorstore existente
-        vectorstore = self.load_vectorstore(embeddings, collection_name)
-        
-        if vectorstore is None:
-            # Si no existe, crear una nueva
-            vectorstore = self.create_vectorstore(documents, embeddings, collection_name)
+        # Si la generación de contexto está activa, crear una colección vacía primero
+        if self.use_context_generation:
+            logger.info("Generación de contexto activa: creando colección vacía primero")
+            empty_doc = Document(
+                page_content="Documento de inicialización", 
+                metadata={"source": "init", "ambito": "general", "cubo_source": "general"}
+            )
+            vectorstore = self.create_vectorstore([empty_doc], embeddings, collection_name, drop_old=True)
             if vectorstore is None:
-                logger.error("No se pudo crear la vectorstore")
+                logger.error("No se pudo crear la colección vacía")
                 return False
-                
+        else:
+            # Intentar cargar la vectorstore existente
+            vectorstore = self.load_vectorstore(embeddings, collection_name)
+            
+            if vectorstore is None:
+                # Si no existe, crear una nueva
+                vectorstore = self.create_vectorstore(documents, embeddings, collection_name)
+                if vectorstore is None:
+                    logger.error("No se pudo crear la vectorstore")
+                    return False
+                    
         # Añadir los documentos a la colección
         return self.add_documents_to_collection(vectorstore, documents, source_documents) 
