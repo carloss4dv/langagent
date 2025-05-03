@@ -16,6 +16,8 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStore
 from langchain_milvus import Milvus, BM25BuiltInFunction
+from langchain_milvus.retrievers import MilvusCollectionHybridSearchRetriever
+from langchain_milvus.rankers import WeightedRanker
 from langagent.vectorstore.base import VectorStoreBase
 from langagent.config.config import VECTORSTORE_CONFIG
 from langagent.models.constants import CUBO_TO_AMBITO, AMBITOS_CUBOS
@@ -116,8 +118,8 @@ class MilvusVectorStore(VectorStoreBase):
         """
         # Obtener parámetros de la configuración
         milvus_uri = VECTORSTORE_CONFIG.get("milvus_uri", "http://localhost:19530")
-        milvus_token = VECTORSTORE_CONFIG.get("milvus_token", "")
-        milvus_secure = VECTORSTORE_CONFIG.get("milvus_secure", True)
+        milvus_token = VECTORSTORE_CONFIG.get("milvus_token", "root:Milvus")
+        milvus_secure = VECTORSTORE_CONFIG.get("milvus_secure", False)
         
         # Verificar si hay variables de entorno disponibles (tienen prioridad)
         env_uri = os.getenv("ZILLIZ_CLOUD_URI")
@@ -442,8 +444,7 @@ class MilvusVectorStore(VectorStoreBase):
     def create_retriever(self, vectorstore: Milvus, k: Optional[int] = None, 
                       similarity_threshold: float = 0.7, **kwargs) -> BaseRetriever:
         """
-        Crea un retriever para una vectorstore Milvus.
-        Configura el retriever para usar búsqueda con filtrado y/o híbrida.
+        Crea un retriever para una vectorstore Milvus usando búsqueda híbrida.
         
         Args:
             vectorstore: Instancia de Milvus vectorstore
@@ -451,68 +452,45 @@ class MilvusVectorStore(VectorStoreBase):
             similarity_threshold: Umbral mínimo de similitud
             
         Returns:
-            BaseRetriever: Retriever configurado para Milvus
+            BaseRetriever: Retriever configurado para Milvus con búsqueda híbrida
         """
         # Verificar que la vectorstore no es None
         if vectorstore is None:
             logger.error("No se puede crear un retriever con una vectorstore None")
-            # Crear una vectorstore dummy para evitar errores
-            try:
-                logger.info("Creando una vectorstore dummy para evitar errores")
-                empty_doc = Document(
-                    page_content="Documento de inicialización dummy", 
-                    metadata={"source": "init", "ambito": "general", "cubo_source": "general"}
-                )
-                dummy_collection_name = "dummy_collection_" + str(int(time.time()))
-                vectorstore = self.create_vectorstore(
-                    documents=[empty_doc],
-                    embeddings=kwargs.get("embeddings"),
-                    collection_name=dummy_collection_name
-                )
-                
-                if vectorstore is None:
-                    logger.error("No se pudo crear vectorstore dummy. Devolviendo None.")
-                    return None
-            except Exception as e:
-                logger.error(f"Error al crear vectorstore dummy: {e}")
-                return None
-        
+            return None
+            
         # Obtener parámetros de búsqueda desde la configuración o parámetros
         k = k or VECTORSTORE_CONFIG.get("k_retrieval", 4)
         
-        # Determinar el tipo de búsqueda a utilizar
-        # 'hybrid' no es un valor válido para search_type, usar 'similarity' en su lugar
-        search_type = "similarity"  # Valor por defecto permitido
-        
-        # Crear los parámetros de búsqueda
-        search_kwargs = {
-            "k": k,
-            "score_threshold": similarity_threshold
-        }
-        
-        # Si usamos búsqueda híbrida, configurar el executor_parameters
-        if self.use_hybrid_search:
-            # En lugar de usar 'hybrid' como search_type, configuramos parámetros especiales
-            # y luego manejaremos la búsqueda híbrida directamente en retrieve_documents
-            search_kwargs["filter"] = None  # Será establecido en retrieve_documents
-            logger.info("Configurando retriever para manejar búsqueda híbrida manualmente")
-        
         try:
-            logger.info(f"Creando retriever con tipo de búsqueda: {search_type}")
-            retriever = vectorstore.as_retriever(
-                search_type=search_type,
-                search_kwargs=search_kwargs
+            logger.info("Creando retriever con búsqueda híbrida")
+            
+            # Configurar parámetros de búsqueda para campos dense y sparse
+            dense_search_params = {
+                "metric_type": "L2",
+                "params": {}
+            }
+            
+            sparse_search_params = {
+                "metric_type": "BM25"
+            }
+            
+            # Crear el retriever híbrido
+            retriever = MilvusCollectionHybridSearchRetriever(
+                collection=vectorstore.col,
+                rerank=WeightedRanker(0.7, 0.3),  # 70% dense, 30% sparse
+                anns_fields=["dense", "sparse"],
+                field_embeddings=[vectorstore.embedding_function, BM25BuiltInFunction()],
+                field_search_params=[dense_search_params, sparse_search_params],
+                top_k=k,
+                text_field="text"
             )
             
-            # Guardamos una referencia para saber si este retriever debe usar búsqueda híbrida
-            if self.use_hybrid_search:
-                # Añadimos un atributo personalizado para identificar que debe usar hybrid_search
-                retriever._use_hybrid_search = True
-                logger.info("Retriever configurado para usar búsqueda híbrida manualmente")
-            
+            logger.info("Retriever híbrido creado correctamente")
             return retriever
+            
         except Exception as e:
-            logger.error(f"Error al crear retriever: {e}")
+            logger.error(f"Error al crear retriever híbrido: {e}")
             # Intentar con parámetros mínimos como fallback
             try:
                 logger.info("Intentando crear retriever con parámetros mínimos")

@@ -32,7 +32,7 @@ def get_ambitos_info() -> str:
     ambitos_info = """
 # 👋 ¡Bienvenido al Asistente de SEGEDA!
 
-Soy tu asistente especializado en datos de SEGEDA Estoy aquí para ayudarte a obtener información precisa y relevante del sistema SEGEDA (DATUZ: Open Data and Transparency UZ).
+Estoy aquí para ayudarte a obtener información precisa y relevante del sistema SEGEDA (DATUZ: Open Data and Transparency UZ).
 
 ## 🤖 ¿Cómo funciona?
 
