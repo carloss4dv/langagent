@@ -17,7 +17,7 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStore
 from langchain_milvus import Milvus, BM25BuiltInFunction
 from langchain_milvus.retrievers import MilvusCollectionHybridSearchRetriever
-from langchain_milvus.rankers import WeightedRanker
+from pymilvus import WeightedRanker
 from langagent.vectorstore.base import VectorStoreBase
 from langagent.config.config import VECTORSTORE_CONFIG
 from langagent.models.constants import CUBO_TO_AMBITO, AMBITOS_CUBOS
@@ -141,14 +141,16 @@ class MilvusVectorStore(VectorStoreBase):
         connection_args = {
             "uri": milvus_uri,
             "secure": milvus_secure,
-            "timeout": 60  # Aumentar el timeout para operaciones largas
+            "timeout": 60,  # Aumentar el timeout para operaciones largas
+            "use_grpc": True,  # Forzar uso de gRPC
+            "grpc_secure": milvus_secure  # Usar la misma configuración SSL para gRPC
         }
         
         # Añadir token solo si está presente
         if milvus_token:
             connection_args["token"] = milvus_token
         
-        logger.info(f"Conectando a Milvus en: {milvus_uri} (Secure: {milvus_secure})")
+        logger.info(f"Conectando a Milvus en: {milvus_uri} (Secure: {milvus_secure}, gRPC: True)")
         
         return connection_args
     
