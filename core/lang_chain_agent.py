@@ -103,6 +103,12 @@ class LangChainAgent:
         print("Configurando embeddings...")
         self.embeddings = create_embeddings()
         
+        # Configurar generador de contexto si está habilitado
+        if VECTORSTORE_CONFIG.get("use_context_generation", False):
+            print("Configurando generador de contexto...")
+            context_generator = create_context_generator(self.llm)
+            self.vectorstore_handler.set_context_generator(context_generator)
+        
         # Cargar documentos
         print("Cargando documentos...")
         documents = load_documents_from_directory(self.data_dir)
@@ -112,88 +118,17 @@ class LangChainAgent:
             print("Cargando consultas guardadas...")
             consultas = load_consultas_guardadas(self.consultas_dir)
             documents.extend(consultas)
-        
-        # Dividir documentos en chunks
-        print("Dividiendo documentos en chunks...")
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=VECTORSTORE_CONFIG["chunk_size"],
-            chunk_overlap=VECTORSTORE_CONFIG["chunk_overlap"]
-        )
-        doc_splits = text_splitter.split_documents(documents)
-        
-        # Organizar documentos por cubo
-        cubo_documents = {}
-        for doc in doc_splits:
-            cubo = doc.metadata.get("cubo", "default")
-            if cubo not in cubo_documents:
-                cubo_documents[cubo] = []
-            cubo_documents[cubo].append(doc)
-        
-        # Procesar cada cubo y crear su vectorstore
-        for cubo_name, docs in cubo_documents.items():
-            print(f"Procesando documentos para el cubo: {cubo_name}")
             
-            # Dividir documentos en chunks
-            doc_splits = text_splitter.split_documents(docs)
+        if self.vector_db_type == "milvus":
+            # Crear diccionario de documentos originales para generación de contexto
+            source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents)}
             
-            # Añadir metadatos sobre el cubo a los documentos
-            for doc in doc_splits:
-                doc.metadata["cubo_source"] = cubo_name
-                # Intentar identificar el ámbito del cubo
-                from langagent.models.constants import CUBO_TO_AMBITO
-                if cubo_name in CUBO_TO_AMBITO:
-                    doc.metadata["ambito"] = CUBO_TO_AMBITO[cubo_name]
-            
-            # Nombre de la colección para el cubo
-            collection_name = f"Cubo{cubo_name}"
-            
-            # Crear vectorstore para el cubo
-            db = self.vectorstore_handler.create_vectorstore(
-                documents=doc_splits,
-                embeddings=self.embeddings,
-                collection_name=collection_name,
-                persist_directory=os.path.join(self.vectorstore_dir, collection_name)
-            )
-            
-            # Guardar la vectorstore
-            self.vectorstores[cubo_name] = db
-            
-            # Crear retriever para el cubo
-            self.retrievers[cubo_name] = self.vectorstore_handler.create_retriever(
-                vectorstore=db,
-                k=VECTORSTORE_CONFIG["k_retrieval"],
-                similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
-            )
-        
-        # Verificar si tenemos al menos un retriever disponible
-        if not self.retrievers:
-            print("¡ADVERTENCIA! No se ha creado ningún retriever. Creando un retriever predeterminado...")
-            try:
-                # Crear un documento vacío y una vectorstore básica para evitar errores
-                empty_doc = Document(page_content="Documento predeterminado", metadata={"source": "default"})
-                
-                # Crear vectorstore predeterminada
-                default_collection = "default_collection"
-                db = self.vectorstore_handler.create_vectorstore(
-                    documents=[empty_doc],
-                    embeddings=self.embeddings,
-                    collection_name=default_collection,
-                    persist_directory=os.path.join(self.vectorstore_dir, default_collection)
-                )
-                
-                # Guardar la vectorstore
-                self.vectorstores["default"] = db
-                
-                # Crear un retriever predeterminado
-                self.retrievers["default"] = self.vectorstore_handler.create_retriever(
-                    vectorstore=db,
-                    k=VECTORSTORE_CONFIG["k_retrieval"],
-                    similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
-                )
-                print("Retriever predeterminado creado correctamente")
-            except Exception as e:
-                print(f"Error al crear retriever predeterminado: {str(e)}")
-                print("¡ADVERTENCIA! La aplicación puede fallar debido a la falta de retrievers disponibles")
+            if self.vectorstore_handler.load_documents(documents, source_documents=source_documents):
+                print("Documentos cargados en vectorstore correctamente")
+            else:
+                print("Vectorstore no encontrado, creando nueva vectorstore...")
+                print("Cargando documentos en vectorstore...")
+                self.vectorstore_handler.load_documents(documents, source_documents=source_documents)
         
         # Crear cadenas
         print("Creando cadenas de procesamiento...")

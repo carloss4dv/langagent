@@ -954,3 +954,43 @@ class MilvusVectorStore(VectorStoreBase):
             logger.warning("Revisa la configuración del LLM y el generador de contexto.")
             
         return documents 
+
+    def load_documents(self, documents: List[Document], embeddings: Embeddings = None, 
+                     source_documents: Dict[str, Document] = None) -> bool:
+        """
+        Carga documentos en la vectorstore.
+        Si la colección no existe, la crea.
+        
+        Args:
+            documents: Lista de documentos a cargar
+            embeddings: Modelo de embeddings a utilizar (opcional)
+            source_documents: Diccionario con los documentos originales completos (opcional)
+            
+        Returns:
+            bool: True si los documentos se cargaron correctamente
+        """
+        if not documents:
+            logger.warning("No hay documentos para cargar")
+            return False
+            
+        # Usar los embeddings proporcionados o los existentes
+        embeddings = embeddings or self.embeddings
+        if not embeddings:
+            logger.error("No se pueden cargar documentos sin embeddings")
+            return False
+            
+        # Obtener el nombre de la colección
+        collection_name = VECTORSTORE_CONFIG.get("collection_name", "default_collection")
+        
+        # Intentar cargar la vectorstore existente
+        vectorstore = self.load_vectorstore(embeddings, collection_name)
+        
+        if vectorstore is None:
+            # Si no existe, crear una nueva
+            vectorstore = self.create_vectorstore(documents, embeddings, collection_name)
+            if vectorstore is None:
+                logger.error("No se pudo crear la vectorstore")
+                return False
+                
+        # Añadir los documentos a la colección
+        return self.add_documents_to_collection(vectorstore, documents, source_documents) 

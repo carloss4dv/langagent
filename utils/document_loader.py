@@ -9,6 +9,8 @@ import os
 from typing import Dict, List
 from langchain_core.documents import Document
 from langchain_community.document_loaders import UnstructuredMarkdownLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from config.config import VECTORSTORE_CONFIG
 
 def load_file(file_path: str) -> List[Document]:
     """
@@ -22,7 +24,10 @@ def load_file(file_path: str) -> List[Document]:
     """
     # Corrige el nombre de la variable (file_path en lugar de path)
     loader = UnstructuredMarkdownLoader(file_path)
-    elements = loader.load_and_split()  # Esto ya devuelve una lista de Documents
+    elements = loader.load_and_split(RecursiveCharacterTextSplitter(
+            chunk_size=VECTORSTORE_CONFIG["chunk_size"],
+            chunk_overlap=VECTORSTORE_CONFIG["chunk_overlap"]
+        ))  # Esto ya devuelve una lista de Documents
     
     # Verifica que los elementos tengan contenido
     if not elements:
