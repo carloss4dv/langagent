@@ -112,6 +112,7 @@ class MilvusVectorStore(VectorStoreBase):
     def _get_connection_args(self) -> Dict[str, Any]:
         """
         Obtiene los argumentos de conexión para Milvus.
+        Configurado para usar túnel SSH sin SSL.
         
         Returns:
             Dict[str, Any]: Argumentos de conexión
@@ -119,7 +120,6 @@ class MilvusVectorStore(VectorStoreBase):
         # Obtener parámetros de la configuración
         milvus_uri = VECTORSTORE_CONFIG.get("milvus_uri", "http://localhost:19530")
         milvus_token = VECTORSTORE_CONFIG.get("milvus_token", "root:Milvus")
-        milvus_secure = VECTORSTORE_CONFIG.get("milvus_secure", False)
         
         # Verificar si hay variables de entorno disponibles (tienen prioridad)
         env_uri = os.getenv("ZILLIZ_CLOUD_URI")
@@ -140,17 +140,17 @@ class MilvusVectorStore(VectorStoreBase):
         # Construir argumentos de conexión
         connection_args = {
             "uri": milvus_uri,
-            "secure": milvus_secure,
+            "secure": False,  # Deshabilitar SSL ya que usamos túnel SSH
             "timeout": 60,  # Aumentar el timeout para operaciones largas
-            "use_grpc": True,  # Forzar uso de gRPC
-            "grpc_secure": milvus_secure  # Usar la misma configuración SSL para gRPC
+            "use_grpc": True,  # Usar gRPC para mejor rendimiento
+            "grpc_secure": False  # Deshabilitar SSL en gRPC también
         }
         
         # Añadir token solo si está presente
         if milvus_token:
             connection_args["token"] = milvus_token
         
-        logger.info(f"Conectando a Milvus en: {milvus_uri} (Secure: {milvus_secure}, gRPC: True)")
+        logger.info(f"Conectando a Milvus a través de túnel SSH en: {milvus_uri} (gRPC: True, SSL: False)")
         
         return connection_args
     
