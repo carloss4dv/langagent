@@ -123,15 +123,21 @@ class LangChainAgent:
             documents.extend(consultas)
             
         if self.vector_db_type == "milvus":
-            # Crear diccionario de documentos originales para generación de contexto
-            source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents)}
-            
-            if self.vectorstore_handler.load_documents(chunked_documents, source_documents=source_documents, embeddings=self.embeddings):
-                print("Documentos cargados en vectorstore correctamente")
+            if self.vectorstore_handler.load_vectorstore(self.embeddings, VECTORSTORE_CONFIG["collection_name"]):
+                print("Vectorstore cargado correctamente")
             else:
                 print("Vectorstore no encontrado, creando nueva vectorstore...")
                 print("Cargando documentos en vectorstore...")
                 self.vectorstore_handler.load_documents(chunked_documents, source_documents=source_documents)
+            # Crear diccionario de documentos originales para generación de contexto
+                source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents)}
+                
+                if self.vectorstore_handler.load_documents(chunked_documents, source_documents=source_documents, embeddings=self.embeddings):
+                    print("Documentos cargados en vectorstore correctamente")
+                else:
+                    print("Vectorstore no encontrado, creando nueva vectorstore...")
+                    print("Cargando documentos en vectorstore...")
+                    self.vectorstore_handler.load_documents(chunked_documents, source_documents=source_documents)
         
         # Crear cadenas
         print("Creando cadenas de procesamiento...")
