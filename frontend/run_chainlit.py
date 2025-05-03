@@ -39,6 +39,7 @@ def run_chainlit():
 
 def main():
     """Función principal que inicia la aplicación."""
+    chainlit_process = None
     try:
         # Iniciar Chainlit
         chainlit_process = run_chainlit()
@@ -52,6 +53,8 @@ def main():
             
     except KeyboardInterrupt:
         print("\nDeteniendo servicio...")
+    except Exception as e:
+        print(f"Error al iniciar Chainlit: {str(e)}")
     finally:
         # Detener el proceso
         if chainlit_process and chainlit_process.poll() is None:
