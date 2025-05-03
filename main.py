@@ -69,7 +69,7 @@ def main():
     )
     
     # Ejecutar el agente con la pregunta proporcionada o una de ejemplo
-    question = args.question if args.question else "¿Cómo se calcula la tasa de éxito académico?"
+    question = args.question if args.question else "¿Cómo se calcula la tasa de éxito académico en el ambito Academico?"
     print(f"Ejecutando consulta: {question}")
     result = agent.run(question)
     
