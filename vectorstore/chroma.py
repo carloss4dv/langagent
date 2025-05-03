@@ -105,4 +105,39 @@ class ChromaVectorStore(VectorStoreBase):
                 "k": k,
                 "score_threshold": similarity_threshold
             }
-        ) 
+        )
+    
+    def retrieve_documents(self, retriever: BaseRetriever, query: str, 
+                         max_retries: int = 3) -> List[Document]:
+        """
+        Recupera documentos de un retriever con manejo de errores y reintentos.
+        
+        Args:
+            retriever: Retriever a utilizar
+            query: Consulta para la búsqueda
+            max_retries: Número máximo de reintentos en caso de error
+            
+        Returns:
+            List[Document]: Lista de documentos recuperados
+        """
+        for attempt in range(max_retries):
+            try:
+                docs = retriever.get_relevant_documents(query)
+                
+                if not docs:
+                    logger.warning(f"No se encontraron documentos relevantes para la consulta: {query}")
+                    return []
+                
+                # Logging detallado de los documentos recuperados
+                for i, doc in enumerate(docs):
+                    logger.debug(f"Documento {i+1}: Score={doc.metadata.get('score', 'N/A')}, "
+                               f"Fuente={doc.metadata.get('source', 'N/A')}")
+                
+                return docs
+                
+            except Exception as e:
+                logger.error(f"Error en intento {attempt + 1}: {str(e)}")
+                if attempt == max_retries - 1:
+                    logger.error("Se agotaron los reintentos")
+                    return []
+                time.sleep(1)  # Esperar antes de reintentar 

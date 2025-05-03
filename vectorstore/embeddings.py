@@ -6,41 +6,36 @@ que serán utilizados por las vectorstores.
 """
 
 import logging
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.embeddings import Embeddings
-from langchain_milvus.utils.sparse import BM25SparseEmbedding
 
 logger = logging.getLogger(__name__)
 
-def create_embeddings(model_name: str = "intfloat/multilingual-e5-large-instruct",
-                     device: str = "cpu",
-                     **kwargs) -> Tuple[Embeddings, BM25SparseEmbedding]:
+def create_embeddings(model_name: str = "intfloat/multilingual-e5-large-instruct", 
+                     device: str = "cuda", **kwargs) -> Embeddings:
     """
-    Crea los modelos de embeddings denso y disperso.
+    Crea un modelo de embeddings.
     
     Args:
-        model_name: Nombre del modelo de HuggingFace a utilizar
-        device: Dispositivo donde ejecutar el modelo ('cpu' o 'cuda')
-        **kwargs: Argumentos adicionales para la configuración
+        model_name (str): Nombre del modelo de embeddings a utilizar.
+        device (str): Dispositivo donde ejecutar el modelo ("cuda" o "cpu").
+        **kwargs: Argumentos adicionales para el modelo.
         
     Returns:
-        Tuple[Embeddings, BM25SparseEmbedding]: Tupla con los modelos de embeddings densos y dispersos
+        Embeddings: Modelo de embeddings configurado.
     """
     try:
-        # Crear embeddings densos
-        dense_embeddings = HuggingFaceEmbeddings(
-            model_name=model_name,
-            model_kwargs={"device": device},
-            **kwargs
-        )
+        model_kwargs = {"device": device}
         
-        # Crear embeddings dispersos con un corpus vacío inicialmente
-        # El corpus se actualizará cuando se añadan documentos
-        sparse_embeddings = BM25SparseEmbedding(corpus=[],language="es")
+        # Añadir argumentos adicionales si se proporcionan
+        if kwargs:
+            model_kwargs.update(kwargs)
         
-        logger.info(f"Modelos de embeddings creados: {model_name}")
-        return dense_embeddings, sparse_embeddings
+        logger.info(f"Creando modelo de embeddings {model_name} en dispositivo {device}")
+        embeddings = HuggingFaceEmbeddings(model_name=model_name, model_kwargs=model_kwargs)
+        
+        return embeddings
     except Exception as e:
         # Si falla con cuda, intentar con CPU
         if device == "cuda":
