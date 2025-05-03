@@ -445,12 +445,14 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                     "question": rewritten_question
                 })
                 
-                # La respuesta es un string
-                if not isinstance(response, str):
-                    print(f"Advertencia: La respuesta no es un string: {type(response)}")
-                    response_json = str(response)
-                else:
+                # Extraer solo el campo answer si la respuesta es un diccionario
+                if isinstance(response, dict) and "answer" in response:
+                    response_json = response["answer"]
+                elif isinstance(response, str):
                     response_json = response
+                else:
+                    print(f"Advertencia: Formato de respuesta no esperado: {type(response)}")
+                    response_json = str(response)
             
             return {
                 "documents": context_docs,
