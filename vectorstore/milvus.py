@@ -483,6 +483,21 @@ class MilvusVectorStore(VectorStoreBase):
             # Obtener la conexión a Milvus
             from pymilvus import connections, Collection
             
+            # Obtener argumentos de conexión
+            connection_args = self._get_connection_args()
+            
+            # Establecer la conexión si no existe
+            try:
+                connections.get_connection("default")
+            except Exception:
+                logger.info("Estableciendo conexión a Milvus...")
+                connections.connect(
+                    alias="default",
+                    uri=connection_args["uri"],
+                    token=connection_args.get("token"),
+                    secure=connection_args.get("secure", False)
+                )
+            
             # Obtener la colección directamente
             collection_name = VECTORSTORE_CONFIG["collection_name"]
             collection = Collection(collection_name)
