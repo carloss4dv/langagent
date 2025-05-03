@@ -58,7 +58,7 @@ class LangChainAgent:
         # Configuración de directorios
         self.data_dir = data_dir or PATHS_CONFIG["default_data_dir"]
         self.vectorstore_dir = vectorstore_dir or PATHS_CONFIG["default_vectorstore_dir"]
-        self.vector_db_type = vector_db_type or VECTORSTORE_CONFIG["default_type"]
+        self.vector_db_type = vector_db_type or VECTORSTORE_CONFIG["vector_db_type"]
         self.consultas_dir = consultas_dir
         
         # Configuración de modelos
