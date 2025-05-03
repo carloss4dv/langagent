@@ -207,7 +207,7 @@ class LangChainAgent:
                 "question": query,
                 "ambito": ambito_result["ambito"],
                 "cubos": ambito_result["cubos"],
-                "is_visualization": ambito_result.get("is_visualization", False)
+                "is_consulta": ambito_result.get("is_consulta", False)
             }
             
             # Ejecutar el workflow principal
@@ -216,7 +216,7 @@ class LangChainAgent:
             # Añadir información del ámbito al resultado
             result["ambito"] = ambito_result["ambito"]
             result["cubos"] = ambito_result["cubos"]
-            result["is_visualization"] = ambito_result.get("is_visualization", False)
+            result["is_consulta"] = ambito_result.get("is_consulta", False)
             
             return result
         

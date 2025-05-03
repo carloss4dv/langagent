@@ -12,7 +12,7 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_community.utilities import SQLDatabase
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langagent.prompts import PROMPTS 
-from langagent.config.config import LLM_CONFIG
+from langagent.config.config import LLM_CONFIG, SQL_CONFIG
 
 def _get_prompt_template(llm, prompt_key: str):
     """Helper para obtener plantillas del modelo correcto."""
@@ -53,7 +53,7 @@ def create_llm(model_name: str = None, temperature: float = None, format: str = 
     )
 
 
-def create_rag_sql_chain(llm, db_uri, dialect="sqlite"):
+def create_rag_sql_chain(llm, db_uri=SQL_CONFIG["db_uri"], dialect=SQL_CONFIG["dialect"]):
     """
     Crea una cadena combinada RAG + SQL que genera tanto una respuesta como una consulta SQL.
     
