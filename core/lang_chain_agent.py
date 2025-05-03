@@ -95,6 +95,10 @@ class LangChainAgent:
         
         # Crear LLMs
         print("Configurando modelos de lenguaje...")
+        print(f"Modelo principal (generación): {self.local_llm}")
+        print(f"Modelo secundario (routing): {self.local_llm2}")
+        print(f"Modelo terciario (evaluación): {self.local_llm3}")
+        
         self.llm = create_llm(model_name=self.local_llm)
         self.llm2 = create_llm(model_name=self.local_llm2)
         self.llm3 = create_llm(model_name=self.local_llm3)
@@ -144,10 +148,17 @@ class LangChainAgent:
         
         # Crear cadenas
         print("Creando cadenas de procesamiento...")
+        print("Usando modelo principal para RAG y SQL...")
         self.rag_sql_chain = create_rag_sql_chain(self.llm)
+        
+        print("Usando modelo secundario para evaluación de relevancia...")
         self.retrieval_grader = create_retrieval_grader(self.llm2)
+        
+        print("Usando modelo terciario para evaluación de alucinaciones y respuestas...")
         self.hallucination_grader = create_hallucination_grader(self.llm3)
         self.answer_grader = create_answer_grader(self.llm3)
+        
+        print("Usando modelo secundario para reescritura de consultas...")
         self.query_rewriter = create_query_rewriter(self.llm2)
         
         # Crear flujos de trabajo
