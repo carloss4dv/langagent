@@ -70,7 +70,8 @@ class LangChainAgent:
         self.llm = None
         self.llm2 = None
         self.llm3 = None
-        self.embeddings = None
+        self.dense_embeddings = None
+        self.sparse_embeddings = None
         self.vectorstore = None
         self.retriever = None
         self.rag_chain = None
@@ -101,7 +102,7 @@ class LangChainAgent:
         
         # Crear embeddings
         print("Configurando embeddings...")
-        self.embeddings = create_embeddings()
+        self.dense_embeddings, self.sparse_embeddings = create_embeddings()
         
         # Configurar generador de contexto si está habilitado
         if VECTORSTORE_CONFIG.get("use_context_generation", False):
@@ -128,18 +129,18 @@ class LangChainAgent:
         
         # Cargar o crear vectorstore
         if self.vector_db_type == "milvus":
-            if self.vectorstore_handler.load_vectorstore(self.embeddings, VECTORSTORE_CONFIG["collection_name"]):
+            if self.vectorstore_handler.load_vectorstore((self.dense_embeddings, self.sparse_embeddings), VECTORSTORE_CONFIG["collection_name"]):
                 print("Vectorstore cargado correctamente")
             else:
                 print("Vectorstore no encontrado, creando nueva vectorstore...")
                 print("Cargando documentos en vectorstore...")
-                if self.vectorstore_handler.load_documents(chunked_documents, source_documents=source_documents, embeddings=self.embeddings):
+                if self.vectorstore_handler.load_documents(chunked_documents, source_documents=source_documents, embeddings=(self.dense_embeddings, self.sparse_embeddings)):
                     print("Documentos cargados en vectorstore correctamente")
                 else:
                     print("Error al cargar documentos en vectorstore")
         
         # Crear el retriever
-        self.retriever = self.vectorstore_handler.create_retriever(self.embeddings)
+        self.retriever = self.vectorstore_handler.create_retriever((self.dense_embeddings, self.sparse_embeddings))
         
         # Crear cadenas
         print("Creando cadenas de procesamiento...")

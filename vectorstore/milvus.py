@@ -154,7 +154,7 @@ class MilvusVectorStore(VectorStoreBase):
         
         return connection_args
     
-    def create_vectorstore(self, documents: List[Document], embeddings: Embeddings, 
+    def create_vectorstore(self, documents: List[Document], embeddings: Tuple[Embeddings, Any], 
                          collection_name: str, **kwargs) -> Milvus:
         """
         Crea una nueva vectorstore Milvus con los documentos proporcionados.
@@ -163,7 +163,7 @@ class MilvusVectorStore(VectorStoreBase):
         
         Args:
             documents: Lista de documentos a indexar
-            embeddings: Modelo de embeddings a utilizar
+            embeddings: Tupla con (embeddings denso, embeddings disperso)
             collection_name: Nombre de la colección en Milvus
             
         Returns:
@@ -172,6 +172,9 @@ class MilvusVectorStore(VectorStoreBase):
         if not documents:
             logger.error("No se pueden crear vectorstores sin documentos.")
             return None
+        
+        # Desempaquetar los embeddings
+        dense_embeddings, sparse_embeddings = embeddings
         
         # Mostrar el número de documentos a procesar
         logger.info(f"Preparando {len(documents)} documentos para vectorstore {collection_name}")
@@ -247,14 +250,14 @@ class MilvusVectorStore(VectorStoreBase):
                 
                 # Preparar argumentos para verificar
                 check_kwargs = {
-                    "embedding_function": embeddings,
+                    "embedding_function": dense_embeddings,
                     "collection_name": collection_name,
                     "connection_args": connection_args
                 }
                 
                 # Configurar búsqueda híbrida si es necesario
                 if use_hybrid_search:
-                    check_kwargs["builtin_function"] = BM25BuiltInFunction()
+                    check_kwargs["builtin_function"] = sparse_embeddings
                     check_kwargs["vector_field"] = ["dense", "sparse"]
                 
                 # Intentar cargar la colección
@@ -282,7 +285,7 @@ class MilvusVectorStore(VectorStoreBase):
             vs_kwargs = {
                 "connection_args": connection_args,
                 "collection_name": collection_name,
-                "embedding": embeddings,
+                "embedding": dense_embeddings,
                 "drop_old": drop_old,
                 "consistency_level": consistency_level
             }
@@ -295,7 +298,7 @@ class MilvusVectorStore(VectorStoreBase):
             # Si queremos usar búsqueda híbrida (denso + sparse)
             if use_hybrid_search:
                 logger.info("Configurando búsqueda híbrida con BM25")
-                vs_kwargs["builtin_function"] = BM25BuiltInFunction()
+                vs_kwargs["builtin_function"] = sparse_embeddings
                 vs_kwargs["vector_field"] = ["dense", "sparse"]  # 'dense' para embeddings, 'sparse' para BM25
             
             # Crear la vectorstore
@@ -351,19 +354,22 @@ class MilvusVectorStore(VectorStoreBase):
 
         return None
     
-    def load_vectorstore(self, embeddings: Embeddings, collection_name: str, 
+    def load_vectorstore(self, embeddings: Tuple[Embeddings, Any], collection_name: str, 
                        **kwargs) -> Milvus:
         """
         Carga una vectorstore Milvus existente.
         Si la colección no existe, la crea con un documento de inicialización.
         
         Args:
-            embeddings: Modelo de embeddings a utilizar
+            embeddings: Tupla con (embeddings denso, embeddings disperso)
             collection_name: Nombre de la colección en Milvus
             
         Returns:
             Milvus: Instancia de la vectorstore cargada
         """
+        # Desempaquetar los embeddings
+        dense_embeddings, sparse_embeddings = embeddings
+
         connection_args = self._get_connection_args()
         logger.info(f"Cargando vectorstore Milvus existente: {collection_name}")
         
@@ -374,7 +380,7 @@ class MilvusVectorStore(VectorStoreBase):
         try:
             # Preparar argumentos para cargar la vectorstore
             vs_kwargs = {
-                "embedding_function": embeddings,
+                "embedding_function": dense_embeddings,
                 "collection_name": collection_name,
                 "connection_args": connection_args
             }
@@ -382,7 +388,7 @@ class MilvusVectorStore(VectorStoreBase):
             # Si queremos usar búsqueda híbrida
             if use_hybrid_search:
                 logger.info("Configurando función BM25 para búsqueda híbrida")
-                vs_kwargs["builtin_function"] = BM25BuiltInFunction()
+                vs_kwargs["builtin_function"] = sparse_embeddings
                 vs_kwargs["vector_field"] = ["dense", "sparse"]  # 'dense' para embeddings, 'sparse' para BM25
             
             # Intentar cargar la vectorstore
@@ -456,26 +462,26 @@ class MilvusVectorStore(VectorStoreBase):
                     logger.error("Asegúrese de configurar las variables de entorno ZILLIZ_CLOUD_URI y ZILLIZ_CLOUD_TOKEN correctamente.")
                 raise e
     
-    def create_retriever(self, embeddings: Embeddings ) -> BaseRetriever:
-        
+    def create_retriever(self, embeddings: Tuple[Embeddings, Any]) -> BaseRetriever:
         """
         Crea un retriever para una vectorstore Milvus usando búsqueda híbrida.
         
         Args:
-            vectorstore: Instancia de Milvus vectorstore
-            k: Número de documentos a recuperar
-            similarity_threshold: Umbral mínimo de similitud
+            embeddings: Tupla con (embeddings denso, embeddings disperso)
             
         Returns:
             BaseRetriever: Retriever configurado para Milvus con búsqueda híbrida
         """
-        # Verificar que la vectorstore no es None
-        if embeddings is None:
-            logger.error("No se puede crear un retriever sin embeddings = None")
+        # Desempaquetar los embeddings
+        dense_embeddings, sparse_embeddings = embeddings
+
+        # Verificar que los embeddings no son None
+        if dense_embeddings is None or sparse_embeddings is None:
+            logger.error("No se puede crear un retriever sin embeddings")
             return None
             
-        # Obtener parámetros de búsqueda desde la configuración o parámetros
-        k = k or VECTORSTORE_CONFIG.get("k_retrieval", 4)
+        # Obtener parámetros de búsqueda desde la configuración
+        k = VECTORSTORE_CONFIG.get("k_retrieval", 4)
         
         try:
             logger.info("Creando retriever con búsqueda híbrida")
@@ -517,7 +523,7 @@ class MilvusVectorStore(VectorStoreBase):
                 collection=collection,
                 rerank=WeightedRanker(0.7, 0.3),  # 70% dense, 30% sparse
                 anns_fields=["dense", "sparse"],
-                field_embeddings=[embeddings, BM25BuiltInFunction()],
+                field_embeddings=[dense_embeddings, sparse_embeddings],
                 field_search_params=[dense_search_params, sparse_search_params],
                 top_k=k,
                 text_field="text"
@@ -528,181 +534,32 @@ class MilvusVectorStore(VectorStoreBase):
             
         except Exception as e:
             logger.error(f"Error al crear retriever híbrido: {e}")
-            # Intentar con parámetros mínimos como fallback
-            try:
-                logger.info("Intentando crear retriever con parámetros mínimos")
-                return vectorstore.as_retriever()
-            except Exception as e2:
-                logger.error(f"Error al crear retriever con parámetros mínimos: {e2}")
-                return None
+            return None
     
-    def retrieve_documents(self, retriever: BaseRetriever, query: str, 
-                         metadata_filters: Optional[Dict[str, Any]] = None,
-                         max_retries: int = 3) -> List[Document]:
-        """
-        Recupera documentos de un retriever con filtrado por metadatos.
-        
-        Args:
-            retriever: Retriever a utilizar
-            query: Consulta para la búsqueda
-            metadata_filters: Filtros de metadatos a aplicar (ej: {"ambito": "seguridad"})
-            max_retries: Número máximo de reintentos en caso de error
-            
-        Returns:
-            List[Document]: Lista de documentos recuperados
-        """
-        logger.info(f"Recuperando documentos para query: {query}")
-        
-        # Verificar que el retriever no es None
-        if retriever is None:
-            logger.error("No se puede recuperar documentos con un retriever None")
-            return []
-        
-        # Verificar si este retriever debe usar búsqueda híbrida
-        use_hybrid = hasattr(retriever, '_use_hybrid_search') and retriever._use_hybrid_search
-        
-        if use_hybrid and hasattr(retriever, '_vectorstore'):
-            logger.info("Usando búsqueda híbrida directamente desde retrieve_documents")
-            try:
-                # Preparar la expresión de filtro si hay filtros de metadatos
-                filter_expr = ""
-                if metadata_filters:
-                    # Convertir valores booleanos a string para Milvus
-                    for key, value in metadata_filters.items():
-                        if isinstance(value, bool):
-                            metadata_filters[key] = str(value).lower()
-                    
-                    filter_expr = self._build_filter_expression(metadata_filters)
-                
-                # Usar hybrid_search directamente en el vectorstore
-                search_results = retriever._vectorstore.hybrid_search(
-                    query=query,
-                    k=VECTORSTORE_CONFIG.get("k_retrieval", 4),
-                    expr=filter_expr if filter_expr else None,
-                    fusion_coefficient=[0.7, 0.3]  # 70% dense, 30% sparse
-                )
-                
-                # Convertir resultados a formato Document
-                if search_results:
-                    # El formato de hybrid_search devuelve tuplas (Document, score)
-                    return [doc[0] for doc in search_results]
-                return []
-                
-            except Exception as e:
-                logger.error(f"Error al usar hybrid_search: {e}")
-                # Intentar con método estándar como fallback
-                logger.info("Fallback: usando método estándar del retriever")
-        
-        # Código existente para retriever estándar con filtros
-        if metadata_filters:
-            logger.info(f"Aplicando filtros de metadatos: {metadata_filters}")
-            
-            # Convertir valores booleanos a string para evitar problemas con Milvus
-            for key, value in metadata_filters.items():
-                if isinstance(value, bool):
-                    metadata_filters[key] = str(value).lower()
-            
-            # Intentar recuperar con filtros
-            for attempt in range(max_retries):
-                try:
-                    # Usar invoke() con parámetro filter
-                    docs = retriever.invoke(query, filter=metadata_filters)
-                    
-                    if not docs:
-                        logger.warning(f"No se encontraron documentos con filtros: {metadata_filters}")
-                        if attempt == max_retries - 1:
-                            # En el último intento, probar sin filtros
-                            logger.info("Intentando recuperar sin filtros como último recurso")
-                            return retriever.invoke(query)
-                    else:
-                        return docs
-                    
-                except Exception as e:
-                    logger.error(f"Error en intento {attempt + 1} con filtros: {str(e)}")
-                    
-                    # Detectar error específico de multi-vector search
-                    if "_collection_search does not support multi-vector search" in str(e) and use_hybrid:
-                        # Reintentar con búsqueda híbrida manual
-                        try:
-                            logger.info("Detectado error de multi-vector. Reintentando con método manual.")
-                            # Construir expresión de filtro para Milvus
-                            filter_expr = self._build_filter_expression(metadata_filters)
-                            
-                            # Usar hybrid_search directamente
-                            search_results = retriever._vectorstore.hybrid_search(
-                                query=query,
-                                k=VECTORSTORE_CONFIG.get("k_retrieval", 4),
-                                expr=filter_expr if filter_expr else None,
-                                fusion_coefficient=[0.7, 0.3]  # 70% dense, 30% sparse
-                            )
-                            
-                            # Convertir resultados a formato Document
-                            if search_results:
-                                return [doc[0] for doc in search_results]
-                            return []
-                            
-                        except Exception as hybrid_error:
-                            logger.error(f"Error al usar hybrid_search manual: {hybrid_error}")
-                    
-                    if attempt == max_retries - 1:
-                        logger.info("Intentando recuperar sin filtros como último recurso")
-                        try:
-                            return retriever.invoke(query)
-                        except Exception as e2:
-                            logger.error(f"Error final sin filtros: {str(e2)}")
-                            return []
-                    time.sleep(1)  # Esperar antes de reintentar
-        else:
-            # Sin filtros, usar método estándar
-            for attempt in range(max_retries):
-                try:
-                    # Método estándar
-                    docs = retriever.invoke(query)
-                    
-                    if not docs:
-                        logger.warning(f"No se encontraron documentos relevantes para: {query}")
-                        return []
-                    
-                    return docs
-                    
-                except Exception as e:
-                    logger.error(f"Error en intento {attempt + 1}: {str(e)}")
-                    
-                    # Detectar error específico de multi-vector search
-                    if "_collection_search does not support multi-vector search" in str(e) and use_hybrid:
-                        # Reintentar con búsqueda híbrida manual
-                        try:
-                            logger.info("Detectado error de multi-vector. Reintentando con método manual.")
-                            
-                            # Usar hybrid_search directamente
-                            search_results = retriever._vectorstore.hybrid_search(
-                                query=query,
-                                k=VECTORSTORE_CONFIG.get("k_retrieval", 4),
-                                fusion_coefficient=[0.7, 0.3]  # 70% dense, 30% sparse
-                            )
-                            
-                            # Convertir resultados a formato Document
-                            if search_results:
-                                return [doc[0] for doc in search_results]
-                            return []
-                            
-                        except Exception as hybrid_error:
-                            logger.error(f"Error al usar hybrid_search manual: {hybrid_error}")
-                    
-                    if attempt == max_retries - 1:
-                        logger.error("Se agotaron los reintentos")
-                        return []
-                    time.sleep(1)  # Esperar antes de reintentar
     
-    def _build_filter_expression(self, metadata_filters: Dict[str, Any]) -> str:
+    def build_filter_expression(self, metadata_filters: Dict[str, Any]) -> str:
         """
         Construye una expresión de filtro para Milvus a partir de un diccionario de filtros.
+        Este método es utilizado por el workflow para generar expresiones de filtro
+        que se aplicarán en las búsquedas de Milvus.
         
         Args:
-            metadata_filters: Diccionario con filtros de metadatos
+            metadata_filters: Diccionario con filtros de metadatos. Ejemplos:
+                - {"ambito": "seguridad"} -> 'ambito == "seguridad"'
+                - {"is_consulta": True} -> 'is_consulta == "true"'
+                - {"cubos": ["cubo1", "cubo2"]} -> 'cubos in ["cubo1", "cubo2"]'
+                - {"ambito": "seguridad", "is_consulta": False} -> 'ambito == "seguridad" && is_consulta == "false"'
             
         Returns:
-            str: Expresión de filtro para Milvus
+            str: Expresión de filtro para Milvus. Si no hay filtros, devuelve cadena vacía.
+            
+        Examples:
+            >>> build_filter_expression({"ambito": "seguridad"})
+            'ambito == "seguridad"'
+            >>> build_filter_expression({"is_consulta": True, "ambito": "general"})
+            'is_consulta == "true" && ambito == "general"'
+            >>> build_filter_expression({"cubos": ["cubo1", "cubo2"]})
+            'cubos in ["cubo1", "cubo2"]'
         """
         expressions = []
         
@@ -1003,7 +860,7 @@ class MilvusVectorStore(VectorStoreBase):
             
         return documents 
 
-    def load_documents(self, documents: List[Document], embeddings: Embeddings = None, 
+    def load_documents(self, documents: List[Document], embeddings: Tuple[Embeddings, Any] = None, 
                      source_documents: Dict[str, Document] = None) -> bool:
         """
         Carga documentos en la vectorstore.
@@ -1012,7 +869,7 @@ class MilvusVectorStore(VectorStoreBase):
         
         Args:
             documents: Lista de documentos a cargar
-            embeddings: Modelo de embeddings a utilizar (opcional)
+            embeddings: Tupla con (embeddings denso, embeddings disperso)
             source_documents: Diccionario con los documentos originales completos (opcional)
             
         Returns:
@@ -1022,9 +879,9 @@ class MilvusVectorStore(VectorStoreBase):
             logger.warning("No hay documentos para cargar")
             return False
             
-        # Usar los embeddings proporcionados o los existentes
-        embeddings = embeddings or self.embeddings
-        if not embeddings:
+        # Desempaquetar los embeddings
+        dense_embeddings, sparse_embeddings = embeddings or (None, None)
+        if dense_embeddings is None or sparse_embeddings is None:
             logger.error("No se pueden cargar documentos sin embeddings")
             return False
             
@@ -1038,17 +895,17 @@ class MilvusVectorStore(VectorStoreBase):
                 page_content="Documento de inicialización", 
                 metadata={"source": "init", "ambito": "general", "cubo_source": "general"}
             )
-            vectorstore = self.create_vectorstore([empty_doc], embeddings, collection_name, drop_old=True)
+            vectorstore = self.create_vectorstore([empty_doc], (dense_embeddings, sparse_embeddings), collection_name, drop_old=True)
             if vectorstore is None:
                 logger.error("No se pudo crear la colección vacía")
                 return False
         else:
             # Intentar cargar la vectorstore existente
-            vectorstore = self.load_vectorstore(embeddings, collection_name)
+            vectorstore = self.load_vectorstore((dense_embeddings, sparse_embeddings), collection_name)
             
             if vectorstore is None:
                 # Si no existe, crear una nueva
-                vectorstore = self.create_vectorstore(documents, embeddings, collection_name)
+                vectorstore = self.create_vectorstore(documents, (dense_embeddings, sparse_embeddings), collection_name)
                 if vectorstore is None:
                     logger.error("No se pudo crear la vectorstore")
                     return False
