@@ -189,15 +189,28 @@ class MilvusVectorStore(VectorStoreBase):
                 # Asegurar que tiene el campo ambito
                 if 'ambito' not in doc.metadata or not doc.metadata['ambito']:
                     # Intentar obtener el ámbito a partir del cubo_source
-                    if 'cubo_source' in doc.metadata and doc.metadata['cubo_source'] in CUBO_TO_AMBITO:
-                        doc.metadata['ambito'] = CUBO_TO_AMBITO[doc.metadata['cubo_source']]
+                    if 'source' in doc.metadata:
+                        # Extraer el nombre del cubo del source usando el patrón info_cubo_X_vY.md
+                        match = re.search(r'info_cubo_([^_]+)_v\d+\.md', doc.metadata['source'])
+                        if match:
+                            cubo_name = match.group(1)
+                            if cubo_name in CUBO_TO_AMBITO:
+                                doc.metadata['ambito'] = CUBO_TO_AMBITO[cubo_name]
+                                doc.metadata['cubo_source'] = cubo_name
+                            else:
+                                doc.metadata['ambito'] = "general"
+                                doc.metadata['cubo_source'] = "general"
+                        else:
+                            doc.metadata['ambito'] = "general"
+                            doc.metadata['cubo_source'] = "general"
                     else:
                         # Si no se puede determinar, usar un valor predeterminado
                         doc.metadata['ambito'] = "general"
+                        doc.metadata['cubo_source'] = "general"
                 
-                # Asegurar que tiene el campo cubo_source
-                if 'cubo_source' not in doc.metadata or not doc.metadata['cubo_source']:
-                    doc.metadata['cubo_source'] = "general"
+                # Asegurar que tiene el campo source
+                if 'source' not in doc.metadata or not doc.metadata['source']:
+                    doc.metadata['source'] = "general"
                     
                 # Inicializar el campo context_generation si no existe
                 if 'context_generation' not in doc.metadata:
@@ -760,15 +773,28 @@ class MilvusVectorStore(VectorStoreBase):
                 # Asegurar que tiene el campo ambito
                 if 'ambito' not in doc.metadata or not doc.metadata['ambito']:
                     # Intentar obtener el ámbito a partir del cubo_source
-                    if 'cubo_source' in doc.metadata and doc.metadata['cubo_source'] in CUBO_TO_AMBITO:
-                        doc.metadata['ambito'] = CUBO_TO_AMBITO[doc.metadata['cubo_source']]
+                    if 'source' in doc.metadata:
+                        # Extraer el nombre del cubo del source usando el patrón info_cubo_X_vY.md
+                        match = re.search(r'info_cubo_([^_]+)_v\d+\.md', doc.metadata['source'])
+                        if match:
+                            cubo_name = match.group(1)
+                            if cubo_name in CUBO_TO_AMBITO:
+                                doc.metadata['ambito'] = CUBO_TO_AMBITO[cubo_name]
+                                doc.metadata['cubo_source'] = cubo_name
+                            else:
+                                doc.metadata['ambito'] = "general"
+                                doc.metadata['cubo_source'] = "general"
+                        else:
+                            doc.metadata['ambito'] = "general"
+                            doc.metadata['cubo_source'] = "general"
                     else:
                         # Si no se puede determinar, usar un valor predeterminado
                         doc.metadata['ambito'] = "general"
+                        doc.metadata['cubo_source'] = "general"
                 
-                # Asegurar que tiene el campo cubo_source
-                if 'cubo_source' not in doc.metadata or not doc.metadata['cubo_source']:
-                    doc.metadata['cubo_source'] = "general"
+                # Asegurar que tiene el campo source
+                if 'source' not in doc.metadata or not doc.metadata['source']:
+                    doc.metadata['source'] = "general"
                     
                 # Inicializar el campo context_generation si no existe
                 if 'context_generation' not in doc.metadata:
