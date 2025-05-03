@@ -13,11 +13,11 @@ import ast
 import json
 from typing import Dict, Any, List, Tuple, Union
 
-# Añadir el directorio raíz al path para importar los módulos
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Añadir el directorio raíz al PYTHONPATH
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 # Importar el agente
-from core.lang_chain_agent import LangChainAgent
+from langagent.core.lang_chain_agent import LangChainAgent
 
 # Instanciar el agente
 agent = LangChainAgent()
