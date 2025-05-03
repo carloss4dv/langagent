@@ -144,7 +144,7 @@ class LangChainAgent:
         
         # Crear cadenas
         print("Creando cadenas de procesamiento...")
-        self.rag_chain = create_rag_chain(self.llm)
+        self.rag_sql_chain = create_rag_sql_chain(self.llm)
         self.retrieval_grader = create_retrieval_grader(self.llm2)
         self.hallucination_grader = create_hallucination_grader(self.llm2)
         self.answer_grader = create_answer_grader(self.llm2)
@@ -165,7 +165,7 @@ class LangChainAgent:
         # Crear el flujo de trabajo principal
         self.workflow = create_workflow(
             retriever=self.retriever,
-            rag_chain=self.rag_chain,
+            rag_sql_chain=self.rag_sql_chain,
             retrieval_grader=self.retrieval_grader,
             hallucination_grader=self.hallucination_grader,
             answer_grader=self.answer_grader,
