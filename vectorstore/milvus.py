@@ -480,6 +480,13 @@ class MilvusVectorStore(VectorStoreBase):
         try:
             logger.info("Creando retriever con búsqueda híbrida")
             
+            # Obtener la conexión a Milvus
+            from pymilvus import connections, Collection
+            
+            # Obtener la colección directamente
+            collection_name = VECTORSTORE_CONFIG["collection_name"]
+            collection = Collection(collection_name)
+            
             # Configurar parámetros de búsqueda para campos dense y sparse
             dense_search_params = {
                 "metric_type": "L2",
@@ -492,7 +499,7 @@ class MilvusVectorStore(VectorStoreBase):
             
             # Crear el retriever híbrido
             retriever = MilvusCollectionHybridSearchRetriever(
-                collection=vectorstore.col,
+                collection=collection,
                 rerank=WeightedRanker(0.7, 0.3),  # 70% dense, 30% sparse
                 anns_fields=["dense", "sparse"],
                 field_embeddings=[vectorstore.embedding_function, BM25BuiltInFunction()],
