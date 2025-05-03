@@ -139,7 +139,7 @@ class LangChainAgent:
                     print("Error al cargar documentos en vectorstore")
         
         # Crear el retriever
-        self.retriever = self.vectorstore_handler.create_retriever(self.vectorstore_handler)
+        self.retriever = self.vectorstore_handler.create_retriever(self.embeddings)
         
         # Crear cadenas
         print("Creando cadenas de procesamiento...")

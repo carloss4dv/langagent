@@ -456,8 +456,8 @@ class MilvusVectorStore(VectorStoreBase):
                     logger.error("Asegúrese de configurar las variables de entorno ZILLIZ_CLOUD_URI y ZILLIZ_CLOUD_TOKEN correctamente.")
                 raise e
     
-    def create_retriever(self, vectorstore: Milvus, k: Optional[int] = None, 
-                      similarity_threshold: float = 0.7, **kwargs) -> BaseRetriever:
+    def create_retriever(self, embeddings: Embeddings ) -> BaseRetriever:
+        
         """
         Crea un retriever para una vectorstore Milvus usando búsqueda híbrida.
         
@@ -470,8 +470,8 @@ class MilvusVectorStore(VectorStoreBase):
             BaseRetriever: Retriever configurado para Milvus con búsqueda híbrida
         """
         # Verificar que la vectorstore no es None
-        if vectorstore is None:
-            logger.error("No se puede crear un retriever con una vectorstore None")
+        if embeddings is None:
+            logger.error("No se puede crear un retriever sin embeddings = None")
             return None
             
         # Obtener parámetros de búsqueda desde la configuración o parámetros
@@ -517,7 +517,7 @@ class MilvusVectorStore(VectorStoreBase):
                 collection=collection,
                 rerank=WeightedRanker(0.7, 0.3),  # 70% dense, 30% sparse
                 anns_fields=["dense", "sparse"],
-                field_embeddings=[vectorstore.embedding_function, BM25BuiltInFunction()],
+                field_embeddings=[embeddings, BM25BuiltInFunction()],
                 field_search_params=[dense_search_params, sparse_search_params],
                 top_k=k,
                 text_field="text"
