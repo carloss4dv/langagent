@@ -61,10 +61,10 @@ class LangChainAgent:
         self.vector_db_type = vector_db_type or VECTORSTORE_CONFIG["vector_db_type"]
         self.consultas_dir = consultas_dir
         
-        # Configuración de modelos
-        self.local_llm = local_llm or LLM_CONFIG["default_model"]
-        self.local_llm2 = local_llm2 or LLM_CONFIG["default_model"]
-        self.local_llm3 = local_llm3 or LLM_CONFIG["default_model"]
+        # Configuración de modelos - Usar los modelos por defecto específicos para cada rol
+        self.local_llm = local_llm or LLM_CONFIG["default_model"]  # Modelo principal
+        self.local_llm2 = local_llm2 or LLM_CONFIG["default_model2"]  # Modelo secundario
+        self.local_llm3 = local_llm3 or LLM_CONFIG["default_model3"]  # Modelo terciario
         
         # Componentes del agente
         self.llm = None
