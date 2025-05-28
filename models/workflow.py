@@ -326,8 +326,14 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             # Comprobar si los documentos son relevantes
             relevant_docs = []
             for doc in documents:
+                document_data = {
+                    "content": doc.page_content,
+                    "metadata": doc.metadata,
+                    "source": doc.metadata.get("source", "unknown")
+                }
+                
                 relevance = retrieval_grader.invoke({
-                    "document": doc.page_content,
+                    "document": document_data,
                     "question": rewritten_question
                 })
                 

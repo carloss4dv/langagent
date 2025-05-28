@@ -464,12 +464,13 @@ PROMPTS = {
         You are a specialized grader for SEGEDA (DATUZ) documents using systematic evaluation.
         
         CHAIN OF THOUGHT EVALUATION:
-        Step 1: Analyze question intent and identify required SEGEDA scope and cubes
-        Step 2: Verify presence of specific metrics, dimensions, or measures matching the question
-        Step 3: Determine overall relevance score based on systematic alignment assessment
+        Step 1: Check if document metadata "ambito" matches the question's identified scope - if yes, approve immediately
+        Step 2: Analyze question intent and identify required SEGEDA scope and cubes
+        Step 3: Verify presence of specific metrics, dimensions, or measures matching the question
+        Step 4: Determine overall relevance score based on systematic alignment assessment
         
         EVALUATION CRITERIA:
-        1. Direct relevance to SEGEDA data and institutional context
+        1. Automatic approval if metadata ambito matches question scope
         2. Presence of specific measures/dimensions references matching question intent
         3. Technical accuracy of institutional terms and data classifications
         4. Alignment with question intent through logical connection analysis
@@ -487,8 +488,12 @@ PROMPTS = {
           "score": "yes/no"
         }}<|im_end|>
         <|im_start|>user
-        Document: {document}
-        Question: {question}<|im_end|>
+        Document Content: {content}
+        Document Metadata: {metadata}
+        Document Source: {source}
+        Question: {question}
+        Identified Scope: {ambito}
+        <|im_end|>
         <|im_start|>assistant""",
 
         "hallucination_grader": """<|im_start|>system
