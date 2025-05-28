@@ -375,8 +375,9 @@ class AgentEvaluator:
                 token_cost=token_info.get("cost_estimate", {}).get("total_cost", 0),
                 completion_time=tiempo_completado
             )
-            
+            time.sleep(0.2)
             test_cases.append(test_case)
+            
         
         return test_cases
 
