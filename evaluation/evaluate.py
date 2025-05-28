@@ -399,7 +399,7 @@ class AgentEvaluator:
             test_cases.append(test_case)
         
         return test_cases
-    
+
     def obtener_contexto_formateado(self, context_docs):
         """
         Convierte los documentos al formato esperado por deepeval.
@@ -428,7 +428,7 @@ class AgentEvaluator:
                 # En cualquier otro caso, convertir a string
                 formatted_context.append(str(doc))
         return formatted_context
-    
+
     def evaluar(self, preguntas: List[str], respuestas_esperadas: List[str] = None):
         """
         Evalúa una lista de preguntas con las métricas configuradas.
@@ -447,26 +447,6 @@ class AgentEvaluator:
         # Convertir los goldens a casos de prueba
         data = self.convertir_goldens_a_test_cases(goldens)
         
-        # Filtrar casos que requieren clarificación
-        evaluable_cases = [case for case in data if not hasattr(case, 'clarification_needed')]
-        clarification_cases = [case for case in data if hasattr(case, 'clarification_needed')]
-        
-        if clarification_cases:
-            print(f"\n📋 Se encontraron {len(clarification_cases)} casos que requieren clarificación y no serán evaluados:")
-            for case in clarification_cases:
-                print(f"   - {case.input}")
-        
-        if not evaluable_cases:
-            print("⚠️  No hay casos evaluables después de filtrar las clarificaciones")
-            return {
-                "results": None,
-                "test_cases": data,
-                "clarification_cases": clarification_cases,
-                "evaluable_cases": []
-            }
-        
-        print(f"\n🔍 Evaluando {len(evaluable_cases)} casos...")
-        
         # Definir las métricas para la evaluación
         metrics = [
             deepeval.metrics.AnswerRelevancyMetric(),
@@ -476,14 +456,12 @@ class AgentEvaluator:
             deepeval.metrics.ContextualRelevancyMetric()
         ]
         
-        # Evaluar solo los casos evaluables con todas las métricas
-        results = deepeval.evaluate(evaluable_cases, metrics=metrics, max_concurrency=2)
+        # Evaluar todos los casos de prueba con todas las métricas
+        results = deepeval.evaluate(data, metrics=metrics)
         
         return {
             "results": results,
-            "test_cases": data,
-            "clarification_cases": clarification_cases,
-            "evaluable_cases": evaluable_cases
+            "test_cases": data
         }
 
 def main():
