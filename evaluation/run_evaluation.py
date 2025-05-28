@@ -96,78 +96,10 @@ def main():
     print(f"Evaluando {len(preguntas)} casos de prueba...")
     
     # Ejecutar evaluación
-    resultados = evaluador.evaluar(preguntas, respuestas_esperadas)
+    evaluador.evaluar(preguntas, respuestas_esperadas)
     
-    # Guardar resultados utilizando la función mejorada
-    ruta_resultados = guardar_resultados_deepeval(evaluador, resultados, args.salida)
+    print("Evaluación completada.")
     
-    # Mostrar resultados
-    print("\nResultados detallados de evaluación:")
-    for i, test_case in enumerate(evaluador.test_cases):
-        print(f"\nCaso {i+1}: {test_case.input}")
-        print(f"Respuesta: {test_case.actual_output}")
-        
-        # Mostrar métricas
-        print("Métricas:")
-        for metric in resultados["metrics"]:
-            if i < len(resultados["scores"][metric.name]):
-                score = resultados["scores"][metric.name][i]
-                print(f"  - {metric.name}: {score:.4f}")
-        
-        # Mostrar metadatos si se solicita modo verbose
-        if args.verbose and hasattr(test_case, "metadata"):
-            metadata = test_case.metadata
-            print("\nMetadatos:")
-            print(f"  - Tiempo de completado: {metadata.get('completion_time', 'N/A'):.4f} segundos")
-            
-            # Mostrar información de tokens si está disponible
-            token_info = metadata.get("token_info", {})
-            if token_info:
-                print("  - Información de tokens:")
-                if "input_tokens" in token_info:
-                    print(f"    - Tokens de entrada: {token_info.get('input_tokens', 0)}")
-                    print(f"    - Tokens de salida: {token_info.get('output_tokens', 0)}")
-                print(f"    - Tokens totales: {token_info.get('total_tokens', 0)}")
-                
-                # Mostrar costos estimados
-                if "cost_estimate" in token_info:
-                    cost = token_info["cost_estimate"]
-                    print("    - Costo estimado:")
-                    if "input_cost" in cost:
-                        print(f"      - Costo de entrada: ${cost.get('input_cost', 0):.6f}")
-                        print(f"      - Costo de salida: ${cost.get('output_cost', 0):.6f}")
-                    print(f"      - Costo total: ${cost.get('total_cost', 0):.6f}")
-            
-            # Mostrar otros metadatos relevantes
-            if "model_info" in metadata:
-                print(f"  - Modelo utilizado: {metadata['model_info']}")
-            if "hallucination_score" in metadata and metadata["hallucination_score"] is not None:
-                print(f"  - Puntuación de alucinación: {metadata['hallucination_score']}")
-            if "answer_score" in metadata and metadata["answer_score"] is not None:
-                print(f"  - Puntuación de respuesta: {metadata['answer_score']}")
     
-    # Calcular y mostrar promedios de métricas
-    print("\nPuntuaciones promedio:")
-    for metric in resultados["metrics"]:
-        scores = resultados["scores"][metric.name]
-        if scores:
-            promedio = sum(scores) / len(scores)
-            print(f"  - {metric.name}: {promedio:.4f}")
-    
-    # Calcular y mostrar promedios de tiempo y tokens
-    if evaluador.test_cases and hasattr(evaluador.test_cases[0], "metadata"):
-        tiempos = [tc.metadata.get("completion_time", 0) for tc in evaluador.test_cases if hasattr(tc, "metadata")]
-        if tiempos:
-            promedio_tiempo = sum(tiempos) / len(tiempos)
-            print(f"\nTiempo promedio de completado: {promedio_tiempo:.4f} segundos")
-        
-        token_totales = [tc.metadata.get("token_info", {}).get("total_tokens", 0) 
-                         for tc in evaluador.test_cases if hasattr(tc, "metadata")]
-        if token_totales:
-            promedio_tokens = sum(token_totales) / len(token_totales)
-            print(f"Tokens promedio por consulta: {promedio_tokens:.1f}")
-    
-    print(f"\nResultados guardados en: {ruta_resultados}")
-
 if __name__ == "__main__":
     main() 
