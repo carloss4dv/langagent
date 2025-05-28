@@ -92,9 +92,9 @@ def create_ambito_workflow(retriever: any, llm: any):
             state["cubos"] = AMBITOS_CUBOS[selected_ambito]["cubos"]
             state["confidence"] = max(ambito_scores.values()) / len(AMBITO_KEYWORDS[selected_ambito])
             return state
-        
-        # Si no se encuentra un ámbito claro, buscar en la base de conocimiento
+          # Si no se encuentra un ámbito claro, buscar en la base de conocimiento
         state["needs_clarification"] = True
+        state["confidence"] = 0.0  # Añadir confidence cuando no se puede identificar el ámbito
         state["clarification_question"] = "No he podido identificar claramente el ámbito. ¿Podrías especificar en qué ámbito te gustaría consultar información?"
         return state
     
