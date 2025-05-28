@@ -465,14 +465,12 @@ PROMPTS = {
         
         CHAIN OF THOUGHT EVALUATION:
         Step 1: Analyze question intent and identify required SEGEDA scope and cubes
-        Step 2: Check document for relevant cube names (PDI, PTGAS, CARGO, MATRÍCULA, etc.)
-        Step 3: Verify presence of specific metrics, dimensions, or measures matching the question
-        Step 4: Assess technical terminology accuracy within Universidad de Zaragoza context
-        Step 5: Determine overall relevance score based on systematic alignment assessment
+        Step 2: Verify presence of specific metrics, dimensions, or measures matching the question
+        Step 3: Determine overall relevance score based on systematic alignment assessment
         
         EVALUATION CRITERIA:
         1. Direct relevance to SEGEDA data and institutional context
-        2. Presence of specific cube/scope references matching question intent
+        2. Presence of specific measures/dimensions references matching question intent
         3. Technical accuracy of institutional terms and data classifications
         4. Alignment with question intent through logical connection analysis
         
