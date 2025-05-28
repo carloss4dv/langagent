@@ -11,7 +11,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_community.utilities import SQLDatabase
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
-from langagent.prompts_mejorado import PROMPTS 
+from langagent.prompts import PROMPTS 
 from langagent.config.config import LLM_CONFIG, SQL_CONFIG
 
 def _get_prompt_template(llm, prompt_key: str):
@@ -112,11 +112,11 @@ def create_rag_sql_chain(llm, db_uri=SQL_CONFIG["db_uri"], dialect=SQL_CONFIG["d
     # Crear la cadena RAG normal (para generar respuestas basadas en contexto)
     rag_prompt_template = _get_prompt_template(llm, "rag")
     prompt = PromptTemplate.from_template(rag_prompt_template)
-      answer_chain = (
+    
+    answer_chain = (
         {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
         | prompt
         | llm
-        | JsonOutputParser()
     )
     
     return {
