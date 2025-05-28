@@ -412,21 +412,33 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             # Crear contexto a partir de los documentos
             context_docs = []
             for idx, doc in enumerate(documents):
-                doc_source = doc.metadata.get('cubo_source', 'Desconocido')
-                doc_id = doc.metadata.get('doc_id', f'doc_{idx}')
-                
-                # Usar el contexto generado si está disponible, de lo contrario usar el contenido original
-                doc_content = doc.page_content
-                generated_context = doc.metadata.get('context_generation', '')
-                
-                # Si existe context_generation y no está vacío, añadirlo antes del contenido
-                context_info = ""
-                if generated_context.strip():
-                    context_info = f"\n[CONTEXTO: {generated_context}]\n"
-                
-                # Crear string con la info del documento
-                doc_string = f"\n[DOCUMENTO {idx+1} - {doc_source} - ID: {doc_id}]{context_info}\n{doc_content}\n"
-                context_docs.append(doc_string)
+                # Verificar si doc es un Document o un string
+                if isinstance(doc, str):
+                    # Si es un string, usarlo directamente como contexto
+                    doc_string = f"\n[DOCUMENTO {idx+1} - Contenido de reintento]\n{doc}\n"
+                    context_docs.append(doc_string)
+                elif hasattr(doc, 'metadata') and hasattr(doc, 'page_content'):
+                    # Si es un Document válido, procesar normalmente
+                    doc_source = doc.metadata.get('cubo_source', 'Desconocido')
+                    doc_id = doc.metadata.get('doc_id', f'doc_{idx}')
+                    
+                    # Usar el contexto generado si está disponible, de lo contrario usar el contenido original
+                    doc_content = doc.page_content
+                    generated_context = doc.metadata.get('context_generation', '')
+                    
+                    # Si existe context_generation y no está vacío, añadirlo antes del contenido
+                    context_info = ""
+                    if generated_context.strip():
+                        context_info = f"\n[CONTEXTO: {generated_context}]\n"
+                    
+                    # Crear string con la info del documento
+                    doc_string = f"\n[DOCUMENTO {idx+1} - {doc_source} - ID: {doc_id}]{context_info}\n{doc_content}\n"
+                    context_docs.append(doc_string)
+                else:
+                    # Si no es ni string ni Document válido, convertir a string
+                    print(f"Advertencia: Documento {idx+1} tiene tipo inesperado: {type(doc)}")
+                    doc_string = f"\n[DOCUMENTO {idx+1} - Tipo inesperado]\n{str(doc)}\n"
+                    context_docs.append(doc_string)
             
             context = "\n".join(context_docs)
             
@@ -622,7 +634,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         
         # Lógica de reintento
         max_retries = WORKFLOW_CONFIG.get("max_retries", 2)
-        should_retry = (is_hallucination or is_unhelpful) and retry_count < max_retries
+        should_retry = (is_hallucination and is_unhelpful) and retry_count < max_retries
         
         if should_retry:
             print(f"Reintentando (intento {retry_count+1}/{max_retries})")
