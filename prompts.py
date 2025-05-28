@@ -145,7 +145,8 @@ PROMPTS = {
         Answer: {generation}
         Question: {question} 
         <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
-          "query_rewriter": """<|begin_of_text|><|start_header_id|>system<|end_header_id|> 
+        
+        "query_rewriter": """<|begin_of_text|><|start_header_id|>system<|end_header_id|> 
         You are an expert query optimizer for SEGEDA (DATUZ) using systematic enhancement.
 
         CHAIN OF THOUGHT OPTIMIZATION:
@@ -329,7 +330,8 @@ PROMPTS = {
         
         Answer: {generation}
         Question: {question} [/INST]""",
-          "query_rewriter": """[INST] You are an expert query optimizer for SEGEDA (DATUZ) using systematic enhancement.
+        
+        "query_rewriter": """[INST] You are an expert query optimizer for SEGEDA (DATUZ) using systematic enhancement.
         
         CHAIN OF THOUGHT OPTIMIZATION:
         Step 1: Analyze the original question to identify core intent and scope
@@ -435,6 +437,15 @@ PROMPTS = {
         4. Note key figures and metrics with their scope and limitations
         5. Maintain technical precision using systematic evaluation
         
+        CRITICAL OUTPUT REQUIREMENTS:
+        - You MUST respond with ONLY the JSON format shown below
+        - Do NOT include any additional text, explanations, or content
+        - Do NOT repeat the input documents in your response
+        - Your response must be parseable JSON
+        - NO explanations, NO additional text, NO document repetition
+        - ONLY output "yes" if ALL claims are supported by documents
+        - ONLY output "no" if ANY claim lacks document support
+        
         RESPONSE FORMAT:
         {{
           "context": "Your concise context here"
@@ -459,6 +470,16 @@ PROMPTS = {
         2. Presence of specific cube/scope references matching question intent
         3. Technical accuracy of institutional terms and data classifications
         4. Alignment with question intent through logical connection analysis
+        
+         CRITICAL OUTPUT REQUIREMENTS:
+        - You MUST respond with ONLY the JSON format shown below
+        - Do NOT include any additional text, explanations, or content
+        - Do NOT repeat the input documents in your response
+        - Your response must be parseable JSON
+        - NO explanations, NO additional text, NO document repetition
+        - ONLY output "yes" if ALL claims are supported by documents
+        - ONLY output "no" if ANY claim lacks document support
+        
         
         RESPONSE FORMAT:
         {{
@@ -485,10 +506,31 @@ PROMPTS = {
         3. Check accuracy of institutional metrics and dimensional classifications
         4. Confirm technical terminology usage matches SEGEDA standards
         
+        CRITICAL OUTPUT REQUIREMENTS:
+        - You MUST respond with ONLY the JSON format shown below
+        - Do NOT include any additional text, explanations, or content
+        - Do NOT repeat the input documents in your response
+        - Your response must be parseable JSON
+        - NO explanations, NO additional text, NO document repetition
+        - ONLY output "yes" if ALL claims are supported by documents
+        - ONLY output "no" if ANY claim lacks document support
+        
         RESPONSE FORMAT:
         {{
           "score": "yes/no"
-        }}<|im_end|>
+        }}
+        
+        EXAMPLES:
+        Example 1:
+        Documents: [doc about PDI]
+        Generation: "El PDI incluye profesores titulares"
+        Response: {{"score": "yes"}}
+
+        Example 2:
+        Documents: [doc about MATRÍCULA] 
+        Generation: "Hay 50,000 estudiantes matriculados"
+        Response: {{"score": "no"}}
+        <|im_end|>
         <|im_start|>user
         Documents: {documents}
         Generation: {generation}<|im_end|>
@@ -510,10 +552,24 @@ PROMPTS = {
         3. Technical accuracy of information within Universidad de Zaragoza context
         4. Appropriate scope and context matching institutional standards
         
+        CRITICAL OUTPUT REQUIREMENTS:
+        - You MUST respond with ONLY the JSON format shown below
+        - Do NOT include any additional text, explanations, or content
+        - Do NOT repeat the input documents in your response
+        - Your response must be parseable JSON
+        - NO explanations, NO additional text, NO document repetition
+        - ONLY output "yes" if ALL claims are supported by documents
+        - ONLY output "no" if ANY claim lacks document support
+        
+        
         RESPONSE FORMAT:
         {{
           "score": "yes/no"
-        }}<|im_end|>
+        }}
+        
+
+        
+        <|im_end|>
         <|im_start|>user
         Answer: {generation}
         Question: {question}<|im_end|>

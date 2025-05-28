@@ -19,7 +19,7 @@ LLM_CONFIG = {
     "model_format": "json",    # Formato de salida (json, text, etc.)
     "default_model": "mistral-small-3.1:24b",  # Modelo predeterminado para el LLM principal
     "default_model2": "qwen2.5:1.5b", # Modelo predeterminado para el LLM secundario (routing)
-    "default_model3": "llama3.2:3b" # Modelo predeterminado para el LLM tercero (eavluation)
+    "default_model3": "llama3.2:3bm" # Modelo predeterminado para el LLM tercero (eavluation)
 }
 
 # Configuración de Vector Store
@@ -32,7 +32,7 @@ VECTORSTORE_CONFIG = {
     "vector_db_type": "milvus", # Tipo de base de datos vectorial (chroma o milvus)
     
     # Configuración para Milvus/Zilliz Cloud
-    "milvus_uri": os.getenv("ZILLIZ_CLOUD_URI", "http://localhost:19530"),
+    "milvus_uri": os.getenv("ZILLIZ_CLOUD_URI", "http://localhost:19532"),
     "milvus_token": os.getenv("ZILLIZ_CLOUD_TOKEN", ""),
     "milvus_secure": os.getenv("ZILLIZ_CLOUD_SECURE", "True").lower() in ("true", "1", "t"),     # Usar conexión segura (para Zilliz Cloud)
     
@@ -56,7 +56,7 @@ VECTORSTORE_CONFIG = {
 
 # Configuración de SQL
 SQL_CONFIG = {
-    "db_uri": "sqlite:///sqlite/pdi_database.db",  # URI de conexión a la base de datos
+    "db_uri": "sqlite:///langagent/sqlite/pdi_database.db",  # URI de conexión a la base de datos
     "dialect": "sqlite",                           # Dialecto SQL (sqlite, postgres, etc.)
     "enable_sql_queries": True,                    # Habilitar consultas SQL
     "max_results": 20,                             # Número máximo de resultados por consulta
