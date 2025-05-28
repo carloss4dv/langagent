@@ -633,6 +633,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         {
             "execute_query": "execute_query",
             "generate": "generate",
+            "retrieve": "retrieve",
             "END": END
         }
     )
