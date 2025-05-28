@@ -1,0 +1,366 @@
+[
+  {
+    "pregunta": "¿Cuántos alumnos están matriculados en un plan de estudios oficial en un curso académico?",
+    "respuesta_esperada": "El cubo MATRÍCULA del ámbito ACADÉMICO incluye la medida 'Alumnos Matriculados' que proporciona el número total de estudiantes matriculados en planes de estudios oficiales. Se debe introducir en la consulta la dimensión 'CURSO ACADÉMICO' para evitar acumular el total de estudiantes de todos los cursos."
+  },
+  {
+    "pregunta": "¿Qué son los créditos matriculados y cómo se contabilizan?",
+    "respuesta_esperada": "Los créditos matriculados son el número total de créditos ECTS en los que se han matriculado los estudiantes en un curso académico determinado. Se contabilizan sumando todos los créditos de las asignaturas en las que cada estudiante se ha inscrito, según se indica en el cubo MATRÍCULA del ámbito ACADÉMICO."
+  },
+  {
+    "pregunta": "¿Cómo se calcula la tasa de éxito académico?",
+    "respuesta_esperada": "La tasa de éxito es el cociente entre el número de créditos superados y el número de créditos presentados a examen, expresado en porcentaje. Esta medida se encuentra en el cubo RENDIMIENTO del ámbito ACADÉMICO y mide la eficacia del proceso de enseñanza-aprendizaje."
+  },
+  {
+    "pregunta": "¿Qué diferencia hay entre créditos evaluados y créditos superados?",
+    "respuesta_esperada": "Los créditos evaluados son el número total de créditos de los que los estudiantes se han examinado, mientras que los créditos superados son aquellos en los que han obtenido una calificación igual o superior a 5. Ambas medidas están disponibles en el cubo RENDIMIENTO del ámbito ACADÉMICO."
+  },
+  {
+    "pregunta": "¿Cómo se calcula la tasa de rendimiento académico?",
+    "respuesta_esperada": "La tasa de rendimiento es el cociente entre el número de créditos superados y el número de créditos matriculados, expresado en porcentaje. Esta medida del cubo RENDIMIENTO evalúa el aprovechamiento académico global de los estudiantes en relación con su carga de matrícula."
+  },
+  {
+    "pregunta": "¿Qué define a un alumno de nuevo ingreso?",
+    "respuesta_esperada": "Un alumno de nuevo ingreso es aquel que se matricula por primera vez en un plan de estudios determinado en la Universidad de Zaragoza. Esta clasificación se encuentra en la dimensión Alumno del cubo MATRÍCULA, con el atributo 'Nuevo Ingreso (S/N)' que permite distinguir entre estudiantes nuevos (S) y el resto (N)."
+  },
+  {
+    "pregunta": "¿Cuántos estudiantes egresan anualmente de la Universidad de Zaragoza?",
+    "respuesta_esperada": "El cubo EGRESADOS del ámbito ACADÉMICO proporciona la medida 'Egresados' que indica el número de estudiantes que finalizan sus estudios. Se recomienda incorporar la dimensión 'CURSO ACADÉMICO' para obtener datos anuales específicos y evitar acumulaciones de todos los años."
+  },
+  {
+    "pregunta": "¿Cómo se determina la nota media de admisión?",
+    "respuesta_esperada": "La nota media de admisión es la nota media de todos los estudiantes que participan en el proceso de admisión, según se define en el cubo ADMISIÓN. Si se introduce el plan de estudios en la consulta, el indicador será específico para ese plan. Es recomendable incluir la dimensión 'cupo adjudicación' para distinguir entre el cupo general y los cupos de reserva."
+  },
+  {
+    "pregunta": "¿Cuántas plazas de nuevo ingreso se ofertan cada año?",
+    "respuesta_esperada": "El cubo OFERTA PLAZAS del ámbito ADMISIÓN incluye la medida 'Plazas Ofertadas' que indica el número de plazas disponibles para estudiantes de nuevo ingreso en cada curso académico. Los datos se pueden clasificar por centro, titulación y tipo de acceso."
+  },
+  {
+    "pregunta": "¿Qué tipos de responsabilidad docente existen en el sistema?",
+    "respuesta_esperada": "Según el cubo DOCENCIA PDI, la dimensión Responsabilidad permite clasificar los datos según el tipo de responsabilidad asumida por el profesor que imparte la asignatura. Los valores posibles son: coordinar docencia, impartir docencia y dirigir."
+  },
+  {
+    "pregunta": "¿Qué tipos de docencia se imparten en la universidad?",
+    "respuesta_esperada": "El cubo DOCENCIA PDI incluye la dimensión 'Tipo de docencia' que clasifica la docencia según los siguientes valores: clases magistrales, resolución de problemas y casos, trabajos, prácticas de laboratorio, prácticas especiales, prácticas externas curriculares, docencia tutorizada, entre otros."
+  },
+  {
+    "pregunta": "¿Cuántos estudiantes se matriculan en Estudios Propios?",
+    "respuesta_esperada": "El cubo MATRÍCULA ESTUDIOS PROPIOS del ámbito ESTUDIOS PROPIOS proporciona la medida 'Alumnos Matriculados' que indica el número total de estudiantes matriculados en Estudios Propios. Se debe introducir la dimensión 'CURSO ACADÉMICO' para evitar acumular el total de todos los cursos."
+  },
+  {
+    "pregunta": "¿Cuántos grupos de investigación están constituidos en la universidad?",
+    "respuesta_esperada": "El cubo GRUPOS DE INVESTIGACIÓN del ámbito I+D+i incluye la medida 'Número de grupos' que indica los grupos de investigación constituidos. Se recomienda incorporar la dimensión 'año' para obtener datos específicos y evitar mostrar acumulados de todos los años."
+  },
+  {
+    "pregunta": "¿Cuántos investigadores pertenecen a grupos de investigación?",
+    "respuesta_esperada": "La medida 'Número de investigadores' del cubo GRUPOS DE INVESTIGACIÓN indica el número de investigadores en la Universidad de Zaragoza que pertenecen a un grupo de investigación. Se recomienda incluir la dimensión 'año' para datos específicos temporales."
+  },
+  {
+    "pregunta": "¿Cuántos proyectos de I+D+i están vigentes actualmente?",
+    "respuesta_esperada": "El cubo PROYECTOS del ámbito I+D+i incluye la medida 'Proyectos vigentes' que indica el número de proyectos/contratos de I+D+i vigentes en una fecha determinada. Se recomienda especificar el año natural para obtener datos precisos."
+  },
+  {
+    "pregunta": "¿Cuántos artículos científicos se publican anualmente?",
+    "respuesta_esperada": "El cubo PRODUCCIÓN CIENTÍFICA del ámbito I+D+i incluye la medida 'Artículos' que indica el número de artículos publicados. Se recomienda incorporar la dimensión 'AÑO' para obtener datos anuales específicos, de lo contrario se acumularán todos los artículos desde que existen datos."
+  },
+  {
+    "pregunta": "¿Cuál es la tasa de éxito en las convocatorias de proyectos de I+D+i?",
+    "respuesta_esperada": "La tasa de éxito en convocatorias es el cociente entre el número de solicitudes concedidas y el total de solicitudes, según se define en el cubo SOLICITUD CONVOCATORIA del ámbito I+D+i. Se recomienda incorporar la dimensión 'AÑO DE CONVOCATORIA' para datos anuales específicos."
+  },
+  {
+    "pregunta": "¿Cuántos estudiantes participan en programas de movilidad de entrada?",
+    "respuesta_esperada": "El cubo ESTUDIANTES IN del ámbito MOVILIDAD proporciona la medida 'Estudiantes de intercambio' que indica el número de estudiantes internacionales que vienen a estudiar a la Universidad de Zaragoza. Se debe especificar el curso académico para obtener datos precisos."
+  },
+  {
+    "pregunta": "¿Cuántos estudiantes de la UZ participan en programas de movilidad de salida?",
+    "respuesta_esperada": "El cubo ESTUDIANTES OUT del ámbito MOVILIDAD incluye medidas sobre estudiantes de la Universidad de Zaragoza que realizan estancias en universidades extranjeras. Los datos se pueden clasificar por programa de movilidad, destino y duración de la estancia."
+  },
+  {
+    "pregunta": "¿Cuántas solicitudes de movilidad se presentan anualmente?",
+    "respuesta_esperada": "El cubo SOLICITUDES MOVILIDAD OUT del ámbito MOVILIDAD incluye la medida 'Total solicitudes' que indica el número total de solicitudes de movilidad presentadas por estudiantes de la Universidad de Zaragoza, clasificadas por programa y destino."
+  },
+  {
+    "pregunta": "¿Cuántos cargos administrativos existen en la universidad?",
+    "respuesta_esperada": "El cubo CARGO del ámbito RRHH incluye la medida 'Número de cargos' que indica el número de órganos unipersonales de representación, incluyendo cargos del Consejo de Dirección, de los Centros, de los Departamentos y de los Institutos Universitarios de Investigación."
+  },
+  {
+    "pregunta": "¿Cuántos efectivos de PDI hay en la universidad?",
+    "respuesta_esperada": "El cubo PDI del ámbito RRHH proporciona la medida 'Número de efectivos' que indica el número total de Personal Docente e Investigador en la Universidad de Zaragoza. Se recomienda incorporar la dimensión 'tiempo' para obtener datos de una fecha específica."
+  },
+  {
+    "pregunta": "¿Cuántos empleados de PTGAS trabajan en la universidad?",
+    "respuesta_esperada": "El cubo PTGAS del ámbito RRHH incluye la medida 'Número de efectivos' que indica el número total de Personal de Administración y Servicios. Los datos se pueden clasificar por categoría, centro, departamento y tipo de contrato."
+  },
+  {
+    "pregunta": "¿Cuántos puestos de trabajo existen en la Universidad de Zaragoza?",
+    "respuesta_esperada": "El cubo PUESTO del ámbito RRHH proporciona la medida 'Número de puestos' que indica los puestos de trabajo existentes en la UZ, incluyendo todos los puestos de RPT y los puestos fuera de RPT que estén ocupados."
+  },
+  {
+    "pregunta": "¿Qué categorías de PDI existen en la universidad?",
+    "respuesta_esperada": "Según el cubo PDI, las categorías incluyen: Catedráticos de Universidad, Titulares de Universidad, Catedráticos de Escuelas Universitarias, Titulares de Escuelas Universitarias, Asociados, Contratados Doctores, Personal Investigador en Formación, Ayudantes Doctores, Colaboradores, Colaboradores Extraordinarios, Eméritos, entre otros."
+  },
+  {
+    "pregunta": "¿Qué grupos laborales existen para el PTGAS?",
+    "respuesta_esperada": "Según el cubo PTGAS, los grupos de pertenencia laboral de los empleados son: A1, A2, C1, C2, LA, LB, LC, LD, que clasifican a los empleados según su nivel y tipo de contrato en la administración pública."
+  },
+  {
+    "pregunta": "¿Cómo se clasifican los estudiantes por rango de edad?",
+    "respuesta_esperada": "Los rangos de edad para estudiantes se clasifican en: 20 años o menos, 21 a 30, 31 a 40, 41 a 50, 51 a 60, 60 años o más. Esta clasificación está disponible en múltiples cubos como MATRÍCULA, ADMISIÓN y RENDIMIENTO."
+  },
+  {
+    "pregunta": "¿Qué macroáreas de conocimiento se contemplan en el sistema?",
+    "respuesta_esperada": "Las macroáreas de conocimiento son: Artes y Humanidades, Ciencias, Ciencias Sociales y Jurídicas, Ciencias de la Salud, e Ingeniería y Arquitectura. Esta clasificación se utiliza en varios cubos para organizar la información académica y de investigación."
+  },
+  {
+    "pregunta": "¿Cómo se clasifican los estudios por tipo?",
+    "respuesta_esperada": "Los estudios se clasifican en tipos como: grado, licenciatura o equivalente, diplomatura o equivalente, máster, doctorado. Esta clasificación aparece en cubos como ADMISIÓN, MATRÍCULA y EGRESADOS para organizar la información por nivel de estudios."
+  },
+  {
+    "pregunta": "¿Qué tipos de centros universitarios existen?",
+    "respuesta_esperada": "Los tipos de centros incluyen: facultad, escuela universitaria, centro adscrito, entre otros. Esta clasificación se utiliza en múltiples cubos para organizar la información según la estructura organizativa de la universidad."
+  },
+  {
+    "pregunta": "¿Cómo se clasifican las asignaturas por tipo?",
+    "respuesta_esperada": "Las asignaturas se clasifican en: formación básica, obligatoria, optativa, libre elección, troncal, prácticas externas, complementos de formación, actividades académicas complementarias, y ESPECIAL. Esta clasificación aparece en el cubo DOCENCIA ASIGNATURA."
+  },
+  {
+    "pregunta": "¿Qué modalidades de estudios propios existen?",
+    "respuesta_esperada": "Las modalidades de estudios propios incluyen: Presencial, Semipresencial, Semipresencial/On-line, Presencial/Semipresencial/On-line, Presencial/Semipresencial, Presencial/On line, y On line, según se especifica en el cubo MATRÍCULA ESTUDIOS PROPIOS."
+  },
+  {
+    "pregunta": "¿Cómo se clasifican los proyectos de investigación por agrupación?",
+    "respuesta_esperada": "Los proyectos se clasifican en: Proyectos de Investigación Básica (no Europeos), Proyectos de Investigación Básica Europeos, Proyectos colaborativos con Empresa, y Contratos y Convenios, según el cubo PROYECTOS del ámbito I+D+i."
+  },
+  {
+    "pregunta": "¿Qué ámbitos territoriales se consideran para los proyectos?",
+    "respuesta_esperada": "Los ámbitos territoriales para proyectos son: local, autonómico, nacional, europeo e internacional. Esta clasificación se utiliza tanto en el cubo PROYECTOS como en SOLICITUD CONVOCATORIA para categorizar el alcance geográfico."
+  },
+  {
+    "pregunta": "¿Cómo se mide la producción científica de la universidad?",
+    "respuesta_esperada": "La producción científica se mide a través del cubo PRODUCCIÓN CIENTÍFICA que incluye medidas como: número de artículos, número de autores, capítulos de libro, libros y actividades en congresos. Se recomienda incorporar la dimensión 'AÑO' para datos específicos temporales."
+  },
+  {
+    "pregunta": "¿Qué información contiene el cubo de índices bibliométricos?",
+    "respuesta_esperada": "El cubo ÍNDICES BIBLIOMÉTRICOS del ámbito I+D+i contiene información sobre indicadores de impacto de la investigación, aunque los detalles específicos de las medidas y dimensiones requieren consultar la documentación completa del cubo."
+  },
+  {
+    "pregunta": "¿Cómo se clasifican las movilidades de I+D+i?",
+    "respuesta_esperada": "Las movilidades de I+D+i se clasifican según el cubo MOVILIDAD I+D+i del ámbito MOVILIDAD, considerando factores como la duración, el tipo de investigador, la entidad de destino y la modalidad de la movilidad."
+  },
+  {
+    "pregunta": "¿Qué tipos de acuerdos bilaterales maneja la universidad?",
+    "respuesta_esperada": "El cubo ACUERDOS BILATERALES del ámbito MOVILIDAD gestiona información sobre los convenios internacionales de la Universidad de Zaragoza, clasificados por tipo de acuerdo, país, institución y ámbito de aplicación."
+  },
+  {
+    "pregunta": "¿Cómo se determina si un puesto es de investigación?",
+    "respuesta_esperada": "La dimensión 'Puesto de Investigación (S/N)' del cubo PUESTO permite identificar si un puesto de trabajo está vinculado a actividades de investigación (S) o no (N), facilitando la clasificación del personal según su función principal."
+  },
+  {
+    "pregunta": "¿Qué especialidades RPT existen para el PTGAS?",
+    "respuesta_esperada": "Las especialidades de la Relación de Puestos de Trabajo para PTGAS incluyen: Área de Administración y Servicios Generales, Área Técnica de Mantenimiento y Oficios, Apoyo a la Docencia e Investigación y Laboratorios, y Fuera RPT."
+  },
+  {
+    "pregunta": "¿Cómo se clasifica el personal según su situación administrativa?",
+    "respuesta_esperada": "La situación administrativa del personal se clasifica en: servicio activo, excedencia, suspensión de contrato, servicios especiales, entre otros. Esta clasificación está disponible tanto para PDI como para PTGAS en sus respectivos cubos."
+  },
+  {
+    "pregunta": "¿Qué tipos de dedicación existen para los puestos de trabajo?",
+    "respuesta_esperada": "Los tipos de dedicación incluyen: tiempo completo, tiempo parcial, tiempo parcial 6 horas, tiempo parcial 4 horas, tiempo parcial 3 horas, conjunta completa, conjunta parcial (para personal de ciencias de la salud), y colaborador extraordinario."
+  },
+  {
+    "pregunta": "¿Cómo se clasifican los investigadores por nivel formativo?",
+    "respuesta_esperada": "Los investigadores se clasifican por nivel formativo en: bachiller elemental o equivalente, bachiller superior o equivalente, diplomados o equivalente, licenciados o equivalente, Máster (EEES), y Doctor, según el cubo GRUPOS DE INVESTIGACIÓN."
+  },
+  {
+    "pregunta": "¿Qué son los sexenios de investigación?",
+    "respuesta_esperada": "Los sexenios son tramos de investigación reconocidos por la CNEAI a los investigadores, que se contabilizan en el cubo GRUPOS DE INVESTIGACIÓN. Se incluyen tanto los reconocidos a funcionarios docentes universitarios como al personal contratado."
+  },
+  {
+    "pregunta": "¿Cómo se calcula el importe concedido en proyectos?",
+    "respuesta_esperada": "El importe concedido se refiere a las cantidades aprobadas en la resolución de convocatorias de proyectos de I+D+i, según el cubo SOLICITUD CONVOCATORIA. Se recomienda incorporar la dimensión 'AÑO DE CONVOCATORIA' para datos específicos temporales."
+  },
+  {
+    "pregunta": "¿Qué oficinas gestoras participan en la investigación?",
+    "respuesta_esperada": "Las oficinas gestoras incluyen: Oficina de Proyectos Europeos (OPE), Oficina de Transferencia de Resultados de Investigación (OTRI), Servicio de Gestión de la Investigación (SGI), y proyectos externos, según el cubo PROYECTOS."
+  },
+  {
+    "pregunta": "¿Cómo se clasifican las actividades en congresos por ámbito?",
+    "respuesta_esperada": "Las actividades en congresos se clasifican por ámbito en: autonómica, nacional, Unión Europea, internacional no UE, y otros. Esta clasificación solo tiene sentido cuando se cruza con la medida 'actividades en congresos' del cubo PRODUCCIÓN CIENTÍFICA."
+  },
+  {
+    "pregunta": "¿Qué tipos de oportunidad existen para proyectos?",
+    "respuesta_esperada": "Los tipos de oportunidad para proyectos son: Contrato, Convenio, Convocatoria, y Subcontratación convocatoria. Esta clasificación se utiliza tanto en el cubo PROYECTOS como en SOLICITUD CONVOCATORIA."
+  },
+  {
+    "pregunta": "¿Cómo se determina si un investigador es responsable de grupo?",
+    "respuesta_esperada": "La dimensión 'Responsable de Grupo (S/N)' del cubo GRUPOS DE INVESTIGACIÓN permite agrupar a los investigadores según si son responsables de su grupo de investigación (S) o no (N)."
+  },
+  {
+    "pregunta": "¿Qué información proporciona la dimensión de tesis dirigidas?",
+    "respuesta_esperada": "La dimensión 'Tesis dirigidas' del cubo RRHH I+D+i clasifica a los investigadores según el número de tesis doctorales correspondientes a programas regulados por el RD 99/2011 que han dirigido o codirigido. En caso de codirección, se adjudica a cada director una fracción proporcional."
+  },
+  {
+    "pregunta": "¿Cómo se clasifica el personal según su régimen jurídico?",
+    "respuesta_esperada": "El personal se clasifica por régimen jurídico en: funcionario, laboral, atípico (colaboradores extraordinarios y eméritos), y contratado administrativo para PDI; y funcionario y laboral para PTGAS, según sus respectivos cubos."
+  },
+  {
+    "pregunta": "¿Qué modalidades de personal investigador existen?",
+    "respuesta_esperada": "Las modalidades incluyen: de carrera, interino, indefinido fijo, indefinido no fijo, temporal, y convencional (colaboradores extraordinarios y eméritos). Se recomienda incorporar la dimensión 'PAS o PDI' para distinguir entre las diferentes modalidades."
+  },
+  {
+    "pregunta": "¿Cómo se clasifican los estudiantes por universidad de origen?",
+    "respuesta_esperada": "Los estudiantes se clasifican según la universidad de la que proceden o en la que han cursado estudios previos o superado las Pruebas de Acceso correspondientes, según la dimensión 'Universidad de Origen' del cubo ADMISIÓN."
+  },
+  {
+    "pregunta": "¿Qué cupos de adjudicación existen en el proceso de admisión?",
+    "respuesta_esperada": "Los cupos incluyen el cupo general (EVAU-PAU, CFGS, Credencial UNED) y los cupos de reserva (titulados universitarios, mayores de 25 años, mayores de 45 años, mayores de 40 años con experiencia profesional, discapacitados, deportistas de alto nivel), según el cubo ADMISIÓN."
+  },
+  {
+    "pregunta": "¿Cómo se determina la nota de corte en las titulaciones?",
+    "respuesta_esperada": "La nota de corte es la menor nota de admisión con la que se adjudica plaza en una titulación específica, según se define en el cubo OFERTA PLAZAS. Puede haber diferencias entre la convocatoria ordinaria y extraordinaria."
+  },
+  {
+    "pregunta": "¿Qué información contiene la dimensión de traslados?",
+    "respuesta_esperada": "La dimensión Traslado del cubo EGRESADOS permite clasificar a los estudiantes según si han realizado traslados de expediente durante sus estudios, facilitando el análisis de la movilidad interna entre titulaciones."
+  },
+  {
+    "pregunta": "¿Cómo se clasifican los estudios por interuniversitariedad?",
+    "respuesta_esperada": "Los estudios se clasifican según si son interuniversitarios o no, considerando si se imparten en colaboración con otras universidades. Esta información está disponible en varios cubos académicos para identificar programas conjuntos."
+  },
+  {
+    "pregunta": "¿Qué campus tiene la Universidad de Zaragoza?",
+    "respuesta_esperada": "La Universidad de Zaragoza tiene múltiples campus donde se ubican sus centros. Esta información se utiliza como atributo de clasificación en las dimensiones de Centro de varios cubos para organizar geográficamente la información institucional."
+  },
+  {
+    "pregunta": "¿Cómo se determina si un cargo es remunerado?",
+    "respuesta_esperada": "La dimensión 'Remunerado' del cubo CARGO permite clasificar los cargos según si conllevan compensación económica adicional (S) o no (N), facilitando el análisis de la estructura retributiva de los órganos de gobierno."
+  },
+  {
+    "pregunta": "¿Qué información proporciona la fecha de actualización?",
+    "respuesta_esperada": "La dimensión 'Fecha de actualización' indica cuándo se realizó la última recarga de datos en el sistema SEGEDA. Habitualmente es el domingo anterior a la fecha de consulta, y está presente en todos los cubos para garantizar la trazabilidad temporal."
+  },
+  {
+    "pregunta": "¿Cómo se clasifican los puestos por situación?",
+    "respuesta_esperada": "Los puestos se clasifican según su situación administrativa: ocupados, vacantes, en proceso de provisión, entre otros estados. Esta información está disponible en el cubo PUESTO para gestionar la planificación de recursos humanos."
+  },
+  {
+    "pregunta": "¿Qué tipos de estudios previos dan acceso a la universidad?",
+    "respuesta_esperada": "Los estudios previos incluyen: Pruebas de Acceso, COU sin PAU, FP, Titulados Universitarios, Mayores de 25, Mayores de 40, Mayores de 45. Los estudiantes de Bachillerato se incluyen en 'Pruebas de Acceso', según el cubo ADMISIÓN."
+  },
+  {
+    "pregunta": "¿Cómo se calcula el ratio de créditos por alumno matriculado?",
+    "respuesta_esperada": "El ratio se calcula dividiendo el total de créditos matriculados entre el número de alumnos matriculados, proporcionando una medida de la carga académica promedio por estudiante. Esta información se puede derivar del cubo MATRÍCULA del ámbito ACADÉMICO."
+  },
+  {
+    "pregunta": "¿Qué modalidades de contrato existen para el personal investigador?",
+    "respuesta_esperada": "Según el cubo RRHH I+D+i, las modalidades incluyen: de carrera, interino, indefinido fijo, indefinido no fijo, temporal, y convencional (para colaboradores extraordinarios y eméritos). Se debe considerar también la dimensión 'PAS o PDI' para una clasificación completa."
+  },
+  {
+    "pregunta": "¿Cómo se determina si un investigador participa en proyectos?",
+    "respuesta_esperada": "La dimensión 'Participa Proyecto (S/N)' del cubo RRHH I+D+i permite clasificar a los investigadores según si figuran como participantes en un proyecto de I+D+i (S) o no (N), facilitando el análisis de la actividad investigadora."
+  },
+  {
+    "pregunta": "¿Qué centros de investigación distintos a los IUI se consideran?",
+    "respuesta_esperada": "Se consideran estructuras de investigación como el IIS (Instituto de Investigación Sanitaria de Aragón) y otros centros que no son institutos universitarios de investigación propios, según la dimensión 'Otros Centros de Investigación' de varios cubos de I+D+i."
+  },
+  {
+    "pregunta": "¿Cómo se clasifican las tesis con mención internacional?",
+    "respuesta_esperada": "Las tesis con mención internacional se clasifican según el número de tesis doctorales dirigidas o codirigidas que han obtenido esta distinción, disponible en la dimensión 'Tesis dirigidas con mención internacional' del cubo RRHH I+D+i."
+  },
+  {
+    "pregunta": "¿Qué información contiene la dimensión de permanencia del profesorado?",
+    "respuesta_esperada": "La dimensión 'Permanente (S/N)' del cubo DOCENCIA PDI permite clasificar a los profesores según si tienen un contrato permanente (S) o temporal (N), facilitando el análisis de la estabilidad del profesorado en la impartición de docencia."
+  },
+  {
+    "pregunta": "¿Cómo se determina el país de obtención del título de doctor?",
+    "respuesta_esperada": "La dimensión 'Doctor País' del cubo PDI permite clasificar al personal según el país donde obtuvo el título de Doctor. En caso de que no conste esta información, se consigna 'No aplica'."
+  },
+  {
+    "pregunta": "¿Qué universidades otorgan títulos de doctor al personal de la UZ?",
+    "respuesta_esperada": "La dimensión 'Doctor Universidad' del cubo PDI clasifica al personal según la universidad donde obtuvo el título de Doctor, permitiendo analizar la diversidad formativa del personal docente e investigador."
+  },
+  {
+    "pregunta": "¿Cómo se clasifican los profesores asociados sanitarios?",
+    "respuesta_esperada": "La dimensión 'Asociado Sanitario (S/N)' del cubo PDI permite distinguir a los profesores asociados de ciencias de la salud (S) del resto del personal (N), reconociendo las particularidades de este colectivo profesional."
+  },
+  {
+    "pregunta": "¿Qué información proporciona la carga docente semanal?",
+    "respuesta_esperada": "La dimensión 'Carga Docente Semanal' del cubo PDI permite clasificar al personal según el número de horas semanales que conlleva su carga docente, facilitando la planificación y distribución de la actividad académica."
+  },
+  {
+    "pregunta": "¿Cómo se determina el grado de complemento del PTGAS?",
+    "respuesta_esperada": "La dimensión 'Grado complemento' del cubo PTGAS permite agrupar los datos según el grado de complemento personal consolidado por los empleados. En caso de no haber consolidado ningún grado, se indica 'No informado'."
+  },
+  {
+    "pregunta": "¿Qué niveles de titulación se reconocen para el PTGAS?",
+    "respuesta_esperada": "Los niveles incluyen: Doctor, Máster, Grado, Licenciados o equivalentes, Diplomados o equivalentes, Bachiller Superior o equivalente, Bachiller elemental o equivalente, Enseñanza primaria o equivalente, según el cubo PTGAS."
+  },
+  {
+    "pregunta": "¿Cómo se determina si el PTGAS trabaja en investigación?",
+    "respuesta_esperada": "La dimensión 'PTGAS de Investigación (S/N)' del cubo PTGAS permite distinguir si los efectivos se remuneran con cargo a proyectos de investigación (S) o no (N), identificando el personal de apoyo a la actividad investigadora."
+  },
+  {
+    "pregunta": "¿Qué categorías de puestos de trabajo existen?",
+    "respuesta_esperada": "Las categorías de puestos se definen según la clasificación administrativa del personal que puede desempeñarlos, incluyendo diferentes niveles y especialidades según la estructura organizativa de la universidad, disponible en el cubo PUESTO."
+  },
+  {
+    "pregunta": "¿Cómo se determina el desempeño de los puestos?",
+    "respuesta_esperada": "La dimensión 'Puesto Desempeño' del cubo PUESTO clasifica los puestos según si están siendo desempeñados actualmente, están vacantes, o se encuentran en proceso de provisión, facilitando la gestión de recursos humanos."
+  },
+  {
+    "pregunta": "¿Qué unidades organizativas se consideran en la estructura?",
+    "respuesta_esperada": "Las unidades organizativas incluyen las diferentes estructuras administrativas de la universidad: servicios, departamentos, centros, institutos, y otras unidades funcionales, según se define en la dimensión Unidad de varios cubos."
+  },
+  {
+    "pregunta": "¿Cómo se clasifican los grupos de puestos de trabajo?",
+    "respuesta_esperada": "Los grupos de puestos se clasifican según el grupo de pertenencia de los empleados que pueden desempeñarlos con carácter definitivo, siguiendo la estructura de la función pública, según la dimensión 'Grupos puesto' del cubo PUESTO."
+  },
+  {
+    "pregunta": "¿Qué información proporciona el nivel de complemento de los puestos?",
+    "respuesta_esperada": "La dimensión 'Nivel complemento' del cubo PUESTO permite agrupar los puestos según el nivel de complemento específico que tienen asignado, que determina parte de la retribución del personal que los ocupa."
+  },
+  {
+    "pregunta": "¿Cómo se determinan los tipos de puesto existentes?",
+    "respuesta_esperada": "Los tipos de puesto se clasifican según su naturaleza funcional: docente, investigador, administrativo, técnico, servicios, entre otros, permitiendo organizar la estructura de recursos humanos según las funciones principales, disponible en el cubo PUESTO."
+  },
+  {
+    "pregunta": "¿Qué programas de movilidad internacional maneja la universidad?",
+    "respuesta_esperada": "Los programas incluyen Erasmus+, convenios bilaterales, programas de intercambio específicos, y otros acuerdos internacionales, clasificados en las dimensiones de movilidad de los cubos ESTUDIANTES IN, ESTUDIANTES OUT y SOLICITUDES MOVILIDAD OUT."
+  },
+  {
+    "pregunta": "¿Cómo se determina la duración de las estancias de movilidad?",
+    "respuesta_esperada": "La duración se clasifica según el período de la estancia: semestre, año académico completo, estancias cortas, entre otros períodos establecidos, disponible en las dimensiones temporales de los cubos de movilidad para planificar y gestionar los intercambios."
+  },
+  {
+    "pregunta": "¿Qué idiomas se consideran en los contratos de estudios?",
+    "respuesta_esperada": "Los contratos de estudios se clasifican según el idioma de impartición en la universidad de destino, incluyendo los principales idiomas europeos e internacionales, según se especifica en los cubos de movilidad para facilitar la planificación académica."
+  },
+  {
+    "pregunta": "¿Cómo se clasifican las áreas de estudio en los acuerdos de movilidad?",
+    "respuesta_esperada": "Las áreas de estudio se organizan según las macroáreas de conocimiento: Artes y Humanidades, Ciencias, Ciencias Sociales y Jurídicas, Ciencias de la Salud, e Ingeniería y Arquitectura, facilitando la gestión de los acuerdos por especialidades académicas."
+  },
+  {
+    "pregunta": "¿Qué tipos de renuncias se contabilizan en movilidad?",
+    "respuesta_esperada": "Se contabilizan las renuncias expresas (comunicadas formalmente) y tácitas (por no presentación o incumplimiento de requisitos), según la medida 'Total renuncias' del cubo SOLICITUDES MOVILIDAD OUT, para evaluar la eficacia del proceso."
+  },
+  {
+    "pregunta": "¿Cómo se determina el nivel de estudios de los estudiantes de movilidad?",
+    "respuesta_esperada": "Los estudiantes se clasifican según su nivel académico: grado, máster, doctorado, estudios de primer/segundo ciclo, permitiendo organizar los programas de movilidad según el perfil académico de los participantes."
+  },
+  {
+    "pregunta": "¿Qué universidades de destino están disponibles para movilidad?",
+    "respuesta_esperada": "Las universidades de destino incluyen instituciones europeas e internacionales con las que la Universidad de Zaragoza mantiene acuerdos de intercambio, clasificadas por país, región y tipo de institución en los cubos de movilidad."
+  },
+  {
+    "pregunta": "¿Cómo se gestionan los acuerdos bilaterales de investigación?",
+    "respuesta_esperada": "Los acuerdos bilaterales de investigación se gestionan a través del cubo ACUERDOS BILATERALES, clasificando los convenios por tipo de institución, país, área de conocimiento y modalidad de colaboración investigadora."
+  },
+  {
+    "pregunta": "¿Qué modalidades de movilidad de investigadores existen?",
+    "respuesta_esperada": "Las modalidades incluyen estancias de investigación, intercambios docentes, participación en proyectos conjuntos, y movilidades formativas, según se clasifica en el cubo MOVILIDAD I+D+i para gestionar la internacionalización de la investigación."
+  },
+  {
+    "pregunta": "¿Cómo se determina si una movilidad incluye prórroga?",
+    "respuesta_esperada": "La información sobre prórrogas de movilidad permite identificar si un investigador ha extendido su estancia más allá del período inicialmente previsto, facilitando la gestión administrativa y presupuestaria de los programas de movilidad."
+  }
+]

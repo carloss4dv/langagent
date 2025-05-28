@@ -1,0 +1,77 @@
+/* Estilos personalizados para Chainlit */
+
+/* Estilos para tablas */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+    font-size: 0.9em;
+    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+th {
+    background-color: #1E88E5;
+    color: #ffffff;
+    font-weight: bold;
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 2px solid #dadada;
+}
+
+td {
+    padding: 10px 15px;
+    border-bottom: 1px solid #dddddd;
+}
+
+tr:nth-child(even) {
+    background-color: rgba(30, 136, 229, 0.05);
+}
+
+tr:hover {
+    background-color: rgba(30, 136, 229, 0.1);
+}
+
+/* Estilo para los bloques de código */
+pre {
+    border-radius: 8px;
+    padding: 1em;
+    background-color: #282828 !important;
+}
+
+/* Estilo para el autor de los mensajes */
+.author {
+    font-size: 0.8em;
+    opacity: 0.7;
+}
+
+/* Estilo para los mensajes del sistema */
+[data-author="Sistema"] {
+    font-style: italic;
+    opacity: 0.8;
+}
+
+/* Ajustes para contenido que se desborda */
+.overflow-container {
+    width: 100%;
+    overflow-x: auto;
+    margin-bottom: 1em;
+    border-radius: 8px;
+}
+
+/* Eliminar margen inferior del último párrafo en celdas para evitar espacios excesivos */
+td p:last-child {
+    margin-bottom: 0;
+}
+
+/* Estilos para dispositivos móviles */
+@media screen and (max-width: 600px) {
+    table {
+        font-size: 0.8em;
+    }
+    
+    th, td {
+        padding: 8px 10px;
+    }
+} 

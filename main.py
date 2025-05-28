@@ -6,19 +6,23 @@ utilizando LangGraph, LLaMA3 y Chroma vector store.
 """
 import re
 import os
+import sys
 import argparse
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+# Asegurarnos que podemos importar desde el directorio actual
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
 from langagent.utils.document_loader import (
     load_documents_from_directory,
     load_consultas_guardadas
 )
-from langagent.utils.vectorstore import (
-    create_embeddings, 
-    create_vectorstore, 
-    load_vectorstore, 
-    create_retriever
+from langagent.vectorstore import (
+    VectorStoreFactory,
+    create_embeddings
 )
 from langagent.models.llm import (
     create_llm, 
@@ -40,7 +44,7 @@ from langagent.config.config import (
     VECTORSTORE_CONFIG,
     PATHS_CONFIG
 )
-from lang_chain_agent import LangChainAgent
+from langagent.core.lang_chain_agent import LangChainAgent
 
 def main():
     """Función principal para ejecutar el agente desde línea de comandos."""
@@ -50,20 +54,26 @@ def main():
     parser.add_argument("--local_llm", default=None, help="Modelo LLM principal")
     parser.add_argument("--local_llm2", default=None, help="Modelo LLM secundario (opcional)")
     parser.add_argument("--question", help="Pregunta a responder")
+    parser.add_argument("--vector_db_type", default="milvus", choices=["chroma", "milvus"],
+                       help="Tipo de vectorstore a utilizar (default: milvus)")
     
     args = parser.parse_args()
     
     # Crear una instancia del agente
     agent = LangChainAgent(
         data_dir=args.data_dir, 
-        chroma_base_dir=args.chroma_dir, 
+        vectorstore_dir=args.chroma_dir, 
+        vector_db_type=args.vector_db_type,
         local_llm=args.local_llm, 
         local_llm2=args.local_llm2
     )
     
-    # Ejecutar el agente con una pregunta de ejemplo
-    question = "¿Cuál es la capital de Francia?"
-    agent.run(question)
+    # Ejecutar el agente con la pregunta proporcionada o una de ejemplo
+    question = args.question if args.question else "¿Cómo se calcula la tasa de éxito académico en el ambito Academico?"
+    print(f"Ejecutando consulta: {question}")
+    result = agent.run(question)
+    
+    return result
 
 if __name__ == "__main__":
     main()

@@ -22,7 +22,7 @@ def load_file(file_path: str) -> List[Document]:
     """
     # Corrige el nombre de la variable (file_path en lugar de path)
     loader = UnstructuredMarkdownLoader(file_path)
-    elements = loader.load_and_split()  # Esto ya devuelve una lista de Documents
+    elements = loader.load()  # Esto ya devuelve una lista de Documents
     
     # Verifica que los elementos tengan contenido
     if not elements:

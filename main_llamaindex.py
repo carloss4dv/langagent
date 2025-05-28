@@ -18,10 +18,9 @@ from langagent.utils.document_loader import (
     load_documents_from_directory,
     load_consultas_guardadas
 )
-from langagent.utils.vectorstore import (
-    create_embeddings,
-    create_vectorstore, 
-    load_vectorstore
+from langagent.vectorstore import (
+    VectorStoreFactory,
+    create_embeddings
 )
 from langagent.models.llm import (
     create_llm, 
@@ -160,14 +159,27 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
         
         # Crear directorio para vectorstore de este cubo
         cubo_persist_dir = os.path.join(persist_directory, f"Cubo{cubo_name}")
+        collection_name = f"Cubo{cubo_name}"
+        
+        # Obtener la instancia de vectorstore
+        vectorstore_handler = VectorStoreFactory.get_vectorstore_instance()
         
         # Crear o cargar vectorstore básica para este cubo
-        if not os.path.exists(cubo_persist_dir):
+        try:
+            print(f"Intentando cargar base de datos vectorial existente para {cubo_name}...")
+            db = vectorstore_handler.load_vectorstore(
+                embeddings=embeddings,
+                collection_name=collection_name,
+                persist_directory=cubo_persist_dir
+            )
+        except Exception as e:
             print(f"Creando nueva base de datos vectorial para {cubo_name}...")
-            db = create_vectorstore(doc_splits, embeddings, cubo_persist_dir)
-        else:
-            print(f"Cargando base de datos vectorial existente para {cubo_name}...")
-            db = load_vectorstore(cubo_persist_dir, embeddings)
+            db = vectorstore_handler.create_vectorstore(
+                documents=doc_splits,
+                embeddings=embeddings,
+                collection_name=collection_name,
+                persist_directory=cubo_persist_dir
+            )
         
         # Guardar la vectorstore básica
         vectorstores[cubo_name] = db
@@ -189,9 +201,12 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
                 llm=llm2 if llm2 else llm
             )
         else:
-            # Para un retriever estándar, usamos create_retriever de vectorstore.py
-            from langagent.utils.vectorstore import create_retriever
-            retrievers[cubo_name] = create_retriever(db, k=VECTORSTORE_CONFIG["k_retrieval"])
+            # Para un retriever estándar, usamos create_retriever de la nueva implementación
+            retrievers[cubo_name] = vectorstore_handler.create_retriever(
+                vectorstore=db,
+                k=VECTORSTORE_CONFIG["k_retrieval"],
+                similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
+            )
     
     # Procesar consultas guardadas por ámbito
     for ambito, consultas in consultas_por_ambito.items():
@@ -202,14 +217,27 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
         
         # Crear directorio para vectorstore de consultas de este ámbito
         consultas_persist_dir = os.path.join(persist_directory, f"Consultas_{ambito}")
+        collection_name = f"Consultas_{ambito}"
+        
+        # Obtener la instancia de vectorstore
+        vectorstore_handler = VectorStoreFactory.get_vectorstore_instance()
         
         # Crear o cargar vectorstore para las consultas de este ámbito
-        if not os.path.exists(consultas_persist_dir):
+        try:
+            print(f"Intentando cargar base de datos vectorial existente para consultas de {ambito}...")
+            db = vectorstore_handler.load_vectorstore(
+                embeddings=embeddings,
+                collection_name=collection_name,
+                persist_directory=consultas_persist_dir
+            )
+        except Exception as e:
             print(f"Creando nueva base de datos vectorial para consultas de {ambito}...")
-            db = create_vectorstore(consulta_splits, embeddings, consultas_persist_dir)
-        else:
-            print(f"Cargando base de datos vectorial existente para consultas de {ambito}...")
-            db = load_vectorstore(consultas_persist_dir, embeddings)
+            db = vectorstore_handler.create_vectorstore(
+                documents=consulta_splits,
+                embeddings=embeddings,
+                collection_name=collection_name,
+                persist_directory=consultas_persist_dir
+            )
         
         # Guardar la vectorstore de consultas
         consultas_vectorstores[ambito] = db
@@ -235,7 +263,11 @@ def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm
             )
         else:
             # Retriever estándar para consultas
-            retrievers[retriever_key] = create_retriever(db, k=VECTORSTORE_CONFIG["k_retrieval"])
+            retrievers[retriever_key] = vectorstore_handler.create_retriever(
+                vectorstore=db,
+                k=VECTORSTORE_CONFIG["k_retrieval"],
+                similarity_threshold=VECTORSTORE_CONFIG.get("similarity_threshold", 0.7)
+            )
     
     # Si se solicita la técnica de router, combinar los retrievers
     if 'router' in advanced_techniques and len(retrievers) > 1:

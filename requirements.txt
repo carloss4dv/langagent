@@ -62,3 +62,10 @@ python-dotenv
 ipython
 streamlit-authenticator
 typing-extensions
+
+# Nuevas dependencias para Milvus
+langchain-milvus
+pymilvus
+
+# Frontend Chainlit
+chainlit

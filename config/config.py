@@ -6,23 +6,61 @@ componentes del sistema, permitiendo ajustar su comportamiento sin
 modificar el código principal.
 """
 
+import os
+from dotenv import load_dotenv
+
+# Cargar variables de entorno desde .env
+load_dotenv()
+
 # Configuración de LLM
 LLM_CONFIG = {
     "model_temperature": 0.15,  # Controla la aleatoriedad de las respuestas (0-1)
-    "max_tokens": 1024,        # Límite de tokens para las respuestas generadas
+    "max_tokens": 2048,        # Límite de tokens para las respuestas generadas
     "model_format": "json",    # Formato de salida (json, text, etc.)
-    "default_model": "hf.co/unsloth/Mistral-Small-3.1-24B-Instruct-2503-GGUF",  # Modelo predeterminado para el LLM principal
-    "default_model2": "qwen2.5:7b", # Modelo predeterminado para el LLM secundario (evaluación)
-    "default_model3": "ollama/llama3.1:8b" # Modelo predeterminado para el LLM tercero (evaluación)
+    "default_model": "mistral-small-3.1:24b",  # Modelo predeterminado para el LLM principal
+    "default_model2": "qwen2.5:1.5b", # Modelo predeterminado para el LLM secundario (routing)
+    "default_model3": "llama3.2:3b" # Modelo predeterminado para el LLM tercero (eavluation)
 }
 
 # Configuración de Vector Store
 VECTORSTORE_CONFIG = {
-    "chunk_size": 500,         # Tamaño de los fragmentos de texto para indexación
+    "chunk_size": 512,         # Tamaño de los fragmentos de texto para indexación
     "chunk_overlap": 50,        # Superposición entre fragmentos
     "k_retrieval": 6,          # Número de documentos a recuperar
     "similarity_threshold": 0.7,  # Umbral mínimo de similitud para considerar un documento relevante
-    "max_docs_total": 15       # Aumentar el límite total de documentos
+    "max_docs_total": 15,       # Aumentar el límite total de documentos
+    "vector_db_type": "milvus", # Tipo de base de datos vectorial (chroma o milvus)
+    
+    # Configuración para Milvus/Zilliz Cloud
+    "milvus_uri": os.getenv("ZILLIZ_CLOUD_URI", "http://localhost:19530"),
+    "milvus_token": os.getenv("ZILLIZ_CLOUD_TOKEN", ""),
+    "milvus_secure": os.getenv("ZILLIZ_CLOUD_SECURE", "True").lower() in ("true", "1", "t"),     # Usar conexión segura (para Zilliz Cloud)
+    
+    # Configuración de particionamiento para Milvus
+    "use_partitioning": False,  # Desactivar particiones, usar filtrado en su lugar
+    "partition_key_field": "ambito",  # Campo para particionamiento (si se activa)
+    
+    # Configuración para enfoque de colección única
+    "use_single_collection": True,  # Usar una sola colección para todos los documentos
+    "collection_name": "default_collection",  # Nombre de la colección unificada
+    "always_update_collection": False,  # Si se deben actualizar documentos en colección existente
+    "filter_by_metadata": True,  # Habilitar filtrado por metadatos en consultas
+    
+    # Configuración de búsqueda híbrida
+    "use_hybrid_search": True,  # Activar búsqueda híbrida (vectorial + texto completo)
+    
+    # Configuración de generación de contexto
+    "use_context_generation": True,  # Activar generación de contexto para chunks
+    "log_context_generation": True,  # Mostrar logs detallados de la generación de contexto
+}
+
+# Configuración de SQL
+SQL_CONFIG = {
+    "db_uri": "sqlite:///sqlite/pdi_database.db",  # URI de conexión a la base de datos
+    "dialect": "sqlite",                           # Dialecto SQL (sqlite, postgres, etc.)
+    "enable_sql_queries": True,                    # Habilitar consultas SQL
+    "max_results": 20,                             # Número máximo de resultados por consulta
+    "default_table": "pdi_docencia"                # Tabla por defecto para consultas
 }
 
 # Configuración de API
@@ -41,9 +79,10 @@ WORKFLOW_CONFIG = {
 
 # Rutas y Directorios
 PATHS_CONFIG = {
-    "default_data_dir": "./output_md",           # Directorio predeterminado para datos
-    "default_chroma_dir": "./chroma",       # Directorio predeterminado para la base de datos vectorial
-    "log_dir": "./logs",                    # Directorio para archivos de registro
+    "default_data_dir": "./output_md",        # Directorio predeterminado para datos
+    "default_vectorstore_dir": "./vectordb",  # Directorio base para vectorstores
+    "default_chroma_dir": "./chroma",         # Directorio específico para Chroma
+    "log_dir": "./logs",                      # Directorio para archivos de registro
 }
 
 # Configuración de Seguridad

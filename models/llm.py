@@ -9,18 +9,24 @@ from langchain_ollama import ChatOllama
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
+from langchain_community.utilities import SQLDatabase
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langagent.prompts import PROMPTS 
-from langagent.config.config import LLM_CONFIG
+from langagent.config.config import LLM_CONFIG, SQL_CONFIG
 
 def _get_prompt_template(llm, prompt_key: str):
     """Helper para obtener plantillas del modelo correcto."""
-    model_name = llm.model if "llama" not in llm.model else "llama"
+    model_name = llm.model
+    if "llama" in llm.model:
+        model_name = "llama"
+    elif "qwen" in llm.model:
+        model_name = "qwen"
     try:
         return PROMPTS[model_name][prompt_key]
     except KeyError:
         raise ValueError(f"No prompt found for model '{model_name}' and key '{prompt_key}'")
 
-def create_llm(model_name: str = None, temperature: float = None, format: str = None):
+def create_llm(model_name: str = None, temperature: float = None, format: str = None, max_tokens: int = None):
     """
     Crea un modelo de lenguaje basado en Ollama.
     
@@ -28,6 +34,7 @@ def create_llm(model_name: str = None, temperature: float = None, format: str = 
         model_name (str, optional): Nombre del modelo a utilizar.
         temperature (float, optional): Temperatura para la generación (0-1).
         format (str, optional): Formato de salida ('json' u otro).
+        max_tokens (int, optional): Número máximo de tokens para la generación.
         
     Returns:
         ChatOllama: Modelo de lenguaje configurado.
@@ -36,8 +43,112 @@ def create_llm(model_name: str = None, temperature: float = None, format: str = 
     model_name = model_name or LLM_CONFIG["default_model"]
     temperature = temperature if temperature is not None else LLM_CONFIG["model_temperature"]
     format = format or LLM_CONFIG["model_format"]
+    max_tokens = max_tokens if max_tokens is not None else LLM_CONFIG["max_tokens"]
     
-    return ChatOllama(model=model_name, format=format, temperature=temperature)
+    return ChatOllama(
+        model=model_name, 
+        format=format, 
+        temperature=temperature,
+        max_tokens=max_tokens
+    )
+
+
+def create_rag_sql_chain(llm, db_uri=SQL_CONFIG["db_uri"], dialect=SQL_CONFIG["dialect"]):
+    """
+    Crea una cadena combinada RAG + SQL que genera tanto una respuesta como una consulta SQL.
+    
+    Esta cadena utiliza primero un enfoque RAG para entender el contexto y luego genera
+    una consulta SQL basada en la pregunta. La consulta se puede ejecutar posteriormente.
+    
+    Args:
+        llm: Modelo de lenguaje a utilizar.
+        db_uri: URI de conexión a la base de datos SQL.
+        dialect: Dialecto SQL a utilizar (por defecto: sqlite).
+        
+    Returns:
+        dict: Diccionario con dos cadenas - 'answer_chain' para RAG y 'sql_query_chain' para generar SQL.
+    """
+    # Crear la conexión a la base de datos
+    db = SQLDatabase.from_uri(db_uri)
+    
+    # Obtener información del esquema
+    table_info = db.get_table_info() 
+    # Crear plantilla para generar consultas SQL
+    sql_prompt = PromptTemplate.from_template(
+        """
+        Dado el contexto y la pregunta, crea una consulta SQL sintácticamente correcta para {dialect}.
+        A menos que se especifique un número de resultados, limita a 10 resultados máximo.
+        Puedes ordenar los resultados por una columna relevante para mostrar los ejemplos más interesantes.
+        
+        Nunca consultes todas las columnas de una tabla, solo selecciona las columnas relevantes para la pregunta.
+        Es obligatorio usar una referencia temporal en la consulta.
+        
+        Presta atención a usar solo los nombres de columnas que puedes ver en la descripción del esquema.
+        Ten cuidado de no consultar columnas que no existen. También, presta atención a qué columna está en qué tabla.
+        
+        Solo usa las siguientes tablas:
+        {table_info}
+        
+        Contexto: {context}
+        Pregunta: {question}
+        
+        Consulta SQL:
+        """
+    )
+    
+    # Crear la cadena para generar consultas SQL
+    sql_query_chain = (
+        {
+            "dialect": lambda _: dialect,
+            "table_info": lambda _: table_info,
+            "context": RunnablePassthrough(),
+            "question": RunnablePassthrough()
+        }
+        | sql_prompt
+        | llm
+        | (lambda x: x.content)
+    )
+    
+    # Crear la cadena RAG normal (para generar respuestas basadas en contexto)
+    rag_prompt_template = _get_prompt_template(llm, "rag")
+    prompt = PromptTemplate.from_template(rag_prompt_template)
+    
+    answer_chain = (
+        {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
+        | prompt
+        | llm
+        | JsonOutputParser()
+    )
+    
+    return {
+        "answer_chain": answer_chain,
+        "sql_query_chain": sql_query_chain
+    }
+
+def create_context_generator(llm):
+    """
+    Crea un generador de contexto para mejorar la calidad de los chunks.
+    
+    Este generador utiliza el LLM principal para crear una descripción contextual
+    para cada chunk basándose en el documento completo, mejorando así su recuperación.
+    
+    Args:
+        llm: Modelo de lenguaje a utilizar.
+        
+    Returns:
+        Chain: Cadena para generar contexto.
+    """
+    # Prompt para generación de contexto
+    prompt_template = _get_prompt_template(llm, "context_generator")
+    prompt = PromptTemplate(
+        template=prompt_template,
+        input_variables=["document", "chunk"],
+    )
+    
+    # Definir la cadena de generación de contexto con JsonOutputParser
+    context_generator_chain = prompt | llm | JsonOutputParser()
+    
+    return context_generator_chain
 
 def create_rag_chain(llm):
     """
@@ -58,6 +169,7 @@ def create_rag_chain(llm):
         {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
         | prompt
         | llm
+        | JsonOutputParser()
     )
     
     return rag_chain
@@ -141,3 +253,46 @@ def create_question_router(llm):
     
     question_router = prompt | llm | JsonOutputParser()
     return question_router
+
+def create_query_rewriter(llm):
+    """
+    Crea un reescritor de consultas para mejorar la recuperación de información.
+    
+    Args:
+        llm: Modelo de lenguaje a utilizar.
+        
+    Returns:
+        Chain: Cadena de reescritura de consultas configurada.
+    """
+    # Prompt para reescritura de consultas
+    prompt_template = _get_prompt_template(llm, "query_rewriter")
+    prompt = PromptTemplate(
+        template=prompt_template,
+        input_variables=["question"],
+    )
+    
+    # Aquí no usamos JsonOutputParser porque queremos texto plano
+    query_rewriter = prompt | llm
+    return query_rewriter
+
+def create_clarification_generator(llm):
+    """
+    Crea un generador de preguntas de clarificación para el agente de ámbito.
+    
+    Args:
+        llm: Modelo de lenguaje a utilizar.
+        
+    Returns:
+        Chain: Cadena de generación de clarificación configurada.
+    """
+    # Prompt para generar preguntas de clarificación
+    prompt_template = _get_prompt_template(llm, "clarification_generator")
+    prompt = PromptTemplate(
+        template=prompt_template,
+        input_variables=["question", "context"],
+    )
+    
+    # Definir la cadena de generación de clarificación
+    # No usamos JsonOutputParser porque queremos texto plano para la pregunta de clarificación
+    clarification_generator = prompt | llm
+    return clarification_generator
