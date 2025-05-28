@@ -21,6 +21,3 @@ except ImportError:
     if current_dir not in sys.path:
         sys.path.insert(0, current_dir)
         
-    # Intentar importar de nuevo
-    from core.lang_chain_agent import LangChainAgent
-    from evaluation.evaluate import AgentEvaluator
