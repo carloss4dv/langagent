@@ -117,6 +117,7 @@ def create_rag_sql_chain(llm, db_uri=SQL_CONFIG["db_uri"], dialect=SQL_CONFIG["d
         {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
         | prompt
         | llm
+        | JsonOutputParser()
     )
     
     return {
