@@ -18,7 +18,7 @@ if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 # Importar desde el módulo local
-from langagent.evaluation.evaluate import AgentEvaluator, guardar_resultados_deepeval
+from langagent.evaluation.evaluate import AgentEvaluator
 
 # Casos de prueba basados en los cubos de datos del sistema
 CASOS_PRUEBA = [
