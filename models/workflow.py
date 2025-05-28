@@ -628,7 +628,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             print(f"Reintentando (intento {retry_count+1}/{max_retries})")
             print(f"- Contiene alucinaciones: {is_hallucination}")
             print(f"- No aborda adecuadamente la pregunta: {is_unhelpful}")
-            return "retrieve"
+            return "generate"
         else:
             if retry_count >= max_retries and (is_hallucination or is_unhelpful):
                 print(f"Máximo de reintentos alcanzado ({max_retries}). Finalizando con la mejor respuesta disponible.")

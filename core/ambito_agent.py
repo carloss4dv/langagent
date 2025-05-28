@@ -114,15 +114,12 @@ def create_ambito_workflow(retriever: any, llm: any):
             # Recuperar documentos usando el retriever
             docs = retriever.invoke(question)
             
-            
             if docs:
                 # LÓGICA MEJORADA: Analizar documentos con priorización
                 ambito_counts = {}
                 relevance_scores = {}
                 
                 for i, doc in enumerate(docs[:5]):  # Analizar más documentos
-                    print(f"Doc {i+1}: {doc.page_content[:100]}...")
-                    print(f"Metadata: {doc.metadata}")
                     
                     # Extraer ámbito del metadata
                     if 'ambito' in doc.metadata:
