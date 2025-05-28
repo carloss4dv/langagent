@@ -480,8 +480,6 @@ PROMPTS = {
         - Do NOT repeat the input documents in your response
         - Your response must be parseable JSON
         - NO explanations, NO additional text, NO document repetition
-        - ONLY output "yes" if ALL claims are supported by documents
-        - ONLY output "no" if ANY claim lacks document support
         
         
         RESPONSE FORMAT:
