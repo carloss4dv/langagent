@@ -10,7 +10,6 @@ import argparse
 import json
 import time
 import sys
-from datetime import datetime
 from typing import List, Dict, Any, Optional
 from langchain_core.documents import Document
 from deepeval import evaluate
@@ -59,9 +58,6 @@ class AgentEvaluator:
             local_llm2=local_llm2,
             local_llm3=local_llm3
         )
-        
-        self.test_cases = []
-        self.raw_outputs = []  # Almacenar las salidas completas del agente
     
     def calcular_token_cost(self, response_metadata):
         """
@@ -289,152 +285,6 @@ class AgentEvaluator:
         # Si no pudimos extraer, convertir a string
         return str(respuesta)
 
-    def crear_caso_prueba(self, pregunta: str, respuesta_esperada: str = None):
-        """
-        Ejecuta el agente con una pregunta y crea un caso de prueba para evaluación.
-        
-        Args:
-            pregunta (str): Pregunta a evaluar.
-            respuesta_esperada (str, optional): Respuesta esperada para la pregunta.
-        
-        Returns:
-            LLMTestCase: Caso de prueba para evaluación con deepeval.
-        """
-        # Registrar el tiempo de inicio
-        tiempo_inicio = time.time()
-        
-        # Ejecutar el agente para obtener la respuesta
-        resultado = self.agent.run(pregunta)
-        print(resultado)
-        
-        # Calcular tiempo de completado
-        tiempo_completado = time.time() - tiempo_inicio
-        
-        # Guardar la respuesta completa para análisis
-        self.raw_outputs.append({
-            "pregunta": pregunta,
-            "resultado_completo": resultado,
-            "tiempo_completado": tiempo_completado
-        })
-        
-        # Extraer los componentes necesarios para el caso de prueba
-        generation = None
-        response_metadata = None
-        
-        # Extraer metadatos de respuesta si existen antes de procesar la generación
-        if "response_metadata" in resultado:
-            response_metadata = resultado["response_metadata"]
-        
-        # Verificar si generation es un string con formato especial
-        if "generation" in resultado:
-            gen = resultado["generation"]
-            # Formato específico con response_metadata y usage_metadata
-            if isinstance(gen, str) and "response_metadata=" in gen:
-                try:
-                    # Extraer el texto de la respuesta
-                    generation = self.extraer_texto_respuesta(gen)
-                    
-                    # Extraer los metadatos de respuesta
-                    metadata_start = gen.find("response_metadata={") 
-                    if metadata_start > 0:
-                        # Cortar el string para obtener solo la parte de los metadatos
-                        metadata_str = gen[metadata_start:]
-                        response_metadata = metadata_str
-                except Exception as e:
-                    print(f"Error al procesar metadatos del formato especial: {e}")
-            else:
-                # Formato normal
-                generation = self.extraer_texto_respuesta(gen)
-                # Si no hay response_metadata, intentar extraerlo de generation
-                if not response_metadata and isinstance(gen, dict):
-                    response_metadata = gen.get("response_metadata")
-        
-        # Si no encontramos la generación, buscar en otros campos comunes
-        if not generation and "response" in resultado:
-            generation = self.extraer_texto_respuesta(resultado["response"])
-        
-        # Extraer otros campos importantes
-        documents = resultado.get("documents", [])
-        relevant_cubos = resultado.get("relevant_cubos", [])
-        is_consulta = resultado.get("is_consulta", False)
-        consulta_documents = resultado.get("consulta_documents", [])
-        rewritten_query = resultado.get("rewritten_query", "")
-        
-        # Extraer puntuaciones si existen
-        hallucination_score = None
-        if "hallucination_score" in resultado and isinstance(resultado["hallucination_score"], dict):
-            hallucination_score = resultado["hallucination_score"].get("score")
-        
-        answer_score = None
-        if "answer_score" in resultado and isinstance(resultado["answer_score"], dict):
-            answer_score = resultado["answer_score"].get("score")
-        
-        ambito = resultado.get("ambito")
-        retrieval_details = resultado.get("retrieval_details", {})
-        
-        # Calcular información de tokens y costos
-        token_info = self.calcular_token_cost(response_metadata)
-        
-        # Si es una consulta, agregar los documentos de consulta al contexto
-        if is_consulta and consulta_documents:
-            context_docs = consulta_documents
-        else:
-            # Usar los documentos recuperados normalmente
-            context_docs = documents
-        
-        # Convertir los documentos al formato esperado por deepeval
-        formatted_context = []
-        for doc in context_docs:
-            if isinstance(doc, Document):
-                # Si es un objeto Document de LangChain
-                formatted_context.append(doc.page_content)
-            elif isinstance(doc, dict) and "page_content" in doc:
-                # Si es un diccionario con page_content
-                formatted_context.append(doc["page_content"])
-            elif isinstance(doc, dict) and "text" in doc:
-                # Si es un diccionario con text
-                formatted_context.append(doc["text"])
-            elif isinstance(doc, str):
-                # Si es un string directamente
-                formatted_context.append(doc)
-            else:
-                # En cualquier otro caso, convertir a string
-                formatted_context.append(str(doc))
-        
-        # Crear y devolver el caso de prueba con los parámetros permitidos
-        test_case = LLMTestCase(
-            input=pregunta,
-            actual_output=generation or "No se pudo extraer una respuesta",
-            expected_output=respuesta_esperada,
-            context=formatted_context,
-            token_cost=token_info.get("cost_estimate", {}).get("total_cost", 0),
-            completion_time=tiempo_completado,
-            additional_metadata={
-                "rewritten_query": rewritten_query,
-                "hallucination_score": hallucination_score,
-                "answer_score": answer_score,
-                "relevant_cubos": relevant_cubos,
-                "ambito": ambito,
-                "is_consulta": is_consulta,
-                "model_info": token_info.get("model", "unknown"),
-                
-            }
-        )
-        
-        # Guardar los metadatos adicionales como atributos del objeto para uso posterior
-        test_case.hallucination_score = hallucination_score
-        test_case.answer_score = answer_score
-        test_case.relevant_cubos = relevant_cubos
-        test_case.rewritten_query = rewritten_query
-        test_case.ambito = ambito
-        test_case.is_consulta = is_consulta
-        test_case.model_info = token_info.get("model", "unknown")
-        test_case.token_info = token_info
-        test_case.retrieval_details = retrieval_details
-        
-        self.test_cases.append(test_case)
-        return test_case
-    
     def convertir_a_golden(self, preguntas: List[str], respuestas_esperadas: List[str] = None):
         """
         Convierte una lista de preguntas y respuestas esperadas en objetos Golden
@@ -488,13 +338,6 @@ class AgentEvaluator:
             # Calcular tiempo de completado
             tiempo_completado = time.time() - tiempo_inicio
             
-            # Guardar la respuesta completa para análisis
-            self.raw_outputs.append({
-                "pregunta": pregunta,
-                "resultado_completo": resultado,
-                "tiempo_completado": tiempo_completado
-            })
-            
             # Extraer el texto de la respuesta
             generation = None
             if "generation" in resultado:
@@ -506,19 +349,6 @@ class AgentEvaluator:
             documents = resultado.get("documents", [])
             is_consulta = resultado.get("is_consulta", False)
             consulta_documents = resultado.get("consulta_documents", [])
-            relevant_cubos = resultado.get("relevant_cubos", [])
-            ambito = resultado.get("ambito")
-            retrieval_details = resultado.get("retrieval_details", {})
-            rewritten_query = resultado.get("rewritten_query", "")
-            
-            # Extraer puntuaciones si existen
-            hallucination_score = None
-            if "hallucination_score" in resultado and isinstance(resultado["hallucination_score"], dict):
-                hallucination_score = resultado["hallucination_score"].get("score")
-            
-            answer_score = None
-            if "answer_score" in resultado and isinstance(resultado["answer_score"], dict):
-                answer_score = resultado["answer_score"].get("score")
             
             # Extraer metadatos de respuesta si existen
             response_metadata = resultado.get("generation", "")
@@ -543,31 +373,8 @@ class AgentEvaluator:
                 expected_output=golden.expected_output,
                 retrieval_context=context,
                 token_cost=token_info.get("cost_estimate", {}).get("total_cost", 0),
-                completion_time=tiempo_completado,
-                additional_metadata={
-                    "original_query": golden.input,
-                    "rewritten_query": rewritten_query,
-                    "hallucination_score": hallucination_score,
-                    "answer_score": answer_score,
-                    "relevant_cubos": relevant_cubos,
-                    "ambito": ambito,
-                    "is_consulta": is_consulta,
-                    "model_info": token_info.get("model", "unknown"),
-                    "token_info": token_info,
-                    "retrieval_details": retrieval_details
-                }
+                completion_time=tiempo_completado
             )
-            
-            # Guardar metadatos adicionales como atributos del objeto para uso posterior
-            test_case.hallucination_score = hallucination_score
-            test_case.answer_score = answer_score
-            test_case.relevant_cubos = relevant_cubos
-            test_case.rewritten_query = rewritten_query
-            test_case.ambito = ambito
-            test_case.is_consulta = is_consulta
-            test_case.model_info = token_info.get("model", "unknown")
-            test_case.token_info = token_info
-            test_case.retrieval_details = retrieval_details
             
             test_cases.append(test_case)
         
@@ -602,45 +409,9 @@ class AgentEvaluator:
                 formatted_context.append(str(doc))
         return formatted_context
 
-    def query_with_context(self, input_query):
-        """
-        Ejecuta una consulta y devuelve el resultado y el contexto.
-        
-        Args:
-            input_query (str): La consulta a ejecutar.
-                
-        Returns:
-            Tuple: (contexto, respuesta)
-        """
-        resultado = self.agent.run(input_query)
-        generation = None
-        
-        if "generation" in resultado:
-            generation = self.extraer_texto_respuesta(resultado["generation"])
-        if not generation and "response" in resultado:
-            generation = self.extraer_texto_respuesta(resultado["response"])
-        
-        # Obtener el contexto utilizado
-        documents = resultado.get("documents", [])
-        is_consulta = resultado.get("is_consulta", False)
-        consulta_documents = resultado.get("consulta_documents", [])
-        
-        # Si es una consulta, agregar los documentos de consulta al contexto
-        if is_consulta and consulta_documents:
-            context_docs = consulta_documents
-        else:
-            # Usar los documentos recuperados normalmente
-            context_docs = documents
-        
-        # Extraer el contexto
-        context = self.obtener_contexto_formateado(context_docs)
-        
-        return context, generation
-
     def evaluar(self, preguntas: List[str], respuestas_esperadas: List[str] = None):
         """
         Evalúa una lista de preguntas con las métricas configuradas.
-        Primero recopila todas las respuestas y luego realiza la evaluación.
         
         Args:
             preguntas (List[str]): Lista de preguntas a evaluar.
@@ -648,16 +419,13 @@ class AgentEvaluator:
                 Si no se proporciona, se usa None para cada pregunta.
                 
         Returns:
-            Dict: Resultados de la evaluación, incluyendo métricas y puntuaciones.
+            Dict: Resultados de la evaluación.
         """
         # Convertir preguntas y respuestas a objetos Golden
         goldens = self.convertir_a_golden(preguntas, respuestas_esperadas)
         
-        # Crear dataset para pruebas
-        golden_dataset = goldens
-        
         # Convertir los goldens a casos de prueba
-        data = self.convertir_goldens_a_test_cases(golden_dataset)
+        data = self.convertir_goldens_a_test_cases(goldens)
         
         # Definir las métricas para la evaluación
         metrics = [
@@ -671,87 +439,10 @@ class AgentEvaluator:
         # Evaluar todos los casos de prueba con todas las métricas
         results = deepeval.evaluate(data, metrics=metrics)
         
-        # Guardar los casos de prueba para uso posterior
-        self.test_cases = data
-        
         return {
             "results": results,
             "test_cases": data
         }
-
-def guardar_resultados_deepeval(evaluador, resultados, ruta_salida=None):
-    """
-    Guarda los resultados de la evaluación en un archivo.
-    
-    Args:
-        evaluador (AgentEvaluator): El evaluador utilizado.
-        resultados (Dict): Resultados de la evaluación.
-        ruta_salida (str, optional): Ruta donde guardar los resultados.
-        
-    Returns:
-        str: Ruta donde se guardaron los resultados.
-    """
-    # Generar nombre de archivo con marca de tiempo
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    if ruta_salida:
-        os.makedirs(ruta_salida, exist_ok=True)
-        archivo_resultados = os.path.join(ruta_salida, f"eval_results_{timestamp}.json")
-    else:
-        # Crear directorio output_eval si no existe
-        os.makedirs("output_eval", exist_ok=True)
-        archivo_resultados = os.path.join("output_eval", f"eval_results_{timestamp}.json")
-    
-    # Obtener los resultados de la evaluación y los casos de prueba
-    test_cases = resultados.get("test_cases", [])
-    eval_results = resultados.get("results", {})
-    
-    # Preparar resultados para serialización
-    resultados_json = {
-        "timestamp": timestamp,
-        "nombre_evaluacion": f"Evaluación {timestamp}",
-        "num_preguntas": len(test_cases),
-        "metricas": {},
-        "casos": []
-    }
-    
-    # Extraer puntuaciones de las métricas
-    if hasattr(eval_results, "metrics"):
-        for metric in eval_results.metrics:
-            metric_name = metric.__class__.__name__.replace("Metric", "").lower()
-            resultados_json["metricas"][metric_name] = {
-                "promedio": getattr(eval_results, f"{metric_name}_score", None),
-                "passed": getattr(eval_results, f"{metric_name}_passed", False)
-            }
-    
-    # Datos de cada caso
-    for i, test_case in enumerate(test_cases):
-        caso = {
-            "id": i + 1,
-            "pregunta": test_case.input,
-            "respuesta": test_case.actual_output,
-            "esperado": test_case.expected_output,
-            "contexto": test_case.retrieval_context[:3] if hasattr(test_case, "retrieval_context") else [],
-            "puntuaciones": {}
-        }
-        
-        # Añadir metadatos relevantes
-        caso["metadata"] = {
-            "tiempo_completado": getattr(test_case, "completion_time", 0),
-        }
-        
-        # Obtener puntuaciones individuales si están disponibles
-        if hasattr(test_case, "metrics"):
-            for metric_result in test_case.metrics:
-                metric_name = metric_result.__class__.__name__.replace("Metric", "").lower()
-                caso["puntuaciones"][metric_name] = metric_result.score
-        
-        resultados_json["casos"].append(caso)
-    
-    # Guardar a archivo
-    with open(archivo_resultados, 'w', encoding='utf-8') as f:
-        json.dump(resultados_json, f, ensure_ascii=False, indent=2)
-    
-    return archivo_resultados
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluador de agentes RAG")
@@ -760,8 +451,6 @@ def main():
     parser.add_argument("--modelo", help="Nombre del modelo LLM principal")
     parser.add_argument("--modelo2", help="Nombre del segundo modelo LLM")
     parser.add_argument("--modelo3", help="Nombre del tercer modelo LLM")
-    parser.add_argument("--salida", help="Ruta para guardar resultados")
-    parser.add_argument("--verbose", action="store_true", help="Mostrar información detallada")
     parser.add_argument("--casos", help="Archivo JSON con casos de prueba")
     parser.add_argument("--vector_db_type", default="milvus", choices=["chroma", "milvus"],
                        help="Tipo de vectorstore a utilizar (default: milvus)")
@@ -793,13 +482,7 @@ def main():
         respuestas_esperadas = [None, None]
     
     # Ejecutar evaluación
-    resultados = evaluador.evaluar(preguntas, respuestas_esperadas)
-    
-    # Guardar resultados
-    ruta_resultados = guardar_resultados_deepeval(evaluador, resultados, args.salida)
-    
-    if args.verbose:
-        print(f"Evaluación completada. Resultados guardados en: {ruta_resultados}")
+    evaluador.evaluar(preguntas, respuestas_esperadas)
 
 if __name__ == "__main__":
-    main() 
+    main()

@@ -12,6 +12,7 @@ from langagent.models.constants import (
     AMBITO_KEYWORDS,
     AMBITO_EN_ES
 )
+from langagent.models.llm import create_clarification_generator
 import re
 
 class AmbitoState(TypedDict):
@@ -37,6 +38,9 @@ def create_ambito_workflow(retriever: any, llm: any):
         StateGraph: Grafo de estado configurado
     """
     workflow = StateGraph(AmbitoState)
+    
+    # Crear el generador de clarificación usando las prompts mejoradas
+    clarification_generator = create_clarification_generator(llm)
     
     def identify_ambito(state: AmbitoState) -> AmbitoState:
         """
@@ -120,16 +124,30 @@ def create_ambito_workflow(retriever: any, llm: any):
         if not state["needs_clarification"]:
             return state
             
-        # Generar pregunta de clarificación usando el LLM
-        prompt = f"""
-        Basado en la pregunta del usuario: "{state['question']}"
-        Y el contexto recuperado: {state['context']}
-        
-        Genera una pregunta de clarificación para ayudar al usuario a identificar el ámbito correcto.
-        """
-        
-        response = llm.invoke(prompt)
-        state["clarification_question"] = response
+        # Generar pregunta de clarificación usando el generador mejorado
+        try:
+            # Preparar el contexto para el generador
+            context_text = ""
+            if state.get("context"):
+                context_text = "\n".join([doc.page_content for doc in state["context"][:3]])  # Limitar a 3 documentos
+            
+            # Usar el generador de clarificación con las prompts mejoradas
+            response = clarification_generator.invoke({
+                "question": state["question"],
+                "context": context_text
+            })
+            
+            # Extraer el contenido de la respuesta
+            if hasattr(response, 'content'):
+                state["clarification_question"] = response.content
+            else:
+                state["clarification_question"] = str(response)
+                
+        except Exception as e:
+            print(f"Error al generar clarificación: {str(e)}")
+            # Fallback a pregunta genérica
+            state["clarification_question"] = "No he podido identificar claramente el ámbito. ¿Podrías especificar en qué ámbito te gustaría consultar información?"
+            
         return state
     
     # Añadir nodos al grafo

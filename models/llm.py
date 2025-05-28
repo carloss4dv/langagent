@@ -117,6 +117,7 @@ def create_rag_sql_chain(llm, db_uri=SQL_CONFIG["db_uri"], dialect=SQL_CONFIG["d
         {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
         | prompt
         | llm
+        | JsonOutputParser()
     )
     
     return {
@@ -168,6 +169,7 @@ def create_rag_chain(llm):
         {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
         | prompt
         | llm
+        | JsonOutputParser()
     )
     
     return rag_chain
@@ -272,3 +274,25 @@ def create_query_rewriter(llm):
     # Aquí no usamos JsonOutputParser porque queremos texto plano
     query_rewriter = prompt | llm
     return query_rewriter
+
+def create_clarification_generator(llm):
+    """
+    Crea un generador de preguntas de clarificación para el agente de ámbito.
+    
+    Args:
+        llm: Modelo de lenguaje a utilizar.
+        
+    Returns:
+        Chain: Cadena de generación de clarificación configurada.
+    """
+    # Prompt para generar preguntas de clarificación
+    prompt_template = _get_prompt_template(llm, "clarification_generator")
+    prompt = PromptTemplate(
+        template=prompt_template,
+        input_variables=["question", "context"],
+    )
+    
+    # Definir la cadena de generación de clarificación
+    # No usamos JsonOutputParser porque queremos texto plano para la pregunta de clarificación
+    clarification_generator = prompt | llm
+    return clarification_generator

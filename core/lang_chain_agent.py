@@ -27,7 +27,7 @@ from langagent.models.llm import (
     create_rag_sql_chain
 )
 from langagent.models.workflow import create_workflow
-from langagent.models.ambito_agent import create_ambito_workflow
+from langagent.core.ambito_agent import create_ambito_workflow
 from langagent.utils.terminal_visualization import (
     print_title, 
     print_documents, 
