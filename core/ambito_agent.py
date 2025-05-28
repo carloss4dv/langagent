@@ -116,9 +116,31 @@ def create_ambito_workflow(retriever: any, llm: any):
             print(f"Documentos recuperados: {len(docs) if docs else 0}")
             
             if docs:
-                for i, doc in enumerate(docs[:3]):  # Mostrar solo los primeros 3
+                # NUEVA LÓGICA: Analizar los documentos para identificar ámbito
+                ambito_counts = {}
+                
+                for i, doc in enumerate(docs[:3]):
                     print(f"Doc {i+1}: {doc.page_content[:100]}...")
                     print(f"Metadata: {doc.metadata}")
+                    
+                    # Extraer ámbito del metadata
+                    if 'ambito' in doc.metadata:
+                        ambito = doc.metadata['ambito']
+                        ambito_counts[ambito] = ambito_counts.get(ambito, 0) + 1
+                
+                # Si encontramos ámbitos en los documentos, seleccionar el más frecuente
+                if ambito_counts:
+                    selected_ambito = max(ambito_counts.items(), key=lambda x: x[1])[0]
+                    print(f"Ámbito identificado por contexto: {selected_ambito}")
+                    
+                    # Verificar que el ámbito existe en nuestras constantes
+                    if selected_ambito in AMBITOS_CUBOS:
+                        state["ambito"] = selected_ambito
+                        state["cubos"] = AMBITOS_CUBOS[selected_ambito]["cubos"]
+                        state["confidence"] = 0.8  # Buena confianza basada en contexto
+                        state["needs_clarification"] = False
+                        state["clarification_question"] = None
+                        print(f"Ámbito actualizado: {selected_ambito}, Cubos: {state['cubos']}")
             
             state["context"] = docs if docs else []
             
