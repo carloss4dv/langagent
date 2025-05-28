@@ -235,6 +235,11 @@ PROMPTS = {
         - No line breaks within responses
         - Clean, simple text without special formatting
         
+        RESPONSE FORMAT:
+        {{
+          "answer": "Your answer here"
+        }}
+        
         Question: {question}
         Context: {context} [/INST]""",
         

@@ -92,7 +92,8 @@ def create_ambito_workflow(retriever: any, llm: any):
             state["cubos"] = AMBITOS_CUBOS[selected_ambito]["cubos"]
             state["confidence"] = max(ambito_scores.values()) / len(AMBITO_KEYWORDS[selected_ambito])
             return state
-          # Si no se encuentra un ámbito claro, buscar en la base de conocimiento
+        
+        # Si no se encuentra un ámbito claro, buscar en la base de conocimiento
         state["needs_clarification"] = True
         state["confidence"] = 0.0  # Añadir confidence cuando no se puede identificar el ámbito
         state["clarification_question"] = "No he podido identificar claramente el ámbito. ¿Podrías especificar en qué ámbito te gustaría consultar información?"
@@ -106,13 +107,24 @@ def create_ambito_workflow(retriever: any, llm: any):
             return state
             
         question = state["question"]
+        print(f"---RETRIEVE CONTEXT FOR AMBITO---")
+        print(f"Pregunta: {question}")
         
         try:
             # Recuperar documentos usando el retriever
             docs = retriever.invoke(question)
-            state["context"] = docs
+            print(f"Documentos recuperados: {len(docs) if docs else 0}")
+            
+            if docs:
+                for i, doc in enumerate(docs[:3]):  # Mostrar solo los primeros 3
+                    print(f"Doc {i+1}: {doc.page_content[:100]}...")
+                    print(f"Metadata: {doc.metadata}")
+            
+            state["context"] = docs if docs else []
+            
         except Exception as e:
             print(f"Error al recuperar contexto: {str(e)}")
+            print(f"Tipo de retriever: {type(retriever)}")
             state["context"] = []
             
         return state
