@@ -319,6 +319,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         
         documents = state["documents"]
         question = state["question"]
+        ambito = state["ambito"]
         rewritten_question = state.get("rewritten_question", question)
         retrieval_details = state.get("retrieval_details", {})
         
@@ -333,8 +334,11 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 }
                 
                 relevance = retrieval_grader.invoke({
-                    "document": document_data,
-                    "question": rewritten_question
+                    "content": document_data["content"],
+                    "metadata": str(document_data["metadata"]),
+                    "source": document_data["source"],
+                    "question": question,
+                    "ambito": ambito,
                 })
                 
                 if isinstance(relevance, dict) and relevance.get("score", "").lower() == "yes":
