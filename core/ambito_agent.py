@@ -114,32 +114,65 @@ def create_ambito_workflow(retriever: any, llm: any):
             # Recuperar documentos usando el retriever
             docs = retriever.invoke(question)
             
+            
             if docs:
-                # NUEVA LÓGICA: Analizar los documentos para identificar ámbito
+                # LÓGICA MEJORADA: Analizar documentos con priorización
                 ambito_counts = {}
+                relevance_scores = {}
                 
-                for i, doc in enumerate(docs[:3]):
+                for i, doc in enumerate(docs[:5]):  # Analizar más documentos
                     print(f"Doc {i+1}: {doc.page_content[:100]}...")
                     print(f"Metadata: {doc.metadata}")
                     
                     # Extraer ámbito del metadata
                     if 'ambito' in doc.metadata:
                         ambito = doc.metadata['ambito']
+                        
+                        # Calcular puntuación de relevancia basada en la posición del documento
+                        relevance_weight = 1.0 / (i + 1)  # Documentos más arriba tienen más peso
+                        
+                        # Si ya teníamos un ámbito identificado, darle prioridad
+                        if state.get("ambito") == ambito:
+                            relevance_weight *= 2.0  # Doble peso si coincide con ámbito previo
+                        
+                        # Verificar keywords específicas en el contenido
+                        content_lower = doc.page_content.lower()
+                        if ambito in AMBITO_KEYWORDS:
+                            keyword_matches = sum(1 for keyword in AMBITO_KEYWORDS[ambito] 
+                                                if keyword in content_lower)
+                            if keyword_matches > 0:
+                                relevance_weight *= (1 + keyword_matches * 0.2)
+                        
                         ambito_counts[ambito] = ambito_counts.get(ambito, 0) + 1
+                        relevance_scores[ambito] = relevance_scores.get(ambito, 0) + relevance_weight
                 
-                # Si encontramos ámbitos en los documentos, seleccionar el más frecuente
-                if ambito_counts:
-                    selected_ambito = max(ambito_counts.items(), key=lambda x: x[1])[0]
-                    print(f"Ámbito identificado por contexto: {selected_ambito}")
+                print(f"Ámbitos encontrados: {ambito_counts}")
+                print(f"Puntuaciones de relevancia: {relevance_scores}")
+                
+                # Seleccionar ámbito basado en relevancia, no solo frecuencia
+                if relevance_scores:
+                    # Si ya teníamos un ámbito y aparece en los resultados, mantenerlo
+                    if state.get("ambito") and state["ambito"] in relevance_scores:
+                        selected_ambito = state["ambito"]
+                        print(f"Manteniendo ámbito previo: {selected_ambito}")
+                    else:
+                        # Seleccionar el de mayor puntuación de relevancia
+                        selected_ambito = max(relevance_scores.items(), key=lambda x: x[1])[0]
+                        print(f"Ámbito seleccionado por relevancia: {selected_ambito}")
                     
                     # Verificar que el ámbito existe en nuestras constantes
                     if selected_ambito in AMBITOS_CUBOS:
                         state["ambito"] = selected_ambito
                         state["cubos"] = AMBITOS_CUBOS[selected_ambito]["cubos"]
-                        state["confidence"] = 0.8  # Buena confianza basada en contexto
+                        
+                        # Calcular confianza basada en relevancia y frecuencia
+                        max_relevance = max(relevance_scores.values())
+                        confidence = min(0.9, 0.6 + (max_relevance / 5.0))  # Entre 0.6 y 0.9
+                        
+                        state["confidence"] = confidence
                         state["needs_clarification"] = False
                         state["clarification_question"] = None
-                        print(f"Ámbito actualizado: {selected_ambito}, Cubos: {state['cubos']}")
+                        print(f"Ámbito actualizado: {selected_ambito}, Cubos: {state['cubos']}, Confianza: {confidence}")
             
             state["context"] = docs if docs else []
             
