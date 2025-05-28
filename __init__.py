@@ -10,7 +10,7 @@ __version__ = "0.1.0"
 try:
     # Intentamos importar de forma relativa para cuando se usa como módulo
     from .core.lang_chain_agent import LangChainAgent
-    from .evaluation.evaluate import AgentEvaluator, guardar_resultados_deepeval
+    from .evaluation.evaluate import AgentEvaluator
 except ImportError:
     # Fallback a importación absoluta para cuando se ejecuta directamente
     import sys
@@ -23,4 +23,4 @@ except ImportError:
         
     # Intentar importar de nuevo
     from core.lang_chain_agent import LangChainAgent
-    from evaluation.evaluate import AgentEvaluator, guardar_resultados_deepeval
+    from evaluation.evaluate import AgentEvaluator
