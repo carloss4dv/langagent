@@ -49,7 +49,9 @@ def create_llm(model_name: str = None, temperature: float = None, format: str = 
         model=model_name, 
         format=format, 
         temperature=temperature,
-        max_tokens=max_tokens
+        max_tokens=max_tokens,
+        timeout=10,  # Timeout de 60 segundos para evitar bloqueos
+        streaming=False  # Desactivar streaming para evitar problemas de compatibilidad
     )
 
 

@@ -437,7 +437,7 @@ class AgentEvaluator:
         ]
         
         # Evaluar todos los casos de prueba con todas las métricas
-        results = deepeval.evaluate(data, metrics=metrics)
+        results = deepeval.evaluate(data, metrics=metrics, max_concurrency=2)
         
         return {
             "results": results,
