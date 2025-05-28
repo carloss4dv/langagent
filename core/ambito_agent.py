@@ -113,7 +113,6 @@ def create_ambito_workflow(retriever: any, llm: any):
         try:
             # Recuperar documentos usando el retriever
             docs = retriever.invoke(question)
-            print(f"Documentos recuperados: {len(docs) if docs else 0}")
             
             if docs:
                 # NUEVA LÓGICA: Analizar los documentos para identificar ámbito
