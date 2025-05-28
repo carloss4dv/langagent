@@ -446,7 +446,7 @@ class AgentEvaluator:
         
         # Convertir los goldens a casos de prueba
         data = self.convertir_goldens_a_test_cases(goldens)
-        
+        time.sleep(10)  # Esperar 10 segundos antes de iniciar la evaluación
         # Definir las métricas para la evaluación
         metrics = [
             deepeval.metrics.AnswerRelevancyMetric(),
