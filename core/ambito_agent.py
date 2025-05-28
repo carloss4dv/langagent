@@ -103,8 +103,6 @@ def create_ambito_workflow(retriever: any, llm: any):
         """
         Recupera contexto relevante para ayudar a identificar el ámbito.
         """
-        if state["needs_clarification"]:
-            return state
             
         question = state["question"]
         print(f"---RETRIEVE CONTEXT FOR AMBITO---")
