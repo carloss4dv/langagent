@@ -6,8 +6,38 @@ de RAG avanzado utilizando llama-index.
 import re
 import os
 import argparse
-import logging
 from typing import List, Dict, Any, Optional
+
+# Configurar logging antes de cualquier otra importación
+try:
+    from langagent.config.logging_config import setup_logging
+    from langagent.config.config import LOGGING_CONFIG
+    import logging
+    
+    # Configurar logging para el entorno de ejecución
+    level_mapping = {
+        'DEBUG': logging.DEBUG,
+        'INFO': logging.INFO,
+        'WARNING': logging.WARNING,
+        'ERROR': logging.ERROR,
+        'CRITICAL': logging.CRITICAL
+    }
+    
+    log_level = level_mapping.get(LOGGING_CONFIG.get('level', 'INFO'), logging.INFO)
+    setup_logging(level=log_level, log_to_file=True, log_to_console=True)
+    
+except ImportError:
+    # Configuración básica si falla la importación
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+# Obtener logger para este módulo usando el sistema centralizado
+from langagent.config.logging_config import get_logger
+logger = get_logger(__name__)
 
 # Importaciones estándar
 from langchain_core.documents import Document
@@ -52,9 +82,6 @@ from langagent.config.config import (
     VECTORSTORE_CONFIG,
     PATHS_CONFIG
 )
-
-# Configurar logging
-logger = logging.getLogger(__name__)
 
 def setup_agent(data_dir=None, persist_directory=None, local_llm=None, local_llm2=None, 
                 use_advanced_rag=False, advanced_techniques=None, consultas_dir=None):

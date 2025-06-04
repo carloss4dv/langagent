@@ -62,6 +62,8 @@ python-dotenv
 ipython
 streamlit-authenticator
 typing-extensions
+colorlog
+tqdm
 
 # Nuevas dependencias para Milvus
 langchain-milvus

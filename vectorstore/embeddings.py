@@ -5,12 +5,13 @@ Este módulo proporciona funciones para configurar diferentes modelos de embeddi
 que serán utilizados por las vectorstores.
 """
 
-import logging
 from typing import Optional, Dict, Any
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.embeddings import Embeddings
 
-logger = logging.getLogger(__name__)
+# Usar el sistema de logging centralizado
+from langagent.config.logging_config import get_logger
+logger = get_logger(__name__)
 
 def create_embeddings(model_name: str = "intfloat/multilingual-e5-large-instruct", 
                      device: str = "cuda", **kwargs) -> Embeddings:

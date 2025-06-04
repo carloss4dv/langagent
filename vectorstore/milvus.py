@@ -8,7 +8,6 @@ como filtrado por metadatos y búsqueda híbrida.
 
 import os
 import time
-import logging
 import re
 from typing import List, Dict, Any, Optional, Union, Tuple
 from langchain_core.documents import Document
@@ -24,7 +23,9 @@ from langagent.models.constants import CUBO_TO_AMBITO, AMBITOS_CUBOS
 from langagent.models.llm import create_context_generator
 from tqdm import tqdm  # Añadir importación de tqdm para barra de progreso
 
-logger = logging.getLogger(__name__)
+# Usar el sistema de logging centralizado
+from langagent.config.logging_config import get_logger
+logger = get_logger(__name__)
 
 class MilvusVectorStore(VectorStoreBase):
     """Implementación de VectorStoreBase para Milvus/Zilliz con soporte para búsqueda híbrida."""
@@ -588,11 +589,12 @@ class MilvusVectorStore(VectorStoreBase):
             logger.error(f"Error al añadir documentos a la colección: {str(e)}")
             return False
     
+
     def _generate_context_for_chunks(self, documents: List[Document], 
                                source_documents: Dict[str, Document]) -> List[Document]:
         """
         Genera contexto para cada chunk utilizando el documento completo y el LLM.
-        Muestra una barra de progreso para visualizar el avance del procesamiento.
+        Optimizado para procesamiento en lotes y concurrencia.
         
         Args:
             documents: Lista de chunks (documentos) a enriquecer con contexto
@@ -603,7 +605,6 @@ class MilvusVectorStore(VectorStoreBase):
         """
         if not self.use_context_generation or not self.context_generator:
             logger.warning("No se puede generar contexto: generador no configurado o función desactivada")
-            logger.warning(f"use_context_generation: {self.use_context_generation}, context_generator existe: {self.context_generator is not None}")
             return documents
         
         if not source_documents or len(source_documents) == 0:
@@ -612,112 +613,121 @@ class MilvusVectorStore(VectorStoreBase):
             
         logger.info(f"Generando contexto para {len(documents)} chunks...")
         
-        # Rastrear documentos procesados
+        # Configuración de optimización
+        batch_size = VECTORSTORE_CONFIG.get("context_batch_size", 10)  # Procesar en lotes
+        max_workers = VECTORSTORE_CONFIG.get("context_max_workers", 3)  # Concurrencia limitada
+        skip_existing = VECTORSTORE_CONFIG.get("skip_existing_context", True)
+        
+        # Filtrar documentos que necesitan contexto
+        docs_to_process = []
+        docs_with_existing_context = 0
+        
+        for i, doc in enumerate(documents):
+            # Saltar documentos que ya tienen contexto si está configurado
+            if skip_existing and doc.metadata.get('context_generation', '').strip():
+                docs_with_existing_context += 1
+                continue
+                
+            source_path = doc.metadata.get('source', '')
+            if source_path and source_path in source_documents:
+                docs_to_process.append((i, doc, source_documents[source_path]))
+        
+        if docs_with_existing_context > 0:
+            logger.info(f"Saltando {docs_with_existing_context} documentos que ya tienen contexto")
+        
+        if not docs_to_process:
+            logger.info("No hay documentos para procesar contexto")
+            return documents
+        
+        logger.info(f"Procesando contexto para {len(docs_to_process)} chunks en lotes de {batch_size}")
+        
+        # Función para procesar un lote de documentos
+        def process_batch(batch):
+            batch_results = []
+            for doc_idx, doc, full_document in batch:
+                try:
+                    # Preparar input para el generador
+                    context_input = {
+                        "document": full_document.page_content,
+                        "chunk": doc.page_content
+                    }
+                    
+                    # Generar contexto
+                    context_result = self.context_generator.invoke(context_input)
+                    
+                    # Procesar resultado
+                    if isinstance(context_result, dict) and 'context' in context_result:
+                        context = context_result['context']
+                        if isinstance(context, dict):
+                            import json
+                            context = json.dumps(context, ensure_ascii=False, indent=2)
+                    else:
+                        if isinstance(context_result, dict):
+                            import json
+                            context = json.dumps(context_result, ensure_ascii=False, indent=2)
+                        else:
+                            context = str(context_result)
+                    
+                    if not isinstance(context, str):
+                        import json
+                        context = json.dumps(context, ensure_ascii=False, indent=2)
+                    
+                    batch_results.append((doc_idx, context.strip()))
+                    
+                except Exception as e:
+                    logger.error(f"Error procesando chunk {doc_idx}: {str(e)}")
+                    batch_results.append((doc_idx, ""))
+            
+            return batch_results
+        
+        # Procesar en lotes con ThreadPoolExecutor para I/O concurrente
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+        
         processed_count = 0
-        total_docs = len(documents)
-        docs_with_context = 0
-        docs_without_source = 0
+        total_docs = len(docs_to_process)
         
         # Crear barra de progreso
         progress_bar = tqdm(total=total_docs, desc="Generando contexto", unit="chunk")
         
-        for i, doc in enumerate(documents):
-            # Obtener la ruta del documento original
-            source_path = doc.metadata.get('source', '')
-            
-            # Si no podemos identificar el documento original, lo registramos y continuamos
-            if not source_path:
-                logger.warning(f"El chunk {i} no tiene campo 'source' en sus metadatos")
-                docs_without_source += 1
-                progress_bar.update(1)  # Actualizar barra aunque se omita
-                continue
-                
-            # Si el documento original no está en la colección, lo registramos y continuamos
-            if source_path not in source_documents:
-                logger.warning(f"No se encontró el documento original para el chunk {i}: {source_path}")
-                docs_without_source += 1
-                progress_bar.update(1)  # Actualizar barra aunque se omita
-                continue
-                
-            # Obtener el documento original completo
-            full_document = source_documents[source_path]
-            
-            # Si ya tiene un contexto generado, podemos saltarlo a menos que queramos regenerar
-            if doc.metadata.get('context_generation', '').strip() and VECTORSTORE_CONFIG.get("log_context_generation", False):
-                logger.info(f"El chunk {i} ya tiene contexto: {doc.metadata['context_generation'][:50]}...")
-                docs_with_context += 1
-                processed_count += 1
-                progress_bar.update(1)  # Actualizar barra de progreso
-                continue
-            
-            try:
-                # Generar contexto para el chunk usando el LLM
-                if VECTORSTORE_CONFIG.get("log_context_generation", False):
-                    logger.info(f"Generando contexto para chunk {i}/{total_docs}: {source_path}")
-                
-                # Actualizar descripción de la barra con el avance
-                progress_bar.set_description(f"Generando contexto ({processed_count}/{total_docs})")
-                
-                context_result = self.context_generator.invoke({
-                    "document": full_document.page_content,
-                    "chunk": doc.page_content
-                })
-                
-                # Procesar el resultado: ahora es un dict con un campo 'context'
-                if isinstance(context_result, dict) and 'context' in context_result:
-                    context = context_result['context']
-                else:
-                    # Fallback si el formato no es el esperado
-                    logger.warning(f"Formato inesperado de contexto generado: {type(context_result)}")
-                    # Intentar convertir a string
-                    context = str(context_result).strip()
-                
-                # Guardar el contexto generado en los metadatos
-                doc.metadata['context_generation'] = context.strip()
-                
-                # Mostrar los primeros contextos generados para verificación
-                if processed_count < 3 or VECTORSTORE_CONFIG.get("log_context_generation", False):
-                    logger.info(f"Contexto generado para chunk {i}:")
-                    logger.info(f"  Chunk: {doc.page_content[:100]}...")
-                    logger.info(f"  Contexto: {context.strip()}")
-                
-                # Si el contexto no está vacío, contar
-                if context.strip():
-                    docs_with_context += 1
-                
-                # Actualizar contador
-                processed_count += 1
-                
-                # Actualizar barra de progreso
-                progress_bar.update(1)
-                
-                # Actualizar la descripción de la barra con el porcentaje
-                completion_percentage = (processed_count / total_docs) * 100
-                progress_bar.set_description(f"Generando contexto {completion_percentage:.1f}%")
-                    
-            except Exception as e:
-                logger.error(f"Error al generar contexto para chunk {i}: {str(e)}")
-                # En caso de error, establecer un contexto vacío
-                doc.metadata['context_generation'] = ""
-                progress_bar.update(1)  # Actualizar barra a pesar del error
+        # Dividir en lotes
+        batches = [docs_to_process[i:i + batch_size] for i in range(0, len(docs_to_process), batch_size)]
         
-        # Cerrar la barra de progreso
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Enviar todos los lotes
+            future_to_batch = {executor.submit(process_batch, batch): batch for batch in batches}
+            
+            for future in as_completed(future_to_batch):
+                try:
+                    batch_results = future.result()
+                    
+                    # Aplicar resultados al documento original
+                    for doc_idx, context in batch_results:
+                        documents[doc_idx].metadata['context_generation'] = context
+                        processed_count += 1
+                        
+                        # Actualizar barra de progreso
+                        progress_bar.update(1)
+                        completion_percentage = (processed_count / total_docs) * 100
+                        progress_bar.set_description(f"Generando contexto {completion_percentage:.1f}%")
+                        
+                except Exception as e:
+                    logger.error(f"Error procesando lote: {str(e)}")
+                    # Actualizar progreso incluso si falla el lote
+                    batch = future_to_batch[future]
+                    progress_bar.update(len(batch))
+        
         progress_bar.close()
         
-        # Mostrar resumen completo al finalizar
-        logger.info(f"Resumen de generación de contexto:")
-        logger.info(f"  Total de chunks: {total_docs}")
-        logger.info(f"  Chunks procesados: {processed_count}")
-        logger.info(f"  Chunks con contexto generado: {docs_with_context}")
-        logger.info(f"  Chunks sin documento original: {docs_without_source}")
+        # Contar documentos con contexto final
+        docs_with_context = sum(1 for doc in documents if doc.metadata.get('context_generation', '').strip())
         
-        # Verificar si se generó algún contexto
-        if docs_with_context == 0:
-            logger.warning("¡ADVERTENCIA! No se generó ningún contexto para ningún documento.")
-            if docs_without_source > 0:
-                logger.warning(f"  {docs_without_source} chunks no tenían documento original disponible.")
-            logger.warning("Revisa la configuración del LLM y el generador de contexto.")
-            
+        logger.info(f"Resumen de generación de contexto:")
+        logger.info(f"  Total de chunks: {len(documents)}")
+        logger.info(f"  Chunks procesados: {processed_count}")
+        logger.info(f"  Chunks con contexto final: {docs_with_context}")
+        logger.info(f"  Chunks con contexto previo: {docs_with_existing_context}")
+        
         return documents 
 
     def load_documents(self, documents: List[Document], embeddings: Embeddings = None, 

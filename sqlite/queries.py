@@ -5,6 +5,10 @@ Funciones para ejecutar consultas comunes sobre la base de datos PDI.
 from sqlalchemy import func, desc
 from sqlite.database import SessionLocal
 from sqlite.models import PDI_Docencia
+from langagent.config.logging_config import get_logger
+
+# Usar el sistema de logging centralizado
+logger = get_logger(__name__)
 
 def get_estructura_profesorado(plan_estudio_id=148, curso_academico="2024/2025", centro_id=None):
     """
@@ -99,7 +103,7 @@ def get_estructura_profesorado(plan_estudio_id=148, curso_academico="2024/2025",
         return resultado_final
         
     except Exception as e:
-        print(f"Error al ejecutar la consulta: {e}")
+        logger.error(f"Error al ejecutar la consulta: {e}")
         return {"error": str(e)}
     finally:
         db.close()
@@ -144,7 +148,7 @@ def get_profesores_por_categoria(categoria, plan_estudio_id=148, curso_academico
         return resultados
         
     except Exception as e:
-        print(f"Error al ejecutar la consulta: {e}")
+        logger.error(f"Error al ejecutar la consulta: {e}")
         return {"error": str(e)}
     finally:
         db.close()
@@ -178,7 +182,7 @@ def get_centros():
         ]
         
     except Exception as e:
-        print(f"Error al obtener los centros: {e}")
+        logger.error(f"Error al obtener los centros: {e}")
         return {"error": str(e)}
     finally:
         db.close() 

@@ -21,6 +21,10 @@ from langagent.models.constants import (
     AMBITO_EN_ES, CUBO_EN_ES
 )
 
+# Usar el sistema de logging centralizado
+from langagent.config.logging_config import get_logger
+logger = get_logger(__name__)
+
 class GraphState(TypedDict):
     """
     Representa el estado del grafo.
@@ -41,6 +45,7 @@ class GraphState(TypedDict):
         consulta_documents: documentos de consultas guardadas recuperados
         sql_query: consulta SQL generada
         sql_result: resultado de la consulta SQL
+        needs_sql_interpretation: indica si se necesita generar interpretación de resultados SQL
     """
     question: str
     rewritten_question: str
@@ -57,6 +62,7 @@ class GraphState(TypedDict):
     consulta_documents: List[Document]
     sql_query: Optional[str]
     sql_result: Optional[str]
+    needs_sql_interpretation: bool
 
 def normalize_name(name: str) -> str:
     """
@@ -167,10 +173,10 @@ def execute_query(state):
     # Obtener la consulta SQL del estado
     sql_query = state.get("sql_query")
     if not sql_query:
-        print("No hay consulta SQL para ejecutar.")
+        logger.info("No hay consulta SQL para ejecutar.")
         return state
     
-    print("---EXECUTE QUERY---")
+    logger.info("---EXECUTE QUERY---")
     
     # Comprobar si sql_query es un string JSON 
     if isinstance(sql_query, str):
@@ -182,15 +188,15 @@ def execute_query(state):
                     # Buscar la consulta en diferentes claves posibles
                     if "query" in query_data:
                         sql_query = query_data["query"]
-                        print("Consulta SQL extraída del objeto JSON (clave 'query').")
+                        logger.info("Consulta SQL extraída del objeto JSON (clave 'query').")
                     elif "sql" in query_data:
                         sql_query = query_data["sql"]
-                        print("Consulta SQL extraída del objeto JSON (clave 'sql').")
+                        logger.info("Consulta SQL extraída del objeto JSON (clave 'sql').")
         except json.JSONDecodeError:
             # Si no es JSON válido, usar el string como está
             pass
     
-    print(f"Ejecutando consulta SQL: {sql_query}")
+    logger.info(f"Ejecutando consulta SQL: {sql_query}")
     
     try:
         # Crear la conexión a la base de datos y herramienta de consulta
@@ -200,29 +206,28 @@ def execute_query(state):
             
             # Ejecutar la consulta
             result = execute_query_tool.invoke(sql_query)
-            print("Consulta ejecutada con éxito.")
+            state["sql_result"] = result
+            logger.info("Consulta ejecutada con éxito.")
             
-            # Actualizar el estado con el resultado
-            return {
-                **state,
-                "sql_result": result
-            }
         else:
-            error = "No se ha configurado la conexión a la base de datos."
-            print(error)
-            return {
-                **state,
-                "sql_result": error
-            }
+            state["sql_result"] = "Error: No se ha configurado la URI de la base de datos"
+            
     except Exception as e:
         error = f"Error al ejecutar la consulta SQL: {str(e)}"
-        print(error)
-        return {
-            **state,
-            "sql_result": error
-        }
+        state["sql_result"] = error
+        logger.error(error)
+        
+    # También notificar si hay problemas de permisos o conexión
+    if state.get("sql_result", "").startswith("Error"):
+        error = f"Error en la ejecución de la consulta: {state['sql_result']}"
+        logger.error(error)
+    
+    # Marcar que necesita interpretación de resultados SQL
+    state["needs_sql_interpretation"] = True
+    
+    return state
 
-def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_grader, query_rewriter=None, rag_sql_chain=None):
+def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_grader, query_rewriter=None, rag_sql_chain=None, sql_interpretation_chain=None):
     """
     Crea un flujo de trabajo para el agente utilizando LangGraph.
     
@@ -234,6 +239,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         answer_grader: Evaluador de utilidad de respuestas.
         query_rewriter: Reescritor de consultas para mejorar la recuperación.
         rag_sql_chain: Cadena para consultas SQL cuando se detecta que es una consulta de base de datos.
+        sql_interpretation_chain: Cadena para generar interpretación de resultados SQL.
         
     Returns:
         StateGraph: Grafo de estado configurado.
@@ -257,9 +263,9 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         ambito = state.get("ambito")
         is_consulta = state.get("is_consulta", False)
         
-        print("---RETRIEVE---")
-        print(f"Búsqueda con pregunta: {rewritten_question}")
-        print(f"Ámbito identificado: {ambito}")
+        logger.info("---RETRIEVE---")
+        logger.info(f"Búsqueda con pregunta: {rewritten_question}")
+        logger.info(f"Ámbito identificado: {ambito}")
         
         try:
             # Preparar filtros si hay ámbito identificado
@@ -271,12 +277,12 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             
             # Recuperar documentos
             docs = retriever.invoke(rewritten_question, filter=filters if filters else None)
-            print(f"Documentos recuperados: {len(docs)}")
+            logger.info(f"Documentos recuperados: {len(docs)}")
             
             # Limitar el número total de documentos
             max_docs = VECTORSTORE_CONFIG.get("max_docs_total", 10)
             if len(docs) > max_docs:
-                print(f"Limitando a {max_docs} documentos (de {len(docs)} recuperados)")
+                logger.info(f"Limitando a {max_docs} documentos (de {len(docs)} recuperados)")
                 docs = docs[:max_docs]
             
             retrieval_details = {
@@ -295,7 +301,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             }
             
         except Exception as e:
-            print(f"Error al recuperar documentos: {str(e)}")
+            logger.error(f"Error al recuperar documentos: {str(e)}")
             return {
                 "documents": [],
                 "question": question,
@@ -315,7 +321,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         Returns:
             dict: Estado actualizado con los documentos relevantes.
         """
-        print("---GRADE RELEVANCE---")
+        logger.info("---GRADE RELEVANCE---")
         
         documents = state["documents"]
         question = state["question"]
@@ -346,7 +352,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             
             # Si no hay documentos relevantes, usar todos
             if not relevant_docs and documents:
-                print("No se encontraron documentos relevantes. Usando todos los documentos recuperados.")
+                logger.info("No se encontraron documentos relevantes. Usando todos los documentos recuperados.")
                 relevant_docs = documents
             
             # Actualizar detalles de recuperación
@@ -362,7 +368,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             }
             
         except Exception as e:
-            print(f"Error al evaluar relevancia: {str(e)}")
+            logger.error(f"Error al evaluar relevancia: {str(e)}")
             return {
                 **state,
                 "retrieval_details": {
@@ -390,9 +396,9 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         retrieval_details = state.get("retrieval_details", {})
         is_consulta = state.get("is_consulta", False)
         
-        print("---GENERATE---")
+        logger.info("---GENERATE---")
         if not documents:
-            print("No se encontraron documentos relevantes.")
+            logger.info("No se encontraron documentos relevantes.")
             response_json = "No se encontró información relevante en SEGEDA para responder a esta pregunta."
             return {
                 "documents": documents,
@@ -408,7 +414,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             }
         
         try:
-            print("Creando contexto a partir de los documentos recuperados...")
+            logger.info("Creando contexto a partir de los documentos recuperados...")
             # Crear contexto a partir de los documentos
             context_docs = []
             for idx, doc in enumerate(documents):
@@ -436,17 +442,17 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                     context_docs.append(doc_string)
                 else:
                     # Si no es ni string ni Document válido, convertir a string
-                    print(f"Advertencia: Documento {idx+1} tiene tipo inesperado: {type(doc)}")
+                    logger.warning(f"Advertencia: Documento {idx+1} tiene tipo inesperado: {type(doc)}")
                     doc_string = f"\n[DOCUMENTO {idx+1} - Tipo inesperado]\n{str(doc)}\n"
                     context_docs.append(doc_string)
             
             context = "\n".join(context_docs)
             
-            print("Generando respuesta...")
+            logger.info("Generando respuesta...")
             
             # Determinar si usar SQL o RAG basado en si es una consulta
             if is_consulta and rag_sql_chain:
-                print("Se detectó que es una consulta SQL. Generando consulta SQL...")
+                logger.info("Se detectó que es una consulta SQL. Generando consulta SQL...")
                 # Generar consulta SQL utilizando sql_query_chain
                 sql_query = rag_sql_chain["sql_query_chain"].invoke({
                     "context": context,
@@ -455,13 +461,13 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 
                 # Guardar la consulta SQL generada
                 state["sql_query"] = sql_query
-                print(f"Consulta SQL generada: {sql_query}")
+                logger.info(f"Consulta SQL generada: {sql_query}")
                 
                 # La respuesta será generada después con el resultado de la consulta SQL
                 response_json = sql_query
             else:
                 # Usar la cadena RAG estándar para preguntas regulares
-                print("Generando respuesta con RAG estándar...")
+                logger.info("Generando respuesta con RAG estándar...")
                 response = rag_sql_chain["answer_chain"].invoke({
                     "context": context,
                     "question": rewritten_question
@@ -473,7 +479,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 elif isinstance(response, str):
                     response_json = response
                 else:
-                    print(f"Advertencia: Formato de respuesta no esperado: {type(response)}")
+                    logger.warning(f"Advertencia: Formato de respuesta no esperado: {type(response)}")
                     response_json = str(response)
             
             return {
@@ -490,7 +496,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             }
             
         except Exception as e:
-            print(f"Error al generar respuesta: {str(e)}")
+            logger.error(f"Error al generar respuesta: {str(e)}")
             response_json = f"Se produjo un error al generar la respuesta: {str(e)}"
             return {
                 "documents": documents,
@@ -515,7 +521,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         Returns:
             dict: Estado actualizado con las evaluaciones.
         """
-        print("---EVALUATE---")
+        logger.info("---EVALUATE---")
         
         generation = state["generation"]
         question = state["question"]
@@ -526,7 +532,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         try:
             # Evaluar la respuesta solo si no es una consulta SQL
             if not is_consulta or not rag_sql_chain:
-                print("Evaluando si la respuesta contiene alucinaciones...")
+                logger.info("Evaluando si la respuesta contiene alucinaciones...")
                 # Verificar si la respuesta contiene alucinaciones
                 hallucination_eval = hallucination_grader.invoke({
                     "documents": state["documents"],
@@ -535,12 +541,12 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 
                 if isinstance(hallucination_eval, dict) and "score" in hallucination_eval:
                     is_grounded = hallucination_eval["score"].lower() == "yes"
-                    print(f"¿Respuesta fundamentada en los documentos? {'Sí' if is_grounded else 'No'}")
+                    logger.info(f"¿Respuesta fundamentada en los documentos? {'Sí' if is_grounded else 'No'}")
                 else:
-                    print(f"Advertencia: Evaluación de alucinaciones no válida: {hallucination_eval}")
+                    logger.warning(f"Advertencia: Evaluación de alucinaciones no válida: {hallucination_eval}")
                     is_grounded = True  # Por defecto, asumir que está fundamentada
                 
-                print("Evaluando calidad de la respuesta...")
+                logger.info("Evaluando calidad de la respuesta...")
                 # Verificar si la respuesta es útil
                 answer_eval = answer_grader.invoke({
                     "generation": generation,
@@ -549,9 +555,9 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 
                 if isinstance(answer_eval, dict) and "score" in answer_eval:
                     is_useful = answer_eval["score"].lower() == "yes"
-                    print(f"¿Respuesta útil para la pregunta? {'Sí' if is_useful else 'No'}")
+                    logger.info(f"¿Respuesta útil para la pregunta? {'Sí' if is_useful else 'No'}")
                 else:
-                    print(f"Advertencia: Evaluación de utilidad no válida: {answer_eval}")
+                    logger.warning(f"Advertencia: Evaluación de utilidad no válida: {answer_eval}")
                     is_useful = True  # Por defecto, asumir que es útil
             else:
                 # Para consultas SQL, asumimos que son útiles y fundamentadas
@@ -563,7 +569,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             # Si la generación no es exitosa, incrementar contador de reintentos
             if not (is_grounded and is_useful):
                 retry_count += 1
-                print(f"---RETRY ATTEMPT {retry_count}---")
+                logger.info(f"---RETRY ATTEMPT {retry_count}---")
             
             return {
                 **state,
@@ -573,12 +579,96 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             }
             
         except Exception as e:
-            print(f"Error al evaluar respuesta: {str(e)}")
+            logger.error(f"Error al evaluar respuesta: {str(e)}")
             return {
                 **state,
                 "retry_count": retry_count,
                 "hallucination_score": None,
                 "answer_score": None
+            }
+    
+    def generate_sql_interpretation(state):
+        """
+        Genera una respuesta interpretativa basada en los resultados de la consulta SQL.
+        
+        Args:
+            state (dict): Estado actual del grafo.
+            
+        Returns:
+            dict: Estado actualizado con la respuesta interpretativa.
+        """
+        question = state["question"]
+        rewritten_question = state.get("rewritten_question", question)
+        sql_query = state.get("sql_query", "")
+        sql_result = state.get("sql_result", "")
+        documents = state.get("documents", [])
+        
+        logger.info("---GENERATE SQL INTERPRETATION---")
+        
+        if not sql_result:
+            logger.info("No hay resultados SQL para interpretar.")
+            return {
+                **state,
+                "generation": "No se pudieron obtener resultados de la consulta SQL.",
+                "needs_sql_interpretation": False
+            }
+        
+        try:
+            # Crear contexto combinando documentos originales y resultados SQL
+            context_parts = []
+            
+            # Añadir contexto de documentos originales si existen
+            if documents:
+                context_parts.append("[CONTEXTO ORIGINAL DE SEGEDA]")
+                for idx, doc in enumerate(documents[:3]):  # Limitar a 3 documentos
+                    if isinstance(doc, str):
+                        context_parts.append(f"Documento {idx+1}: {doc[:200]}...")
+                    elif hasattr(doc, 'page_content'):
+                        context_parts.append(f"Documento {idx+1}: {doc.page_content[:200]}...")
+            
+            # Añadir información de la consulta SQL
+            context_parts.append(f"\n[CONSULTA SQL EJECUTADA]\n{sql_query}")
+            
+            # Añadir resultados SQL
+            context_parts.append(f"\n[RESULTADOS DE LA CONSULTA]\n{sql_result}")
+            
+            combined_context = "\n".join(context_parts)
+            
+            # Generar interpretación usando el sql_interpretation_chain
+            logger.info("Generando interpretación de resultados SQL...")
+            
+            # Usar sql_interpretation_chain que está disponible en el scope
+            if sql_interpretation_chain:
+                response = sql_interpretation_chain.invoke({
+                    "context": combined_context,
+                    "question": f"Interpreta y explica los siguientes resultados SQL para la pregunta '{rewritten_question}': {sql_result}"
+                })
+                
+                # Extraer la respuesta del JSON
+                if isinstance(response, dict) and "answer" in response:
+                    interpretation = response["answer"]
+                elif isinstance(response, str):
+                    interpretation = response
+                else:
+                    interpretation = str(response)
+            else:
+                # Fallback si no hay cadena de interpretación disponible
+                interpretation = f"Los resultados de la consulta muestran: {sql_result}. Estos datos corresponden a información del sistema SEGEDA (DATUZ) de la Universidad de Zaragoza."
+            
+            logger.info("Interpretación generada con éxito.")
+            
+            return {
+                **state,
+                "generation": interpretation,
+                "needs_sql_interpretation": False
+            }
+            
+        except Exception as e:
+            logger.error(f"Error al generar interpretación SQL: {str(e)}")
+            return {
+                **state,
+                "generation": f"Se obtuvieron los siguientes resultados de la consulta: {sql_result}",
+                "needs_sql_interpretation": False
             }
     
     # Añadir nodos al grafo
@@ -587,6 +677,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
     workflow.add_node("generate", generate)
     workflow.add_node("evaluate", evaluate)
     workflow.add_node("execute_query", execute_query)
+    workflow.add_node("generate_sql_interpretation", generate_sql_interpretation)
     
     # Definir bordes - flujo simplificado
     workflow.set_entry_point("retrieve")
@@ -613,7 +704,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         sql_query = state.get("sql_query")
         
         if is_consulta and sql_query:
-            print("Se detectó una consulta SQL válida. Procediendo a ejecutarla.")
+            logger.info("Se detectó una consulta SQL válida. Procediendo a ejecutarla.")
             return "execute_query"
         
         # Si no es consulta, verificar si necesita reintento
@@ -637,15 +728,34 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         should_retry = (is_hallucination and is_unhelpful) and retry_count < max_retries
         
         if should_retry:
-            print(f"Reintentando (intento {retry_count+1}/{max_retries})")
-            print(f"- Contiene alucinaciones: {is_hallucination}")
-            print(f"- No aborda adecuadamente la pregunta: {is_unhelpful}")
+            logger.info(f"Reintentando (intento {retry_count+1}/{max_retries})")
+            logger.info(f"- Contiene alucinaciones: {is_hallucination}")
+            logger.info(f"- No aborda adecuadamente la pregunta: {is_unhelpful}")
             return "generate"
         else:
             if retry_count >= max_retries and (is_hallucination or is_unhelpful):
-                print(f"Máximo de reintentos alcanzado ({max_retries}). Finalizando con la mejor respuesta disponible.")
+                logger.info(f"Máximo de reintentos alcanzado ({max_retries}). Finalizando con la mejor respuesta disponible.")
             else:
-                print("Generación exitosa. Finalizando.")
+                logger.info("Generación exitosa. Finalizando.")
+            return "END"
+    
+    # Definir condición para después de ejecutar consulta SQL
+    def route_after_execute_query(state):
+        """
+        Determina qué hacer después de ejecutar la consulta SQL.
+        
+        Args:
+            state (dict): Estado actual del grafo.
+            
+        Returns:
+            str: Siguiente nodo a ejecutar
+        """
+        needs_interpretation = state.get("needs_sql_interpretation", False)
+        
+        if needs_interpretation:
+            logger.info("Generando interpretación de resultados SQL...")
+            return "generate_sql_interpretation"
+        else:
             return "END"
     
     # Añadir borde condicional para la decisión después de evaluar
@@ -660,7 +770,17 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         }
     )
     
-    # Añadir borde desde execute_query a END
-    workflow.add_edge("execute_query", END)
+    # Añadir borde condicional desde execute_query
+    workflow.add_conditional_edges(
+        "execute_query",
+        route_after_execute_query,
+        {
+            "generate_sql_interpretation": "generate_sql_interpretation",
+            "END": END
+        }
+    )
+    
+    # Añadir borde desde interpretación SQL a END
+    workflow.add_edge("generate_sql_interpretation", END)
     
     return workflow

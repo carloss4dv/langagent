@@ -76,27 +76,8 @@ def create_rag_sql_chain(llm, db_uri=SQL_CONFIG["db_uri"], dialect=SQL_CONFIG["d
     # Obtener información del esquema
     table_info = db.get_table_info() 
     # Crear plantilla para generar consultas SQL
-    sql_prompt = PromptTemplate.from_template(
-        """
-        Dado el contexto y la pregunta, crea una consulta SQL sintácticamente correcta para {dialect}.
-        A menos que se especifique un número de resultados, limita a 10 resultados máximo.
-        Puedes ordenar los resultados por una columna relevante para mostrar los ejemplos más interesantes.
-        
-        Nunca consultes todas las columnas de una tabla, solo selecciona las columnas relevantes para la pregunta.
-        Es obligatorio usar una referencia temporal en la consulta.
-        
-        Presta atención a usar solo los nombres de columnas que puedes ver en la descripción del esquema.
-        Ten cuidado de no consultar columnas que no existen. También, presta atención a qué columna está en qué tabla.
-        
-        Solo usa las siguientes tablas:
-        {table_info}
-        
-        Contexto: {context}
-        Pregunta: {question}
-        
-        Consulta SQL:
-        """
-    )
+    sql_prompt_template = _get_prompt_template(llm, "sql_generator")
+    sql_prompt = PromptTemplate.from_template(sql_prompt_template)
     
     # Crear la cadena para generar consultas SQL
     sql_query_chain = (
@@ -298,3 +279,24 @@ def create_clarification_generator(llm):
     # No usamos JsonOutputParser porque queremos texto plano para la pregunta de clarificación
     clarification_generator = prompt | llm
     return clarification_generator
+
+def create_sql_interpretation(llm):
+    """
+    Crea un interpretador de resultados SQL para el sistema SEGEDA.
+    
+    Args:
+        llm: Modelo de lenguaje a utilizar.
+        
+    Returns:
+        Chain: Cadena de interpretación de SQL configurada.
+    """
+    # Prompt para interpretar resultados SQL
+    prompt_template = _get_prompt_template(llm, "sql_interpretation")
+    prompt = PromptTemplate(
+        template=prompt_template,
+        input_variables=["context", "question"],
+    )
+    
+    # Definir la cadena de interpretación SQL con JsonOutputParser
+    sql_interpretation_chain = prompt | llm | JsonOutputParser()
+    return sql_interpretation_chain

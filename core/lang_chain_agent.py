@@ -24,7 +24,8 @@ from langagent.models.llm import (
     create_answer_grader, 
     create_query_rewriter,
     create_context_generator,
-    create_rag_sql_chain
+    create_rag_sql_chain,
+    create_sql_interpretation
 )
 from langagent.models.workflow import create_workflow
 from langagent.core.ambito_agent import create_ambito_workflow
@@ -40,6 +41,10 @@ from langagent.config.config import (
     PATHS_CONFIG,
     SQL_CONFIG
 )
+
+# Usar el sistema de logging centralizado
+from langagent.config.logging_config import get_logger
+logger = get_logger(__name__)
 
 class LangChainAgent:
     def __init__(self, data_dir=None, vectorstore_dir=None, vector_db_type=None, local_llm=None, local_llm2=None, local_llm3=None, consultas_dir=None):
@@ -81,6 +86,7 @@ class LangChainAgent:
         self.ambito_workflow = None
         self.app = None
         self.query_rewriter = None
+        self.sql_interpretation_chain = None
         
         # Obtener la instancia de vectorstore
         self.vectorstore_handler = VectorStoreFactory.get_vectorstore_instance(self.vector_db_type)
@@ -94,27 +100,27 @@ class LangChainAgent:
         print_title("Configurando el agente")
         
         # Crear LLMs
-        print("Configurando modelos de lenguaje...")
-        print(f"Modelo principal (generación): {self.local_llm}")
-        print(f"Modelo secundario (routing): {self.local_llm2}")
-        print(f"Modelo terciario (evaluación): {self.local_llm3}")
+        logger.info("Configurando modelos de lenguaje...")
+        logger.info(f"Modelo principal (generación): {self.local_llm}")
+        logger.info(f"Modelo secundario (routing): {self.local_llm2}")
+        logger.info(f"Modelo terciario (evaluación): {self.local_llm3}")
         
         self.llm = create_llm(model_name=self.local_llm)
         self.llm2 = create_llm(model_name=self.local_llm2)
         self.llm3 = create_llm(model_name=self.local_llm3)
         
         # Crear embeddings
-        print("Configurando embeddings...")
+        logger.info("Configurando embeddings...")
         self.embeddings = create_embeddings()
         
         # Configurar generador de contexto si está habilitado
         if VECTORSTORE_CONFIG.get("use_context_generation", False):
-            print("Configurando generador de contexto...")
+            logger.info("Configurando generador de contexto...")
             context_generator = create_context_generator(self.llm)
             self.vectorstore_handler.set_context_generator(context_generator)
         
         # Cargar documentos
-        print("Cargando documentos...")
+        logger.info("Cargando documentos...")
         documents = load_documents_from_directory(self.data_dir)
         chunked_documents = RecursiveCharacterTextSplitter(
             chunk_size=VECTORSTORE_CONFIG["chunk_size"],
@@ -123,7 +129,7 @@ class LangChainAgent:
         
         # Cargar consultas guardadas si existe el directorio
         if self.consultas_dir and os.path.exists(self.consultas_dir):
-            print("Cargando consultas guardadas...")
+            logger.info("Cargando consultas guardadas...")
             consultas = load_consultas_guardadas(self.consultas_dir)
             documents.extend(consultas)
         
@@ -134,35 +140,38 @@ class LangChainAgent:
         if self.vector_db_type == "milvus":
             self.vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, VECTORSTORE_CONFIG["collection_name"])
             if self.vectorstore:
-                print("Vectorstore cargado correctamente")
+                logger.info("Vectorstore cargado correctamente")
             else:
-                print("Vectorstore no encontrado, creando nueva vectorstore...")
-                print("Cargando documentos en vectorstore...")
+                logger.info("Vectorstore no encontrado, creando nueva vectorstore...")
+                logger.info("Cargando documentos en vectorstore...")
                 if self.vectorstore_handler.load_documents(chunked_documents, source_documents=source_documents, embeddings=self.embeddings):
-                    print("Documentos cargados en vectorstore correctamente")
+                    logger.info("Documentos cargados en vectorstore correctamente")
                 else:
-                    print("Error al cargar documentos en vectorstore")
+                    logger.error("Error al cargar documentos en vectorstore")
         
         # Crear el retriever
         self.retriever = self.vectorstore_handler.create_retriever(self.vectorstore)
         
         # Crear cadenas
-        print("Creando cadenas de procesamiento...")
-        print("Usando modelo principal para RAG y SQL...")
+        logger.info("Creando cadenas de procesamiento...")
+        logger.info("Usando modelo principal para RAG y SQL...")
         self.rag_sql_chain = create_rag_sql_chain(self.llm)
         
-        print("Usando modelo secundario para evaluación de relevancia...")
+        logger.info("Usando modelo secundario para evaluación de relevancia...")
         self.retrieval_grader = create_retrieval_grader(self.llm2)
         
-        print("Usando modelo terciario para evaluación de alucinaciones y respuestas...")
+        logger.info("Usando modelo terciario para evaluación de alucinaciones y respuestas...")
         self.hallucination_grader = create_hallucination_grader(self.llm3)
         self.answer_grader = create_answer_grader(self.llm3)
         
-        print("Usando modelo secundario para reescritura de consultas...")
+        logger.info("Usando modelo secundario para reescritura de consultas...")
         self.query_rewriter = create_query_rewriter(self.llm2)
         
+        logger.info("Usando modelo principal para interpretación de resultados SQL...")
+        self.sql_interpretation_chain = create_sql_interpretation(self.llm)
+        
         # Crear flujos de trabajo
-        print("Creando flujos de trabajo...")
+        logger.info("Creando flujos de trabajo...")
         self._create_workflows()
         
         # Compilar workflows
@@ -180,7 +189,8 @@ class LangChainAgent:
             retrieval_grader=self.retrieval_grader,
             hallucination_grader=self.hallucination_grader,
             answer_grader=self.answer_grader,
-            query_rewriter=self.query_rewriter
+            query_rewriter=self.query_rewriter,
+            sql_interpretation_chain=self.sql_interpretation_chain
         )
         
         # Crear el flujo de trabajo del agente de ámbito

@@ -9,6 +9,15 @@ import sys
 import argparse
 import os
 
+# Asegurar que el módulo esté en el path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+# Usar el sistema de logging centralizado
+from langagent.config.logging_config import get_logger
+logger = get_logger(__name__)
+
 def main():
     """Función principal para gestionar los comandos del paquete."""
     parser = argparse.ArgumentParser(
@@ -90,8 +99,8 @@ def main():
                 sys.argv = ["main.py"] + run_main_args
                 run_main()
             except ImportError:
-                print("Error: No se pudo importar el módulo main.py.")
-                print("Asegúrate de que estás ejecutando el script desde el directorio correcto.")
+                logger.error("Error: No se pudo importar el módulo main.py.")
+                logger.error("Asegúrate de que estás ejecutando el script desde el directorio correcto.")
                 sys.exit(1)
         
     elif args.command == "evaluate":
@@ -154,8 +163,8 @@ def main():
                 sys.argv = ["evaluation/run_evaluation.py"] + eval_main_args
                 eval_main()
             except ImportError:
-                print("Error: No se pudo importar el módulo de evaluación.")
-                print("Asegúrate de que estás ejecutando el script desde el directorio correcto.")
+                logger.error("Error: No se pudo importar el módulo de evaluación.")
+                logger.error("Asegúrate de que estás ejecutando el script desde el directorio correcto.")
                 sys.exit(1)
         
     else:

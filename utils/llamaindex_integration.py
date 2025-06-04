@@ -14,7 +14,6 @@ from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.postprocessor import MetadataReplacementPostProcessor
 from llama_index.core.indices.document_summary import DocumentSummaryIndex
 from langchain_core.retrievers import BaseRetriever
-import logging
 import os
 from llama_index.embeddings.langchain import LangchainEmbedding
 from llama_index.llms.langchain import LangChainLLM
@@ -22,7 +21,9 @@ from typing import Any
 import uuid
 from langagent.prompts import PROMPTS
 
-logger = logging.getLogger(__name__)
+# Usar el sistema de logging centralizado
+from langagent.config.logging_config import get_logger
+logger = get_logger(__name__)
 
 def configure_llamaindex_settings(embeddings, llm_principal, llm_evaluador=None, chunk_size=512, chunk_overlap=20):
     """

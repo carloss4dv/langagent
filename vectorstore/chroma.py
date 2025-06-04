@@ -7,7 +7,6 @@ para la base de datos vectorial ChromaDB.
 
 import os
 import time
-import logging
 from typing import List, Dict, Any, Optional
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -17,7 +16,9 @@ from langchain_chroma import Chroma
 from langagent.vectorstore.base import VectorStoreBase
 from langagent.config.config import VECTORSTORE_CONFIG
 
-logger = logging.getLogger(__name__)
+# Usar el sistema de logging centralizado
+from langagent.config.logging_config import get_logger
+logger = get_logger(__name__)
 
 class ChromaVectorStore(VectorStoreBase):
     """Implementación de VectorStoreBase para Chroma."""

@@ -9,6 +9,10 @@ import json
 from typing import Dict, Any, List
 from langchain_core.documents import Document
 
+# Usar el sistema de logging centralizado
+from langagent.config.logging_config import get_logger
+logger = get_logger(__name__)
+
 def print_separator(length: int = 50):
     """
     Imprime una línea separadora en la terminal.
@@ -16,7 +20,7 @@ def print_separator(length: int = 50):
     Args:
         length (int): Longitud de la línea separadora.
     """
-    print("-" * length)
+    logger.info("-" * length)
 
 def print_title(title: str):
     """
@@ -26,7 +30,7 @@ def print_title(title: str):
         title (str): Título a imprimir.
     """
     print_separator()
-    print(f"  {title.upper()}  ")
+    logger.info(f"  {title.upper()}  ")
     print_separator()
 
 def print_documents(documents, title="Documentos Recuperados"):
@@ -38,7 +42,7 @@ def print_documents(documents, title="Documentos Recuperados"):
         title (str): Título para la sección de documentos.
     """
     if not documents:
-        print(f"\n{title}: No hay documentos para mostrar")
+        logger.info(f"\n{title}: No hay documentos para mostrar")
         return
     
     print_title(title)
@@ -46,17 +50,17 @@ def print_documents(documents, title="Documentos Recuperados"):
     # Limitar a 3 documentos para evitar sobrecargar la terminal
     max_docs = 3
     if len(documents) > max_docs:
-        print(f"Mostrando {max_docs} de {len(documents)} documentos:")
+        logger.info(f"Mostrando {max_docs} de {len(documents)} documentos:")
         documents = documents[:max_docs]
     
     for i, doc in enumerate(documents):
-        print(f"Documento {i+1}:")
+        logger.info(f"Documento {i+1}:")
         
         # Intentar acceder a metadata de diferentes formas según el tipo de documento
         if hasattr(doc, 'metadata'):
-            print(f"Fuente: {doc.metadata.get('source', 'Desconocida')}")
+            logger.info(f"Fuente: {doc.metadata.get('source', 'Desconocida')}")
         elif isinstance(doc, dict) and 'metadata' in doc:
-            print(f"Fuente: {doc['metadata'].get('source', 'Desconocida')}")
+            logger.info(f"Fuente: {doc['metadata'].get('source', 'Desconocida')}")
         
         # Extraer el contenido del documento
         if hasattr(doc, 'page_content'):
@@ -71,8 +75,8 @@ def print_documents(documents, title="Documentos Recuperados"):
             content = str(doc)
         
         # Mostrar contenido truncado si es muy largo
-        print("Contenido:")
-        print(content[:500] + "..." if len(content) > 500 else content)
+        logger.info("Contenido:")
+        logger.info(content[:500] + "..." if len(content) > 500 else content)
         print_separator(30)
 
 def print_workflow_result(result: Dict[str, Any]):
@@ -128,33 +132,33 @@ def print_workflow_result(result: Dict[str, Any]):
                                 if last_quote > 0:
                                     respuesta_texto = json_remainder[:last_quote]
         except Exception as e:
-            print(f"Error al procesar la generación: {e}")
+            logger.error(f"Error al procesar la generación: {e}")
     elif isinstance(generacion, str):
         # Formato simple: solo texto
         respuesta_texto = generacion
     
-    print(f"Pregunta: {pregunta}")
-    print(f"Respuesta: {respuesta_texto}")
-    print(f"Intentos realizados: {result.get('retry_count', 0)}")
+    logger.info(f"Pregunta: {pregunta}")
+    logger.info(f"Respuesta: {respuesta_texto}")
+    logger.info(f"Intentos realizados: {result.get('retry_count', 0)}")
     
     # Mostrar información adicional relevante
     if 'hallucination_score' in result:
-        print(f"Puntuación de alucinación: {result['hallucination_score'].get('score', 'N/A')}")
+        logger.info(f"Puntuación de alucinación: {result['hallucination_score'].get('score', 'N/A')}")
     
     if 'answer_score' in result:
-        print(f"Puntuación de respuesta: {result['answer_score'].get('score', 'N/A')}")
+        logger.info(f"Puntuación de respuesta: {result['answer_score'].get('score', 'N/A')}")
     
     if 'relevant_cubos' in result:
-        print(f"Cubos relevantes: {', '.join(result['relevant_cubos'])}")
+        logger.info(f"Cubos relevantes: {', '.join(result['relevant_cubos'])}")
     
     if 'ambito' in result:
-        print(f"Ámbito: {result['ambito']}")
+        logger.info(f"Ámbito: {result['ambito']}")
     
     if 'is_consulta' in result:
-        print(f"Es consulta guardada: {'Sí' if result['is_consulta'] else 'No'}")
+        logger.info(f"Es consulta guardada: {'Sí' if result['is_consulta'] else 'No'}")
     
     if result.get('retry_count', 0) >= 3:
-        print("Nota: Se alcanzó el máximo de intentos sin una respuesta satisfactoria.")
+        logger.warning("Nota: Se alcanzó el máximo de intentos sin una respuesta satisfactoria.")
     
     print_separator()
 
@@ -167,7 +171,7 @@ def print_json(data: Dict[str, Any], title: str = "Datos JSON"):
         title (str): Título para los datos.
     """
     print_title(title)
-    print(json.dumps(data, indent=2, ensure_ascii=False))
+    logger.info(json.dumps(data, indent=2, ensure_ascii=False))
     print_separator()
 
 def print_workflow_steps(state_transitions: List[Dict[str, Any]]):
@@ -180,6 +184,6 @@ def print_workflow_steps(state_transitions: List[Dict[str, Any]]):
     print_title("Pasos del Flujo de Trabajo")
     
     for i, transition in enumerate(state_transitions):
-        print(f"Paso {i+1}: {list(transition.keys())[0]}")
+        logger.info(f"Paso {i+1}: {list(transition.keys())[0]}")
     
     print_separator()

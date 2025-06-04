@@ -12,6 +12,8 @@ import time
 import sys
 from typing import List, Dict, Any, Optional
 from langchain_core.documents import Document
+import deepeval
+from deepeval.evaluate import AsyncConfig
 from deepeval import evaluate
 from deepeval.metrics import (
     AnswerRelevancyMetric,
@@ -21,8 +23,11 @@ from deepeval.metrics import (
     ContextualPrecisionMetric
 )
 from deepeval.test_case import LLMTestCase
-import deepeval
 from deepeval.dataset import Golden
+from deepeval.evaluate import CacheConfig
+from deepeval.evaluate import ErrorConfig
+import pickle
+from datetime import datetime
 
 # Asegurarnos que podemos importar desde el directorio raíz
 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -32,6 +37,9 @@ if current_dir not in sys.path:
 # Importar LangChainAgent desde el módulo core
 from langagent.core.lang_chain_agent import LangChainAgent
 
+# Usar el sistema de logging centralizado
+from langagent.config.logging_config import get_logger
+logger = get_logger(__name__)
 
 class AgentEvaluator:
     """
@@ -58,6 +66,130 @@ class AgentEvaluator:
             local_llm2=local_llm2,
             local_llm3=local_llm3
         )
+        self.checkpoint_dir = os.path.join(os.getcwd(), "checkpoints")
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
+            
+    def generar_nombre_checkpoint(self, preguntas: List[str], config_hash: str = None) -> str:
+        """
+        Genera un nombre único para el archivo de checkpoint basado en las preguntas y configuración.
+        
+        Args:
+            preguntas (List[str]): Lista de preguntas a evaluar.
+            config_hash (str, optional): Hash de la configuración del agente.
+            
+        Returns:
+            str: Nombre del archivo de checkpoint.
+        """
+        # Crear un hash simple de las preguntas
+        preguntas_text = "|".join(preguntas)
+        preguntas_hash = str(hash(preguntas_text))[-8:]  # Últimos 8 caracteres del hash
+        
+        # Incluir configuración del modelo si está disponible
+        modelo_info = f"{self.agent.local_llm or 'default'}"
+        
+        # Crear nombre del archivo
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nombre = f"checkpoint_{modelo_info}_{preguntas_hash}_{timestamp}.pkl"
+        
+        return os.path.join(self.checkpoint_dir, nombre)
+        return os.path.join(self.checkpoint_dir, nombre)
+    
+    def buscar_checkpoint_existente(self, preguntas: List[str]) -> Optional[str]:
+        """
+        Busca un checkpoint existente que coincida con las preguntas proporcionadas.
+        
+        Args:
+            preguntas (List[str]): Lista de preguntas a evaluar.
+            
+        Returns:
+            Optional[str]: Ruta del checkpoint si existe, None en caso contrario.
+        """
+        if not os.path.exists(self.checkpoint_dir):
+            return None
+        
+        # Crear hash de las preguntas actuales
+        preguntas_text = "|".join(preguntas)
+        preguntas_hash = str(hash(preguntas_text))[-8:]
+        
+        # Buscar archivos de checkpoint que coincidan
+        for archivo in os.listdir(self.checkpoint_dir):
+            if archivo.endswith('.pkl'):
+                ruta_completa = os.path.join(self.checkpoint_dir, archivo)
+                # Verificar que el archivo sea válido
+                try:
+                    with open(ruta_completa, 'rb') as f:
+                        data = pickle.load(f)
+                        # Verificar que tenga la estructura esperada
+                        if isinstance(data, dict) and "test_cases" in data and "metadata" in data:
+                            # Verificar que las preguntas coincidan exactamente
+                            checkpoint_preguntas = [tc.input for tc in data["test_cases"]]
+                            if checkpoint_preguntas == preguntas:
+                                logger.info(f"✓ Checkpoint encontrado: {archivo}")
+                                return ruta_completa
+                except Exception as e:
+                    logger.warning(f"⚠️  Checkpoint corrupto ignorado: {archivo} - {e}")
+                    continue
+        
+        return None
+
+    def guardar_checkpoint(self, test_cases: List, preguntas: List[str], metadata: Dict = None) -> str:
+        """
+        Guarda los casos de prueba en un archivo de checkpoint.
+        
+        Args:
+            test_cases (List): Lista de casos de prueba evaluados.
+            preguntas (List[str]): Lista de preguntas originales.
+            metadata (Dict, optional): Metadatos adicionales.
+            
+        Returns:
+            str: Ruta del archivo de checkpoint guardado.
+        """
+        checkpoint_data = {
+            "test_cases": test_cases,
+            "preguntas": preguntas,
+            "metadata": metadata or {},
+            "timestamp": datetime.now().isoformat(),
+            "agent_config": {
+                "local_llm": getattr(self.agent, 'local_llm', None),
+                "local_llm2": getattr(self.agent, 'local_llm2', None),
+                "local_llm3": getattr(self.agent, 'local_llm3', None),
+                "vector_db_type": getattr(self.agent, 'vector_db_type', None)
+            }
+        }
+        
+        archivo_checkpoint = self.generar_nombre_checkpoint(preguntas)
+        
+        try:
+            with open(archivo_checkpoint, 'wb') as f:
+                pickle.dump(checkpoint_data, f)
+            logger.info(f"✓ Checkpoint guardado: {archivo_checkpoint}")
+            return archivo_checkpoint
+        except Exception as e:
+            logger.error(f"✗ Error al guardar checkpoint: {e}")
+            raise
+        
+    def cargar_checkpoint(self, ruta_checkpoint: str) -> Dict:
+        """
+        Carga los datos desde un archivo de checkpoint.
+        
+        Args:
+            ruta_checkpoint (str): Ruta del archivo de checkpoint.
+            
+        Returns:
+            Dict: Datos del checkpoint cargados.
+        """
+        try:
+            with open(ruta_checkpoint, 'rb') as f:
+                data = pickle.load(f)
+                logger.info(f"✓ Checkpoint cargado: {ruta_checkpoint}")
+                logger.info(f"  - Timestamp: {data.get('timestamp', 'No disponible')}")
+                logger.info(f"  - Casos de prueba: {len(data.get('test_cases', []))}")
+                return data
+        except Exception as e:
+            logger.error(f"✗ Error al cargar checkpoint: {e}")
+            raise
+    
     
     def calcular_token_cost(self, response_metadata):
         """
@@ -109,7 +241,7 @@ class AgentEvaluator:
                         if total_tokens_start > 15 and total_tokens_end > 0:
                             token_info["total_tokens"] = int(response_metadata[total_tokens_start:total_tokens_end])
             except Exception as e:
-                print(f"Error al procesar los metadatos de respuesta: {e}")
+                logger.error(f"Error al procesar los metadatos de respuesta: {e}")
         elif isinstance(response_metadata, dict):
             # Para el formato original
             if "usage_metadata" in response_metadata:
@@ -213,7 +345,7 @@ class AgentEvaluator:
                                     return content_remainder[:last_quote]
                                 
                 except Exception as e:
-                    print(f"Error al procesar formato de respuesta específico: {e}")
+                    logger.error(f"Error al procesar formato de respuesta específico: {e}")
             
             # Formato antiguo de generación con content
             if "content='" in respuesta:
@@ -248,7 +380,7 @@ class AgentEvaluator:
                                         if last_quote > 0:
                                             return json_remainder[:last_quote]
                 except Exception as e:
-                    print(f"Error al procesar la generación: {e}")
+                    logger.error(f"Error al procesar la generación: {e}")
                     return respuesta
             return respuesta
             
@@ -313,6 +445,7 @@ class AgentEvaluator:
             goldens.append(golden)
         
         return goldens
+    
     def convertir_goldens_a_test_cases(self, goldens):
         """
         Convierte objetos Golden a casos de prueba LLMTestCase ejecutando el agente
@@ -338,9 +471,9 @@ class AgentEvaluator:
             tiempo_completado = time.time() - tiempo_inicio
             
             # Verificar si el resultado requiere clarificación
-            if isinstance(resultado, dict) and resultado.get("type") == "clarification_needed":
-                print(f"⚠️  Pregunta requiere clarificación, marcando como no evaluable: {pregunta}")
-                print(f"   Pregunta de clarificación: {resultado.get('question', 'No disponible')}")
+            if resultado.get("type") == "clarification_needed":
+                logger.warning(f"⚠️  Pregunta requiere clarificación, marcando como no evaluable: {pregunta}")
+                logger.warning(f"   Pregunta de clarificación: {resultado.get('question', 'No disponible')}")
                 
                 # Crear un caso de prueba marcado como no evaluable
                 test_case = LLMTestCase(
@@ -357,7 +490,7 @@ class AgentEvaluator:
                 time.sleep(0.5)
                 continue
             
-            # ...existing code...
+            
             # Extraer el texto de la respuesta
             generation = None
             if "generation" in resultado:
@@ -429,7 +562,7 @@ class AgentEvaluator:
                 formatted_context.append(str(doc))
         return formatted_context
 
-    def evaluar(self, preguntas: List[str], respuestas_esperadas: List[str] = None):
+    def evaluar(self, preguntas: List[str], respuestas_esperadas: List[str] = None, usar_checkpoint: bool = True, forzar_reevaluacion: bool = False):
         """
         Evalúa una lista de preguntas con las métricas configuradas.
         
@@ -437,32 +570,119 @@ class AgentEvaluator:
             preguntas (List[str]): Lista de preguntas a evaluar.
             respuestas_esperadas (List[str], optional): Lista de respuestas esperadas. 
                 Si no se proporciona, se usa None para cada pregunta.
+            usar_checkpoint (bool): Si buscar y usar checkpoints existentes.
+            forzar_reevaluacion (bool): Si forzar una nueva evaluación ignorando checkpoints.
                 
         Returns:
             Dict: Resultados de la evaluación.
         """
-        # Convertir preguntas y respuestas a objetos Golden
-        goldens = self.convertir_a_golden(preguntas, respuestas_esperadas)
+        # Buscar checkpoint existente si está habilitado
+        checkpoint_path = None
+        if usar_checkpoint and not forzar_reevaluacion:
+            checkpoint_path = self.buscar_checkpoint_existente(preguntas)
         
-        # Convertir los goldens a casos de prueba
-        data = self.convertir_goldens_a_test_cases(goldens)
-        time.sleep(10)  # Esperar 10 segundos antes de iniciar la evaluación
-        # Definir las métricas para la evaluación
-        metrics = [
-            deepeval.metrics.AnswerRelevancyMetric(),
-            deepeval.metrics.FaithfulnessMetric(),
-            deepeval.metrics.ContextualPrecisionMetric(),
-            deepeval.metrics.ContextualRecallMetric(),
-            deepeval.metrics.ContextualRelevancyMetric()
-        ]
-        
-        # Evaluar todos los casos de prueba con todas las métricas
-        results = deepeval.evaluate(data, metrics=metrics)
-        
-        return {
-            "results": results,
-            "test_cases": data
-        }
+        if checkpoint_path:
+            logger.info("🔄 Cargando desde checkpoint existente...")
+            checkpoint_data = self.cargar_checkpoint(checkpoint_path)
+            test_cases = checkpoint_data["test_cases"]
+            
+            # Filtrar casos que requieren clarificación para la evaluación
+            casos_evaluables = [tc for tc in test_cases if not hasattr(tc, 'clarification_needed') or not tc.clarification_needed]
+            casos_clarificacion = [tc for tc in test_cases if hasattr(tc, 'clarification_needed') and tc.clarification_needed]
+            
+            if casos_clarificacion:
+                logger.warning(f"⚠️  {len(casos_clarificacion)} casos requieren clarificación y no serán evaluados con métricas")
+            
+            if casos_evaluables:
+                logger.info("🔄 Ejecutando evaluación con métricas desde checkpoint...")
+                
+                # Definir las métricas para la evaluación
+                metrics = [
+                    deepeval.metrics.AnswerRelevancyMetric(),
+                    deepeval.metrics.FaithfulnessMetric(),
+                    deepeval.metrics.ContextualPrecisionMetric(),
+                    deepeval.metrics.ContextualRecallMetric(),
+                    deepeval.metrics.ContextualRelevancyMetric()
+                ]
+                
+                # Evaluar solo los casos evaluables
+                results = evaluate(async_config=AsyncConfig(throttle_value = 5, max_concurrent= 10), test_cases=casos_evaluables, metrics=metrics)
+                
+                return {
+                    "results": results,
+                    "test_cases": test_cases,  # Incluir todos los casos (evaluables y no evaluables)
+                    "casos_evaluables": len(casos_evaluables),
+                    "casos_clarificacion": len(casos_clarificacion),
+                    "checkpoint_usado": checkpoint_path
+                }
+            else:
+                logger.warning("⚠️  No hay casos evaluables en el checkpoint")
+                return {
+                    "results": None,
+                    "test_cases": test_cases,
+                    "casos_evaluables": 0,
+                    "casos_clarificacion": len(casos_clarificacion),
+                    "checkpoint_usado": checkpoint_path
+                }
+        else:
+            logger.info("🚀 Iniciando nueva evaluación...")
+            
+            # Convertir preguntas y respuestas a objetos Golden
+            goldens = self.convertir_a_golden(preguntas, respuestas_esperadas)
+            
+            # Convertir los goldens a casos de prueba
+            logger.info("🔄 Ejecutando agente para generar respuestas...")
+            test_cases = self.convertir_goldens_a_test_cases(goldens)
+            
+            # Guardar checkpoint después de generar los casos de prueba
+            metadata = {
+                "total_casos": len(test_cases),
+                "respuestas_esperadas_proporcionadas": respuestas_esperadas is not None
+            }
+            checkpoint_path = self.guardar_checkpoint(test_cases, preguntas, metadata)
+            
+            # Filtrar casos que requieren clarificación
+            casos_evaluables = [tc for tc in test_cases if not hasattr(tc, 'clarification_needed') or not tc.clarification_needed]
+            casos_clarificacion = [tc for tc in test_cases if hasattr(tc, 'clarification_needed') and tc.clarification_needed]
+            
+            if casos_clarificacion:
+                logger.warning(f"⚠️  {len(casos_clarificacion)} casos requieren clarificación y no serán evaluados con métricas")
+            
+            if casos_evaluables:
+                time.sleep(10)  # Esperar 10 segundos antes de iniciar la evaluación
+                
+                logger.info("🔄 Ejecutando evaluación con métricas...")
+                
+                # Definir las métricas para la evaluación
+                metrics = [
+                    deepeval.metrics.AnswerRelevancyMetric(),
+                    deepeval.metrics.FaithfulnessMetric(),
+                    deepeval.metrics.ContextualPrecisionMetric(),
+                    deepeval.metrics.ContextualRecallMetric(),
+                    deepeval.metrics.ContextualRelevancyMetric()
+                ]
+                
+                # Evaluar solo los casos evaluables
+                results = evaluate(cache_config=CacheConfig(write_cache=False),
+                                   error_config=ErrorConfig(ignore_errors=False),
+                                   async_config=AsyncConfig(throttle_value = 5, max_concurrent= 20),
+                                   test_cases=casos_evaluables, metrics=metrics)
+                return {
+                    "results": results,
+                    "test_cases": test_cases,
+                    "casos_evaluables": len(casos_evaluables),
+                    "casos_clarificacion": len(casos_clarificacion),
+                    "checkpoint_guardado": checkpoint_path
+                }
+            else:
+                logger.warning("⚠️  No hay casos evaluables para métricas")
+                return {
+                    "results": None,
+                    "test_cases": test_cases,
+                    "casos_evaluables": 0,
+                    "casos_clarificacion": len(casos_clarificacion),
+                    "checkpoint_guardado": checkpoint_path
+                }
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluador de agentes RAG")

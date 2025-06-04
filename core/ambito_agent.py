@@ -15,6 +15,10 @@ from langagent.models.constants import (
 from langagent.models.llm import create_clarification_generator
 import re
 
+# Usar el sistema de logging centralizado
+from langagent.config.logging_config import get_logger
+logger = get_logger(__name__)
+
 class AmbitoState(TypedDict):
     """Estado del agente de ámbito."""
     question: str
@@ -105,8 +109,8 @@ def create_ambito_workflow(retriever: any, llm: any):
         """
             
         question = state["question"]
-        print(f"---RETRIEVE CONTEXT FOR AMBITO---")
-        print(f"Pregunta: {question}")
+        logger.info(f"---RETRIEVE CONTEXT FOR AMBITO---")
+        logger.info(f"Pregunta: {question}")
         
         try:
             # Recuperar documentos usando el retriever
@@ -141,19 +145,19 @@ def create_ambito_workflow(retriever: any, llm: any):
                         ambito_counts[ambito] = ambito_counts.get(ambito, 0) + 1
                         relevance_scores[ambito] = relevance_scores.get(ambito, 0) + relevance_weight
                 
-                print(f"Ámbitos encontrados: {ambito_counts}")
-                print(f"Puntuaciones de relevancia: {relevance_scores}")
+                logger.info(f"Ámbitos encontrados: {ambito_counts}")
+                logger.info(f"Puntuaciones de relevancia: {relevance_scores}")
                 
                 # Seleccionar ámbito basado en relevancia, no solo frecuencia
                 if relevance_scores:
                     # Si ya teníamos un ámbito y aparece en los resultados, mantenerlo
                     if state.get("ambito") and state["ambito"] in relevance_scores:
                         selected_ambito = state["ambito"]
-                        print(f"Manteniendo ámbito previo: {selected_ambito}")
+                        logger.info(f"Manteniendo ámbito previo: {selected_ambito}")
                     else:
                         # Seleccionar el de mayor puntuación de relevancia
                         selected_ambito = max(relevance_scores.items(), key=lambda x: x[1])[0]
-                        print(f"Ámbito seleccionado por relevancia: {selected_ambito}")
+                        logger.info(f"Ámbito seleccionado por relevancia: {selected_ambito}")
                     
                     # Verificar que el ámbito existe en nuestras constantes
                     if selected_ambito in AMBITOS_CUBOS:
@@ -167,13 +171,13 @@ def create_ambito_workflow(retriever: any, llm: any):
                         state["confidence"] = confidence
                         state["needs_clarification"] = False
                         state["clarification_question"] = None
-                        print(f"Ámbito actualizado: {selected_ambito}, Cubos: {state['cubos']}, Confianza: {confidence}")
+                        logger.info(f"Ámbito actualizado: {selected_ambito}, Cubos: {state['cubos']}, Confianza: {confidence}")
             
             state["context"] = docs if docs else []
             
         except Exception as e:
-            print(f"Error al recuperar contexto: {str(e)}")
-            print(f"Tipo de retriever: {type(retriever)}")
+            logger.error(f"Error al recuperar contexto: {str(e)}")
+            logger.error(f"Tipo de retriever: {type(retriever)}")
             state["context"] = []
             
         return state
@@ -205,7 +209,7 @@ def create_ambito_workflow(retriever: any, llm: any):
                 state["clarification_question"] = str(response)
                 
         except Exception as e:
-            print(f"Error al generar clarificación: {str(e)}")
+            logger.error(f"Error al generar clarificación: {str(e)}")
             # Fallback a pregunta genérica
             state["clarification_question"] = "No he podido identificar claramente el ámbito. ¿Podrías especificar en qué ámbito te gustaría consultar información?"
             

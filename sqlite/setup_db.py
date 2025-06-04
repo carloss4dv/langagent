@@ -1,12 +1,18 @@
 """
-Script para inicializar la base de datos SQLite y cargar datos de prueba.
+Configuración y inicialización de la base de datos SQLite para PDI.
+
+Este módulo crea las tablas necesarias y carga datos de ejemplo
+para el sistema de información del Personal Docente e Investigador.
 """
 
-import os
-import sys
+import sqlite3
 import random
-from decimal import Decimal
-from pathlib import Path
+from typing import List, Dict
+import os
+
+# Usar el sistema de logging centralizado
+from langagent.config.logging_config import get_logger
+logger = get_logger(__name__)
 
 # Añadir el directorio raíz al path para poder importar los módulos
 root_dir = Path(__file__).resolve().parent.parent
@@ -36,142 +42,174 @@ CENTROS = [
     {"id": 2, "nombre": "Escuela Universitaria Politécnica de Teruel"}
 ]
 
-def crear_tablas():
-    """Crea todas las tablas definidas en los modelos."""
-    Base.metadata.create_all(bind=engine)
-    print("Tablas creadas correctamente.")
-
-def generar_datos_prueba(total_registros=20):
+def crear_tablas(db_path: str = "pdi_database.db"):
     """
-    Genera datos de prueba para la tabla PDI_Docencia.
+    Crea las tablas necesarias en la base de datos.
     
     Args:
-        total_registros: Número de registros a generar
+        db_path: Ruta del archivo de base de datos
     """
-    db = SessionLocal()
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
     
-    try:
-        # Limpiar datos existentes
-        db.query(PDI_Docencia).delete()
-        db.commit()
-        
-        # Generar nuevos datos
-        registros = []
-        for i in range(1, total_registros + 1):
-            # Seleccionar centro aleatoriamente
-            centro = random.choice(CENTROS)
-            
-            # Datos aleatorios
-            categoria = random.choice(CATEGORIAS_PDI)
-            sexenios = random.randint(0, 6)
-            quinquenios = random.randint(0, 8)
-            
-            # Más probabilidad de permanente y doctor para categorías superiores
-            if "Catedrático" in categoria or "Titular" in categoria:
-                permanente = 'S'
-                doctor = 'S'
-                horas = Decimal(str(round(random.uniform(150.0, 300.0), 2)))
-            elif "contratado doctor" in categoria or "colaborador" in categoria:
-                permanente = 'S'
-                doctor = 'S' if random.random() > 0.2 else 'N'
-                horas = Decimal(str(round(random.uniform(100.0, 250.0), 2)))
-            else:
-                permanente = 'N'
-                doctor = 'S' if random.random() > 0.5 else 'N'
-                horas = Decimal(str(round(random.uniform(30.0, 150.0), 2)))
-            
-            # Crear registro
-            registro = PDI_Docencia(
-                id=i,
-                categoria_pdi=categoria,
-                centro_id=centro["id"],
-                centro_nombre=centro["nombre"],
-                plan_estudio_id=148,  # Grado en Ingeniería Informática
-                curso_academico="2024/2025",
-                curso=random.choice([1, 2, 3, 4, None]),
-                sexenios=sexenios,
-                quinquenios=quinquenios,
-                horas_impartidas=horas,
-                permanente=permanente,
-                doctor=doctor
-            )
-            
-            registros.append(registro)
-        
-        # Insertar todos los registros
-        db.add_all(registros)
-        db.commit()
-        print(f"Se han generado {total_registros} registros de prueba.")
-        
-    except Exception as e:
-        db.rollback()
-        print(f"Error al generar datos de prueba: {e}")
-    finally:
-        db.close()
+    # Crear tabla de centros
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS centros (
+        id INTEGER PRIMARY KEY,
+        nombre TEXT NOT NULL,
+        descripcion TEXT
+    )
+    ''')
+    
+    # Crear tabla de profesores
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS profesores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        centro_id INTEGER NOT NULL,
+        categoria_pdi TEXT NOT NULL,
+        es_doctor INTEGER NOT NULL,
+        es_permanente INTEGER NOT NULL,
+        num_sexenios INTEGER DEFAULT 0,
+        num_quinquenios INTEGER DEFAULT 0,
+        horas_impartidas REAL DEFAULT 0,
+        imparte_primer_curso INTEGER DEFAULT 0,
+        curso_academico TEXT DEFAULT '2024/2025',
+        plan_estudio_id INTEGER DEFAULT 6037,
+        FOREIGN KEY (centro_id) REFERENCES centros (id)
+    )
+    ''')
+    
+    conn.commit()
+    conn.close()
+    
+    logger.info("Tablas creadas correctamente.")
 
-def consulta_ejemplo():
-    """Ejecuta una consulta de ejemplo similar a la web de Unizar."""
-    db = SessionLocal()
+def generar_datos_ejemplo(db_path: str = "pdi_database.db", num_profesores: int = 100):
+    """
+    Genera datos de ejemplo para las tablas.
     
+    Args:
+        db_path: Ruta del archivo de base de datos
+        num_profesores: Número de profesores a generar
+    """
     try:
-        # Consulta SQL usando SQLAlchemy
-        from sqlalchemy import func, desc
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
         
-        # Total de registros para calcular porcentajes
-        total_pdi = db.query(func.count(PDI_Docencia.id)).filter(
-            PDI_Docencia.plan_estudio_id == 148,
-            PDI_Docencia.curso_academico == "2024/2025"
-        ).scalar()
+        # Insertar centros de ejemplo
+        centros = [
+            (148, "Escuela Técnica Superior de Ingeniería Informática", "Centro principal de informática"),
+            (149, "Facultad de Ciencias", "Centro de ciencias básicas"),
+            (150, "Escuela Politécnica Superior", "Centro de ingenierías")
+        ]
         
-        total_horas = db.query(func.sum(PDI_Docencia.horas_impartidas)).filter(
-            PDI_Docencia.plan_estudio_id == 148,
-            PDI_Docencia.curso_academico == "2024/2025"
-        ).scalar()
+        cursor.executemany('INSERT OR REPLACE INTO centros (id, nombre, descripcion) VALUES (?, ?, ?)', centros)
         
-        # Consulta principal
-        resultados = db.query(
-            PDI_Docencia.categoria_pdi,
-            func.count(PDI_Docencia.id).label("total"),
-            (func.count(PDI_Docencia.id) * 100.0 / total_pdi).label("porcentaje"),
-            func.sum(func.case(
-                [(PDI_Docencia.curso == 1, 1)],
-                else_=0
-            )).label("en_primer_curso"),
-            func.sum(PDI_Docencia.sexenios).label("num_sexenios"),
-            func.sum(PDI_Docencia.quinquenios).label("num_quinquenios"),
-            func.sum(PDI_Docencia.horas_impartidas).label("horas_impartidas"),
-            (func.sum(PDI_Docencia.horas_impartidas) * 100.0 / total_horas).label("porcentaje_horas")
-        ).filter(
-            PDI_Docencia.plan_estudio_id == 148,
-            PDI_Docencia.curso_academico == "2024/2025"
-        ).group_by(
-            PDI_Docencia.categoria_pdi
-        ).order_by(
-            desc("horas_impartidas")
-        ).all()
+        # Categorías de PDI con sus distribuciones aproximadas
+        categorias = [
+            ("Catedrático de Universidad", 0.08),
+            ("Profesor Titular de Universidad", 0.25),
+            ("Profesor Contratado Doctor", 0.15),
+            ("Profesor Ayudante Doctor", 0.12),
+            ("Profesor Asociado", 0.25),
+            ("Profesor Sustituto Interino", 0.10),
+            ("Otros", 0.05)
+        ]
         
-        # Mostrar resultados
-        print("\n--- ESTRUCTURA DEL PROFESORADO 2024/2025 ---")
-        print("Estudio: Grado en Ingeniería Informática")
-        print(f"Total personal académico: {total_pdi}")
-        print("-" * 60)
-        print(f"{'Categoría':<40} | {'Total':<5} | {'%':<6} | {'1er curso':<9} | {'Sexenios':<8} | {'Quinq.':<6} | {'Horas':<10} | {'%':<6}")
-        print("-" * 60)
+        # Generar profesores
+        profesores = []
+        total_registros = 0
         
-        for r in resultados:
-            print(f"{r.categoria_pdi:<40} | {r.total:<5} | {r.porcentaje:.2f} | {r.en_primer_curso:<9} | {r.num_sexenios:<8} | {r.num_quinquenios:<6} | {r.horas_impartidas:<10.1f} | {r.porcentaje_horas:.2f}")
+        for _ in range(num_profesores):
+            centro_id = random.choice([148, 149, 150])
+            categoria = random.choices([cat[0] for cat in categorias], 
+                                     weights=[cat[1] for cat in categorias])[0]
             
+            # Configurar probabilidades según la categoría
+            if categoria in ["Catedrático de Universidad", "Profesor Titular de Universidad"]:
+                es_doctor = 1
+                es_permanente = 1
+                sexenios = random.randint(1, 6)
+                quinquenios = random.randint(2, 8)
+                horas = random.uniform(120, 240)
+            elif categoria == "Profesor Contratado Doctor":
+                es_doctor = 1
+                es_permanente = random.choice([0, 1])
+                sexenios = random.randint(0, 3)
+                quinquenios = random.randint(0, 4)
+                horas = random.uniform(180, 240)
+            elif categoria == "Profesor Ayudante Doctor":
+                es_doctor = 1
+                es_permanente = 0
+                sexenios = random.randint(0, 1)
+                quinquenios = random.randint(0, 2)
+                horas = random.uniform(120, 180)
+            else:  # Asociados, Sustitutos, etc.
+                es_doctor = random.choice([0, 1])
+                es_permanente = 0
+                sexenios = 0 if not es_doctor else random.randint(0, 2)
+                quinquenios = random.randint(0, 3)
+                horas = random.uniform(60, 120)
+            
+            imparte_primer_curso = random.choice([0, 1])
+            
+            profesores.append((
+                centro_id, categoria, es_doctor, es_permanente,
+                sexenios, quinquenios, horas, imparte_primer_curso,
+                '2024/2025', 6037
+            ))
+            total_registros += 1
+        
+        cursor.executemany('''
+            INSERT INTO profesores 
+            (centro_id, categoria_pdi, es_doctor, es_permanente, num_sexenios, 
+             num_quinquenios, horas_impartidas, imparte_primer_curso, 
+             curso_academico, plan_estudio_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', profesores)
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Se han generado {total_registros} registros de prueba.")
+        
     except Exception as e:
-        print(f"Error al ejecutar consulta de ejemplo: {e}")
-    finally:
-        db.close()
+        logger.error(f"Error al generar datos de prueba: {e}")
+
+def mostrar_ejemplo_consulta(db_path: str = "pdi_database.db"):
+    """
+    Muestra un ejemplo de consulta a la base de datos.
+    
+    Args:
+        db_path: Ruta del archivo de base de datos
+    """
+    try:
+        from .queries import obtener_estructura_profesorado
+        
+        logger.info("\n--- ESTRUCTURA DEL PROFESORADO 2024/2025 ---")
+        logger.info("Estudio: Grado en Ingeniería Informática")
+        
+        resultados = obtener_estructura_profesorado(db_path)
+        
+        if resultados and not resultados.get("error"):
+            total_pdi = sum(r.total for r in resultados)
+            logger.info(f"Total personal académico: {total_pdi}")
+            logger.info("-" * 60)
+            logger.info(f"{'Categoría':<40} | {'Total':<5} | {'%':<6} | {'1er curso':<9} | {'Sexenios':<8} | {'Quinq.':<6} | {'Horas':<10} | {'%':<6}")
+            logger.info("-" * 60)
+            
+            for r in resultados:
+                logger.info(f"{r.categoria_pdi:<40} | {r.total:<5} | {r.porcentaje:.2f} | {r.en_primer_curso:<9} | {r.num_sexenios:<8} | {r.num_quinquenios:<6} | {r.horas_impartidas:<10.1f} | {r.porcentaje_horas:.2f}")
+        
+    except Exception as e:
+        logger.error(f"Error al ejecutar consulta de ejemplo: {e}")
 
 if __name__ == "__main__":
     # Crear tablas si no existen
     crear_tablas()
     
     # Generar datos de prueba
-    generar_datos_prueba(20)
+    generar_datos_ejemplo(20)
     
     # Ejecutar consulta de ejemplo
-    consulta_ejemplo() 
+    mostrar_ejemplo_consulta() 

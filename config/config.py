@@ -52,6 +52,9 @@ VECTORSTORE_CONFIG = {
     # Configuración de generación de contexto
     "use_context_generation": True,  # Activar generación de contexto para chunks
     "log_context_generation": True,  # Mostrar logs detallados de la generación de contexto
+    "context_batch_size": 20,        # Chunks por lote
+    "context_max_workers": 3,        # Hilos concurrentes (no más de 5 para evitar rate limits)
+    "skip_existing_context": True,   # Saltar chunks con contexto existente
 }
 
 # Configuración de SQL
@@ -83,6 +86,18 @@ PATHS_CONFIG = {
     "default_vectorstore_dir": "./vectordb",  # Directorio base para vectorstores
     "default_chroma_dir": "./chroma",         # Directorio específico para Chroma
     "log_dir": "./logs",                      # Directorio para archivos de registro
+}
+
+# Configuración de Logging
+LOGGING_CONFIG = {
+    "level": "INFO",                          # Nivel de logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    "log_to_file": True,                      # Guardar logs en archivo
+    "log_to_console": True,                   # Mostrar logs en consola
+    "file_max_bytes": 10 * 1024 * 1024,      # Tamaño máximo del archivo de log (10MB)
+    "file_backup_count": 5,                   # Número de archivos de backup
+    "console_colors": True,                   # Usar colores en la consola
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "date_format": "%Y-%m-%d %H:%M:%S",
 }
 
 # Configuración de Seguridad

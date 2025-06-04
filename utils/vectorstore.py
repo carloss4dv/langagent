@@ -10,7 +10,6 @@ from typing import List, Optional
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 from langchain_core.retrievers import BaseRetriever
-import logging
 import os
 
 from langagent.vectorstore import (
@@ -19,7 +18,9 @@ from langagent.vectorstore import (
 )
 from langagent.config.config import VECTORSTORE_CONFIG
 
-logger = logging.getLogger(__name__)
+# Usar el sistema de logging centralizado
+from langagent.config.logging_config import get_logger
+logger = get_logger(__name__)
 
 # Función de compatibilidad para crear embeddings
 def create_embeddings(model_name: str = "intfloat/multilingual-e5-large-instruct"):
