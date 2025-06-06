@@ -55,6 +55,7 @@ VECTORSTORE_CONFIG = {
     "context_batch_size": 20,        # Chunks por lote
     "context_max_workers": 3,        # Hilos concurrentes (no más de 5 para evitar rate limits)
     "skip_existing_context": True,   # Saltar chunks con contexto existente
+    "persist_directory": "./vectordb",  # Directorio para persistir la vectorstore Chroma
 }
 
 # Configuración de SQL
@@ -84,7 +85,7 @@ WORKFLOW_CONFIG = {
 PATHS_CONFIG = {
     "default_data_dir": "./output_md",        # Directorio predeterminado para datos
     "default_vectorstore_dir": "./vectordb",  # Directorio base para vectorstores
-    "default_chroma_dir": "./chroma",         # Directorio específico para Chroma
+    "default_chroma_dir": "./vectordb",       # Directorio específico para Chroma
     "log_dir": "./logs",                      # Directorio para archivos de registro
 }
 

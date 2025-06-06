@@ -148,6 +148,24 @@ class LangChainAgent:
                     logger.info("Documentos cargados en vectorstore correctamente")
                 else:
                     logger.error("Error al cargar documentos en vectorstore")
+        elif self.vector_db_type == "chroma":
+            # Agregar lógica para Chroma
+            collection_name = VECTORSTORE_CONFIG.get("collection_name", "default_collection")
+            logger.info(f"Intentando cargar vectorstore Chroma: {collection_name}")
+            self.vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, collection_name)
+            if self.vectorstore:
+                logger.info("Vectorstore Chroma cargado correctamente")
+            else:
+                logger.info("Vectorstore Chroma no encontrado, creando nueva vectorstore...")
+                self.vectorstore = self.vectorstore_handler.create_vectorstore(
+                    documents=chunked_documents,
+                    embeddings=self.embeddings,
+                    collection_name=collection_name
+                )
+                if self.vectorstore:
+                    logger.info("Vectorstore Chroma creado correctamente")
+                else:
+                    logger.error("Error al crear vectorstore Chroma")
         
         # Crear el retriever
         self.retriever = self.vectorstore_handler.create_retriever(self.vectorstore)

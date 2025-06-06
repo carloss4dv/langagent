@@ -332,7 +332,7 @@ PROMPTS = {
         Step 5: Formulate response using proper institutional terminology and context
         Step 6: If the query mentions concepts that affect multiple cubes and these appear in the retrieved context, 
         establish connections and synthesize cross-cube relationships to provide comprehensive institutional insights
-        
+        Step 7: In your response you must include the exact names that appear in the text.
         RESPONSE GUIDELINES:
         - Write in complete paragraphs, never as lists
         - Never use colons (:) followed by lists

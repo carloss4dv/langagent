@@ -14,7 +14,6 @@ from langchain_community.utilities import SQLDatabase
 from langchain_community.tools.sql_database.tool import QuerySQLDatabaseTool
 import json
 import re
-
 from langagent.config.config import WORKFLOW_CONFIG, VECTORSTORE_CONFIG, SQL_CONFIG
 from langagent.models.constants import (
     AMBITOS_CUBOS, CUBO_TO_AMBITO, AMBITO_KEYWORDS, 
@@ -275,8 +274,19 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             if is_consulta:
                 filters["is_consulta"] = "true"
             
-            # Recuperar documentos
-            docs = retriever.invoke(rewritten_question, filter=filters if filters else None)
+            
+            vector_db_type = VECTORSTORE_CONFIG.get("vector_db_type", "chroma")
+            
+            # Solo aplicar filtros si no es Chroma
+            if vector_db_type.lower() == "chroma" and filters:
+                logger.info(f"⚠️  Vector DB es Chroma - filtros omitidos para mejor compatibilidad: {filters}")
+                docs = retriever.invoke(rewritten_question)
+            elif filters:
+                logger.info(f"Aplicando filtros para {vector_db_type}: {filters}")
+                docs = retriever.invoke(rewritten_question, filter=filters)
+            else:
+                docs = retriever.invoke(rewritten_question)
+                
             logger.info(f"Documentos recuperados: {len(docs)}")
             
             # Limitar el número total de documentos

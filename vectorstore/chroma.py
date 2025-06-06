@@ -25,7 +25,7 @@ class ChromaVectorStore(VectorStoreBase):
     
     def __init__(self):
         """Inicializa la implementación de Chroma Vector Store."""
-        self.persist_directory = VECTORSTORE_CONFIG.get("persist_directory", "chroma_db")
+        self.persist_directory = VECTORSTORE_CONFIG.get("persist_directory", "./vectordb")
     
     def create_vectorstore(self, documents: List[Document], embeddings: Embeddings, 
                          collection_name: str, **kwargs) -> Chroma:
