@@ -382,7 +382,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         logger.info(f"Búsqueda con pregunta: {rewritten_question}")
         logger.info(f"Ámbito identificado: {ambito}")
         logger.info(f"Estrategia de chunk: {chunk_strategy} tokens")
-        logger.info(f"Intento número: {retry_count + 1}")
+        logger.info(f"Intento número: {retry_count + 1} (retry_count actual: {retry_count})")
         
         try:
             # Seleccionar retriever según la estrategia
@@ -1221,9 +1221,11 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         
         if decision == "RETRY":
             logger.info(f"Reintentando con nueva estrategia: {state.get('chunk_strategy', DEFAULT_CHUNK_STRATEGY)}")
+            logger.info(f"Estado antes de RETRY - retry_count: {state.get('retry_count', 0)}")
             return "retrieve"
         else:  # decision == "END"
             logger.info("Finalizando workflow.")
+            logger.info(f"Estado final - retry_count: {state.get('retry_count', 0)}")
             return "END"
     
     # Definir condición para después de ejecutar consulta SQL
@@ -1302,7 +1304,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         
         try:
             # Ejecutar el workflow con configuración explícita de recursión
-            config = {"recursion_limit": 10}  # Límite de recursión explícito
+            config = {"recursion_limit": 50}  # Límite de recursión más alto para permitir reintentos
             result = compiled_workflow.invoke(input_data, config=config)
             
             # Finalizar métricas con éxito
