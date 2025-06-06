@@ -56,6 +56,14 @@ VECTORSTORE_CONFIG = {
     "context_max_workers": 3,        # Hilos concurrentes (no más de 5 para evitar rate limits)
     "skip_existing_context": True,   # Saltar chunks con contexto existente
     "persist_directory": "./vectordb",  # Directorio para persistir la vectorstore Chroma
+    
+    # Configuración de Recuperación Adaptativa - Múltiples Colecciones
+    "adaptive_collections": {
+        "256": "segeda_collection_256",
+        "512": "segeda_collection_512", 
+        "1024": "segeda_collection_1024"
+    },
+    "use_adaptive_retrieval": True,  # Activar recuperación adaptativa
 }
 
 # Configuración de SQL

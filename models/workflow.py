@@ -17,8 +17,10 @@ import re
 from langagent.config.config import WORKFLOW_CONFIG, VECTORSTORE_CONFIG, SQL_CONFIG
 from langagent.models.constants import (
     AMBITOS_CUBOS, CUBO_TO_AMBITO, AMBITO_KEYWORDS, 
-    AMBITO_EN_ES, CUBO_EN_ES
+    AMBITO_EN_ES, CUBO_EN_ES, CHUNK_STRATEGIES, DEFAULT_CHUNK_STRATEGY,
+    MAX_RETRIES, EVALUATION_THRESHOLDS, COLLECTION_CONFIG
 )
+from langagent.models.metrics_collector import MetricsCollector
 
 # Usar el sistema de logging centralizado
 from langagent.config.logging_config import get_logger
@@ -35,8 +37,8 @@ class GraphState(TypedDict):
         documents: lista de documentos
         retrieved_documents: lista de documentos recuperados
         retry_count: contador de reintentos
-        hallucination_score: puntuación de alucinaciones
-        answer_score: puntuación de la respuesta
+        hallucination_score: puntuación de alucinaciones (DEPRECATED - usar evaluation_metrics)
+        answer_score: puntuación de la respuesta (DEPRECATED - usar evaluation_metrics)
         relevant_cubos: lista de cubos relevantes para la pregunta
         ambito: ámbito identificado para la pregunta
         retrieval_details: detalles de recuperación por cubo
@@ -45,6 +47,8 @@ class GraphState(TypedDict):
         sql_query: consulta SQL generada
         sql_result: resultado de la consulta SQL
         needs_sql_interpretation: indica si se necesita generar interpretación de resultados SQL
+        chunk_strategy: estrategia de chunk actual (256, 512, 1024)
+        evaluation_metrics: métricas granulares del evaluador
     """
     question: str
     rewritten_question: str
@@ -52,8 +56,8 @@ class GraphState(TypedDict):
     documents: List[Document]
     retrieved_documents: List[Document]
     retry_count: int
-    hallucination_score: Optional[str]
-    answer_score: Optional[str]
+    hallucination_score: Optional[str]  # DEPRECATED
+    answer_score: Optional[str]  # DEPRECATED
     relevant_cubos: List[str]
     ambito: Optional[str]
     retrieval_details: Dict[str, Dict[str, Any]]
@@ -62,6 +66,8 @@ class GraphState(TypedDict):
     sql_query: Optional[str]
     sql_result: Optional[str]
     needs_sql_interpretation: bool
+    chunk_strategy: str  # Nuevo campo para recuperación adaptativa
+    evaluation_metrics: Dict[str, Any]  # Nuevo campo para métricas granulares
 
 def normalize_name(name: str) -> str:
     """
@@ -287,23 +293,27 @@ def execute_query(state):
     
     return state
 
-def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_grader, query_rewriter=None, rag_sql_chain=None, sql_interpretation_chain=None):
+def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewriter=None, rag_sql_chain=None, sql_interpretation_chain=None, adaptive_retrievers=None, metrics_collector=None):
     """
-    Crea un flujo de trabajo para el agente utilizando LangGraph.
+    Crea un flujo de trabajo para el agente utilizando LangGraph con recuperación adaptativa y recolección de métricas.
     
     Args:
-        retriever: Retriever para recuperar documentos.
-        rag_chain: Cadena de RAG.
+        retriever: Retriever principal para recuperar documentos.
         retrieval_grader: Evaluador de relevancia de documentos.
-        hallucination_grader: Evaluador de alucinaciones.
-        answer_grader: Evaluador de utilidad de respuestas.
+        granular_evaluator: Evaluador granular que reemplaza hallucination_grader y answer_grader.
         query_rewriter: Reescritor de consultas para mejorar la recuperación.
         rag_sql_chain: Cadena para consultas SQL cuando se detecta que es una consulta de base de datos.
         sql_interpretation_chain: Cadena para generar interpretación de resultados SQL.
+        adaptive_retrievers: Diccionario de retrievers por estrategia {"256": retriever, "512": retriever, "1024": retriever}.
+        metrics_collector: Recolector de métricas para análisis de rendimiento.
         
     Returns:
-        StateGraph: Grafo de estado configurado.
+        StateGraph: Grafo de estado configurado con recuperación adaptativa y métricas.
     """
+    # Inicializar el recolector de métricas si no se proporciona
+    if metrics_collector is None:
+        metrics_collector = MetricsCollector()
+    
     # Definimos el grafo de estado
     workflow = StateGraph(GraphState)
     
@@ -317,17 +327,31 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         Returns:
             dict: Estado actualizado con los documentos recuperados.
         """
+        # Iniciar medición del nodo
+        node_context = metrics_collector.start_node("retrieve")
+        
         question = state["question"]
         rewritten_question = state.get("rewritten_question", question)
         retry_count = state.get("retry_count", 0)
         ambito = state.get("ambito")
         is_consulta = state.get("is_consulta", False)
+        chunk_strategy = state.get("chunk_strategy", DEFAULT_CHUNK_STRATEGY)
         
         logger.info("---RETRIEVE---")
         logger.info(f"Búsqueda con pregunta: {rewritten_question}")
         logger.info(f"Ámbito identificado: {ambito}")
+        logger.info(f"Estrategia de chunk: {chunk_strategy} tokens")
+        logger.info(f"Intento número: {retry_count + 1}")
         
         try:
+            # Seleccionar retriever según la estrategia
+            current_retriever = retriever  # Fallback al retriever principal
+            if adaptive_retrievers and chunk_strategy in adaptive_retrievers:
+                current_retriever = adaptive_retrievers[chunk_strategy]
+                logger.info(f"Usando retriever adaptativo para chunks de {chunk_strategy} tokens")
+            else:
+                logger.info(f"Usando retriever principal (estrategia {chunk_strategy} no disponible)")
+            
             # Preparar filtros si hay ámbito identificado
             filters = {}
             if ambito:
@@ -335,18 +359,17 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             if is_consulta:
                 filters["is_consulta"] = "true"
             
-            
             vector_db_type = VECTORSTORE_CONFIG.get("vector_db_type", "chroma")
             
             # Solo aplicar filtros si no es Chroma
             if vector_db_type.lower() == "chroma" and filters:
                 logger.info(f"⚠️  Vector DB es Chroma - filtros omitidos para mejor compatibilidad: {filters}")
-                docs = retriever.invoke(rewritten_question)
+                docs = current_retriever.invoke(rewritten_question)
             elif filters:
                 logger.info(f"Aplicando filtros para {vector_db_type}: {filters}")
-                docs = retriever.invoke(rewritten_question, filter=filters)
+                docs = current_retriever.invoke(rewritten_question, filter=filters)
             else:
-                docs = retriever.invoke(rewritten_question)
+                docs = current_retriever.invoke(rewritten_question)
                 
             logger.info(f"Documentos recuperados: {len(docs)}")
             
@@ -362,25 +385,37 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 "first_doc_snippet": docs[0].page_content[:100] + "..." if docs else "No documents retrieved"
             }
             
-            return {
+            result_state = {
                 "documents": docs,
                 "question": question,
                 "rewritten_question": rewritten_question,
                 "retry_count": retry_count,
                 "ambito": ambito,
-                "retrieval_details": retrieval_details
+                "retrieval_details": retrieval_details,
+                "chunk_strategy": chunk_strategy
             }
+            
+            # Finalizar medición del nodo
+            metrics_collector.end_node(node_context, result_state, success=True)
+            
+            return result_state
             
         except Exception as e:
             logger.error(f"Error al recuperar documentos: {str(e)}")
-            return {
+            error_state = {
                 "documents": [],
                 "question": question,
                 "rewritten_question": rewritten_question,
                 "retry_count": retry_count,
                 "ambito": ambito,
-                "retrieval_details": {"error": str(e)}
+                "retrieval_details": {"error": str(e)},
+                "chunk_strategy": chunk_strategy
             }
+            
+            # Finalizar medición del nodo con error
+            metrics_collector.end_node(node_context, error_state, success=False)
+            
+            return error_state
 
     def grade_relevance(state):
         """
@@ -392,6 +427,9 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         Returns:
             dict: Estado actualizado con los documentos relevantes.
         """
+        # Iniciar medición del nodo
+        node_context = metrics_collector.start_node("grade_relevance")
+        
         logger.info("---GRADE RELEVANCE---")
         
         documents = state["documents"]
@@ -432,21 +470,31 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 "relevance_checked": True
             })
             
-            return {
+            result_state = {
                 **state,
                 "documents": relevant_docs,
                 "retrieval_details": retrieval_details
             }
             
+            # Finalizar medición del nodo
+            metrics_collector.end_node(node_context, result_state, success=True)
+            
+            return result_state
+            
         except Exception as e:
             logger.error(f"Error al evaluar relevancia: {str(e)}")
-            return {
+            error_state = {
                 **state,
                 "retrieval_details": {
                     **retrieval_details,
                     "relevance_error": str(e)
                 }
             }
+            
+            # Finalizar medición del nodo con error
+            metrics_collector.end_node(node_context, error_state, success=False)
+            
+            return error_state
     
     def generate(state):
         """
@@ -459,6 +507,9 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         Returns:
             dict: Estado actualizado con la respuesta generada.
         """
+        # Iniciar medición del nodo
+        node_context = metrics_collector.start_node("generate")
+        
         documents = state["documents"]
         question = state["question"]
         rewritten_question = state.get("rewritten_question", question)
@@ -471,7 +522,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         if not documents:
             logger.info("No se encontraron documentos relevantes.")
             response_json = "No se encontró información relevante en SEGEDA para responder a esta pregunta."
-            return {
+            result_state = {
                 "documents": documents,
                 "question": question,
                 "rewritten_question": rewritten_question,
@@ -483,6 +534,11 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 "sql_query": None,
                 "sql_result": None
             }
+            
+            # Finalizar medición del nodo
+            metrics_collector.end_node(node_context, result_state, success=True)
+            
+            return result_state
         
         try:
             logger.info("Creando contexto a partir de los documentos recuperados...")
@@ -587,7 +643,7 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             
             logger.info(f"Respuesta generada exitosamente: {response_json[:100]}...")
             
-            return {
+            result_state = {
                 "documents": context_docs,
                 "question": question,
                 "rewritten_question": clean_question,
@@ -600,13 +656,18 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 "sql_result": state.get("sql_result")
             }
             
+            # Finalizar medición del nodo
+            metrics_collector.end_node(node_context, result_state, success=True)
+            
+            return result_state
+            
         except Exception as e:
             logger.error(f"Error al generar respuesta: {str(e)}")
             logger.error(f"Tipo de error: {type(e)}")
             import traceback
             logger.error(f"Traceback completo: {traceback.format_exc()}")
             response_json = f"Se produjo un error al generar la respuesta: {str(e)}"
-            return {
+            error_state = {
                 "documents": documents,
                 "question": question,
                 "rewritten_question": rewritten_question,
@@ -618,82 +679,132 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 "sql_query": None,
                 "sql_result": None
             }
+            
+            # Finalizar medición del nodo con error
+            metrics_collector.end_node(node_context, error_state, success=False)
+            
+            return error_state
 
-    def evaluate(state):
+    def evaluate_response_granular(state):
         """
-        Evalúa la respuesta generada para determinar su calidad y fundamentación.
+        Evalúa la respuesta generada usando múltiples métricas de calidad granular.
         
         Args:
             state (dict): Estado actual del grafo.
             
         Returns:
-            dict: Estado actualizado con las evaluaciones.
+            dict: Estado actualizado con las métricas granulares.
         """
-        logger.info("---EVALUATE---")
+        # Iniciar medición del nodo
+        node_context = metrics_collector.start_node("evaluate_response_granular")
+        
+        logger.info("---EVALUATE RESPONSE GRANULAR---")
         
         generation = state["generation"]
         question = state["question"]
-        rewritten_question = state.get("rewritten_question", question)
-        retry_count = state.get("retry_count", 0)
+        documents = state["documents"]
         is_consulta = state.get("is_consulta", False)
         
         try:
             # Evaluar la respuesta solo si no es una consulta SQL
             if not is_consulta or not rag_sql_chain:
-                logger.info("Evaluando si la respuesta contiene alucinaciones...")
-                # Verificar si la respuesta contiene alucinaciones
-                hallucination_eval = hallucination_grader.invoke({
-                    "documents": state["documents"],
+                logger.info("Ejecutando evaluación granular de la respuesta...")
+                
+                # Preparar documentos para el evaluador
+                docs_text = ""
+                if documents:
+                    for i, doc in enumerate(documents):
+                        if isinstance(doc, str):
+                            docs_text += f"[DOCUMENTO {i+1}]: {doc}\n"
+                        elif hasattr(doc, 'page_content'):
+                            docs_text += f"[DOCUMENTO {i+1}]: {doc.page_content}\n"
+                        else:
+                            docs_text += f"[DOCUMENTO {i+1}]: {str(doc)}\n"
+                
+                # Ejecutar evaluación granular
+                evaluation_result = granular_evaluator.invoke({
+                    "question": question,
+                    "documents": docs_text,
                     "generation": generation
                 })
                 
-                if isinstance(hallucination_eval, dict) and "score" in hallucination_eval:
-                    is_grounded = hallucination_eval["score"].lower() == "yes"
-                    logger.info(f"¿Respuesta fundamentada en los documentos? {'Sí' if is_grounded else 'No'}")
+                if isinstance(evaluation_result, dict):
+                    logger.info("Métricas de evaluación granular:")
+                    logger.info(f"  - Faithfulness: {evaluation_result.get('faithfulness', 'N/A')}")
+                    logger.info(f"  - Context Precision: {evaluation_result.get('context_precision', 'N/A')}")
+                    logger.info(f"  - Context Recall: {evaluation_result.get('context_recall', 'N/A')}")
+                    logger.info(f"  - Answer Relevance: {evaluation_result.get('answer_relevance', 'N/A')}")
+                    
+                    evaluation_metrics = evaluation_result
                 else:
-                    logger.warning(f"Advertencia: Evaluación de alucinaciones no válida: {hallucination_eval}")
-                    is_grounded = True  # Por defecto, asumir que está fundamentada
-                
-                logger.info("Evaluando calidad de la respuesta...")
-                # Verificar si la respuesta es útil
-                answer_eval = answer_grader.invoke({
-                    "generation": generation,
-                    "question": rewritten_question
-                })
-                
-                if isinstance(answer_eval, dict) and "score" in answer_eval:
-                    is_useful = answer_eval["score"].lower() == "yes"
-                    logger.info(f"¿Respuesta útil para la pregunta? {'Sí' if is_useful else 'No'}")
-                else:
-                    logger.warning(f"Advertencia: Evaluación de utilidad no válida: {answer_eval}")
-                    is_useful = True  # Por defecto, asumir que es útil
+                    logger.warning(f"Advertencia: Evaluación granular no válida: {evaluation_result}")
+                    # Valores por defecto si falla la evaluación
+                    evaluation_metrics = {
+                        "faithfulness": 0.8,
+                        "context_precision": 0.8,
+                        "context_recall": 0.8,
+                        "answer_relevance": 0.8,
+                        "diagnosis": {
+                            "faithfulness_reason": "Evaluación fallida - usando valores por defecto",
+                            "context_precision_reason": "Evaluación fallida - usando valores por defecto",
+                            "context_recall_reason": "Evaluación fallida - usando valores por defecto",
+                            "answer_relevance_reason": "Evaluación fallida - usando valores por defecto"
+                        }
+                    }
             else:
-                # Para consultas SQL, asumimos que son útiles y fundamentadas
-                is_grounded = True
-                is_useful = True
-                hallucination_eval = {"score": "yes"}
-                answer_eval = {"score": "yes"}
+                # Para consultas SQL, asumimos métricas altas
+                logger.info("Consulta SQL - usando métricas por defecto altas")
+                evaluation_metrics = {
+                    "faithfulness": 0.9,
+                    "context_precision": 0.9,
+                    "context_recall": 0.9,
+                    "answer_relevance": 0.9,
+                    "diagnosis": {
+                        "faithfulness_reason": "Consulta SQL - datos directos de base de datos",
+                        "context_precision_reason": "Consulta SQL - contexto directo relevante", 
+                        "context_recall_reason": "Consulta SQL - información completa recuperada",
+                        "answer_relevance_reason": "Consulta SQL - respuesta directa a la consulta"
+                    }
+                }
             
-            # Si la generación no es exitosa, incrementar contador de reintentos
-            if not (is_grounded and is_useful):
-                retry_count += 1
-                logger.info(f"---RETRY ATTEMPT {retry_count}---")
-            
-            return {
+            result_state = {
                 **state,
-                "retry_count": retry_count,
-                "hallucination_score": hallucination_eval,
-                "answer_score": answer_eval
+                "evaluation_metrics": evaluation_metrics,
+                # Mantener compatibilidad con campos legacy (deprecated)
+                "hallucination_score": {"score": "yes" if evaluation_metrics.get("faithfulness", 0) >= 0.7 else "no"},
+                "answer_score": {"score": "yes" if evaluation_metrics.get("answer_relevance", 0) >= 0.7 else "no"}
             }
+            
+            # Finalizar medición del nodo
+            metrics_collector.end_node(node_context, result_state, success=True)
+            
+            return result_state
             
         except Exception as e:
-            logger.error(f"Error al evaluar respuesta: {str(e)}")
-            return {
+            logger.error(f"Error al evaluar respuesta granular: {str(e)}")
+            # Valores por defecto en caso de error
+            error_state = {
                 **state,
-                "retry_count": retry_count,
-                "hallucination_score": None,
-                "answer_score": None
+                "evaluation_metrics": {
+                    "faithfulness": 0.5,
+                    "context_precision": 0.5,
+                    "context_recall": 0.5,
+                    "answer_relevance": 0.5,
+                    "diagnosis": {
+                        "faithfulness_reason": f"Error en evaluación: {str(e)}",
+                        "context_precision_reason": f"Error en evaluación: {str(e)}",
+                        "context_recall_reason": f"Error en evaluación: {str(e)}",
+                        "answer_relevance_reason": f"Error en evaluación: {str(e)}"
+                    }
+                },
+                "hallucination_score": {"score": "no"},
+                "answer_score": {"score": "no"}
             }
+            
+            # Finalizar medición del nodo con error
+            metrics_collector.end_node(node_context, error_state, success=False)
+            
+            return error_state
     
     def generate_sql_interpretation(state):
         """
@@ -705,6 +816,9 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         Returns:
             dict: Estado actualizado con la respuesta interpretativa.
         """
+        # Iniciar medición del nodo
+        node_context = metrics_collector.start_node("generate_sql_interpretation")
+        
         question = state["question"]
         rewritten_question = state.get("rewritten_question", question)
         sql_query = state.get("sql_query", "")
@@ -715,11 +829,16 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         
         if not sql_result:
             logger.info("No hay resultados SQL para interpretar.")
-            return {
+            result_state = {
                 **state,
                 "generation": "No se pudieron obtener resultados de la consulta SQL.",
                 "needs_sql_interpretation": False
             }
+            
+            # Finalizar medición del nodo
+            metrics_collector.end_node(node_context, result_state, success=True)
+            
+            return result_state
         
         try:
             # Crear contexto combinando documentos originales y resultados SQL
@@ -780,44 +899,174 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             logger.info("Interpretación generada con éxito.")
             logger.info(f"Interpretación generada: {interpretation[:100]}...")
             
-            return {
+            result_state = {
                 **state,
                 "generation": interpretation,
                 "needs_sql_interpretation": False
             }
+            
+            # Finalizar medición del nodo
+            metrics_collector.end_node(node_context, result_state, success=True)
+            
+            return result_state
             
         except Exception as e:
             logger.error(f"Error al generar interpretación SQL: {str(e)}")
             logger.error(f"Tipo de error: {type(e)}")
             import traceback
             logger.error(f"Traceback completo: {traceback.format_exc()}")
-            return {
+            error_state = {
                 **state,
                 "generation": f"Se obtuvieron los siguientes resultados de la consulta: {sql_result}",
                 "needs_sql_interpretation": False
             }
+            
+            # Finalizar medición del nodo con error
+            metrics_collector.end_node(node_context, error_state, success=False)
+            
+            return error_state
     
+    def route_next_strategy(state):
+        """
+        Determina la próxima estrategia de recuperación basada en métricas granulares.
+        
+        Utiliza lógica determinística simple (sin LLM) para decidir:
+        - Si continuar con más intentos
+        - Qué estrategia de chunk usar en el siguiente intento
+        
+        Args:
+            state (dict): Estado actual del grafo.
+            
+        Returns:
+            str: Siguiente acción a tomar ("END", "RETRY")
+        """
+        retry_count = state.get("retry_count", 0)
+        evaluation_metrics = state.get("evaluation_metrics", {})
+        current_strategy = state.get("chunk_strategy", DEFAULT_CHUNK_STRATEGY)
+        
+        logger.info("---ROUTE NEXT STRATEGY---")
+        logger.info(f"Intento actual: {retry_count + 1}, Estrategia actual: {current_strategy}")
+        
+        # Si ya hicimos el máximo de intentos, terminar siempre
+        if retry_count >= MAX_RETRIES:
+            logger.info(f"Máximo de reintentos alcanzado ({MAX_RETRIES}). Finalizando.")
+            return "END"
+        
+        # Extraer métricas con valores por defecto
+        faithfulness = evaluation_metrics.get("faithfulness", 0.0)
+        context_precision = evaluation_metrics.get("context_precision", 0.0)
+        context_recall = evaluation_metrics.get("context_recall", 0.0)
+        answer_relevance = evaluation_metrics.get("answer_relevance", 0.0)
+        
+        logger.info(f"Métricas actuales - Faithfulness: {faithfulness}, Precision: {context_precision}, Recall: {context_recall}, Relevance: {answer_relevance}")
+        
+        # Si todas las métricas están por encima de los umbrales, terminar
+        if (faithfulness >= EVALUATION_THRESHOLDS["faithfulness"] and
+            context_precision >= EVALUATION_THRESHOLDS["context_precision"] and
+            context_recall >= EVALUATION_THRESHOLDS["context_recall"] and
+            answer_relevance >= EVALUATION_THRESHOLDS["answer_relevance"]):
+            logger.info("Todas las métricas superan los umbrales. Finalizando con éxito.")
+            return "END"
+        
+        # Incrementar contador de reintentos
+        new_retry_count = retry_count + 1
+        state["retry_count"] = new_retry_count
+        
+        # Lógica determinística para seleccionar estrategia
+        
+        # Context Recall bajo → necesitamos más contexto (chunks más grandes)
+        if context_recall < EVALUATION_THRESHOLDS["context_recall"]:
+            if current_strategy != "1024":
+                state["chunk_strategy"] = "1024"
+                logger.info(f"Context Recall bajo ({context_recall}). Cambiando a chunks de 1024 tokens.")
+                return "RETRY"
+        
+        # Context Precision bajo O Faithfulness bajo → necesitamos más precisión (chunks más pequeños)
+        if (context_precision < EVALUATION_THRESHOLDS["context_precision"] or
+            faithfulness < EVALUATION_THRESHOLDS["faithfulness"]):
+            if current_strategy != "256":
+                state["chunk_strategy"] = "256"
+                logger.info(f"Context Precision ({context_precision}) o Faithfulness ({faithfulness}) bajos. Cambiando a chunks de 256 tokens.")
+                return "RETRY"
+        
+        # Answer Relevance bajo → probar estrategia diferente
+        if answer_relevance < EVALUATION_THRESHOLDS["answer_relevance"]:
+            # Ciclar entre estrategias: 512 -> 1024 -> 256 -> 512
+            if current_strategy == "512":
+                state["chunk_strategy"] = "1024"
+            elif current_strategy == "1024":
+                state["chunk_strategy"] = "256"
+            else:  # current_strategy == "256"
+                state["chunk_strategy"] = "512"
+            
+            logger.info(f"Answer Relevance bajo ({answer_relevance}). Cambiando de {current_strategy} a {state['chunk_strategy']} tokens.")
+            return "RETRY"
+        
+        # Si llegamos aquí, las métricas no son suficientemente buenas pero no hay estrategia clara
+        # Probar con la estrategia contraria a la actual
+        if current_strategy == "512":
+            state["chunk_strategy"] = "1024"
+        elif current_strategy == "1024":
+            state["chunk_strategy"] = "256"
+        else:
+            state["chunk_strategy"] = "512"
+        
+        logger.info(f"Métricas subóptimas. Probando estrategia alternativa: {state['chunk_strategy']} tokens.")
+        return "RETRY"
+
+    def execute_query_with_metrics(state):
+        """
+        Ejecuta la consulta SQL generada con métricas integradas.
+        
+        Args:
+            state (dict): Estado actual del grafo.
+            
+        Returns:
+            dict: Estado actualizado con el resultado de la consulta SQL.
+        """
+        # Iniciar medición del nodo
+        node_context = metrics_collector.start_node("execute_query")
+        
+        try:
+            # Reutilizar la lógica de la función execute_query original
+            result_state = execute_query(state)
+            success = not result_state.get("sql_result", "").startswith("Error")
+            
+            # Finalizar medición del nodo
+            metrics_collector.end_node(node_context, result_state, success=success)
+            
+            return result_state
+            
+        except Exception as e:
+            logger.error(f"Error en execute_query_with_metrics: {str(e)}")
+            error_state = {**state, "sql_result": f"Error: {str(e)}"}
+            
+            # Finalizar medición del nodo con error
+            metrics_collector.end_node(node_context, error_state, success=False)
+            
+            return error_state
+
     # Añadir nodos al grafo
     workflow.add_node("retrieve", retrieve)
     workflow.add_node("grade_relevance", grade_relevance)
     workflow.add_node("generate", generate)
-    workflow.add_node("evaluate", evaluate)
-    workflow.add_node("execute_query", execute_query)
+    workflow.add_node("evaluate_response_granular", evaluate_response_granular)
+    workflow.add_node("execute_query", execute_query_with_metrics)
     workflow.add_node("generate_sql_interpretation", generate_sql_interpretation)
     
-    # Definir bordes - flujo simplificado
+    # Definir bordes - flujo con recuperación adaptativa
     workflow.set_entry_point("retrieve")
     workflow.add_edge("retrieve", "grade_relevance")
     workflow.add_edge("grade_relevance", "generate")
-    workflow.add_edge("generate", "evaluate")
+    workflow.add_edge("generate", "evaluate_response_granular")
     
-    # Definir condición para ejecución de consulta SQL o verificación de reintento
-    def route_after_evaluate(state):
+    # Definir condición para enrutamiento después de evaluación granular
+    def route_after_granular_evaluation(state):
         """
-        Determina qué hacer después de evaluar la respuesta:
+        Determina qué hacer después de la evaluación granular:
         - Ejecutar SQL si es una consulta
-        - Reintentar si la respuesta no es buena
-        - Finalizar si todo está bien
+        - Reintentar con nueva estrategia si las métricas no son suficientes
+        - Finalizar si las métricas son buenas o se alcanzó el máximo de reintentos
         
         Args:
             state (dict): Estado actual del grafo.
@@ -825,44 +1074,22 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         Returns:
             str: Siguiente nodo a ejecutar
         """
-        # Verificar si es una consulta SQL
+        # Verificar si es una consulta SQL que necesita ejecución
         is_consulta = state.get("is_consulta", False)
         sql_query = state.get("sql_query")
         
-        if is_consulta and sql_query:
+        if is_consulta and sql_query and not state.get("sql_result"):
             logger.info("Se detectó una consulta SQL válida. Procediendo a ejecutarla.")
             return "execute_query"
         
-        # Si no es consulta, verificar si necesita reintento
-        retry_count = state.get("retry_count", 0)
-        hallucination_score = state.get("hallucination_score")
-        answer_score = state.get("answer_score")
+        # Usar la lógica de route_next_strategy para decidir si reintentar
+        decision = route_next_strategy(state)
         
-        # Función para extraer score de diferentes formatos
-        def extract_score(response):
-            if isinstance(response, dict) and "score" in response:
-                value = str(response["score"]).lower().strip()
-                return value == "yes" or value == "true" or value == "1"
-            return False
-        
-        # Determinar si hay problemas con la generación
-        is_hallucination = not extract_score(hallucination_score) if hallucination_score else False
-        is_unhelpful = not extract_score(answer_score) if answer_score else False
-        
-        # Lógica de reintento
-        max_retries = WORKFLOW_CONFIG.get("max_retries", 2)
-        should_retry = (is_hallucination and is_unhelpful) and retry_count < max_retries
-        
-        if should_retry:
-            logger.info(f"Reintentando (intento {retry_count+1}/{max_retries})")
-            logger.info(f"- Contiene alucinaciones: {is_hallucination}")
-            logger.info(f"- No aborda adecuadamente la pregunta: {is_unhelpful}")
-            return "generate"
-        else:
-            if retry_count >= max_retries and (is_hallucination or is_unhelpful):
-                logger.info(f"Máximo de reintentos alcanzado ({max_retries}). Finalizando con la mejor respuesta disponible.")
-            else:
-                logger.info("Generación exitosa. Finalizando.")
+        if decision == "RETRY":
+            logger.info(f"Reintentando con nueva estrategia: {state.get('chunk_strategy', DEFAULT_CHUNK_STRATEGY)}")
+            return "retrieve"
+        else:  # decision == "END"
+            logger.info("Finalizando workflow.")
             return "END"
     
     # Definir condición para después de ejecutar consulta SQL
@@ -884,17 +1111,35 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
         else:
             return "END"
     
-    # Añadir borde condicional para la decisión después de evaluar
+    # Añadir borde condicional desde evaluate_response_granular
     workflow.add_conditional_edges(
-        "evaluate",
-        route_after_evaluate,
+        "evaluate_response_granular",
+        route_after_granular_evaluation,
         {
             "execute_query": "execute_query",
-            "generate": "generate",
             "retrieve": "retrieve",
             "END": END
         }
     )
+    
+    # Definir condición para después de ejecutar consulta SQL
+    def route_after_execute_query(state):
+        """
+        Determina qué hacer después de ejecutar la consulta SQL.
+        
+        Args:
+            state (dict): Estado actual del grafo.
+            
+        Returns:
+            str: Siguiente nodo a ejecutar
+        """
+        needs_interpretation = state.get("needs_sql_interpretation", False)
+        
+        if needs_interpretation:
+            logger.info("Generando interpretación de resultados SQL...")
+            return "generate_sql_interpretation"
+        else:
+            return "END"
     
     # Añadir borde condicional desde execute_query
     workflow.add_conditional_edges(
@@ -909,4 +1154,48 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
     # Añadir borde desde interpretación SQL a END
     workflow.add_edge("generate_sql_interpretation", END)
     
-    return workflow
+    # Crear función wrapper para el workflow que maneje las métricas
+    def workflow_with_metrics(input_data):
+        """
+        Ejecuta el workflow con recolección de métricas integrada.
+        
+        Args:
+            input_data: Datos de entrada del workflow
+            
+        Returns:
+            Resultado del workflow con métricas recopiladas
+        """
+        # Extraer datos iniciales
+        question = input_data.get("question", "")
+        chunk_strategy = input_data.get("chunk_strategy", DEFAULT_CHUNK_STRATEGY)
+        
+        # Iniciar recolección de métricas
+        metrics_collector.start_workflow(question, chunk_strategy)
+        
+        try:
+            # Compilar y ejecutar el workflow
+            compiled_workflow = workflow.compile()
+            result = compiled_workflow.invoke(input_data)
+            
+            # Finalizar métricas con éxito
+            metrics_collector.end_workflow(result, success=True)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error en la ejecución del workflow: {str(e)}")
+            # Finalizar métricas con error
+            error_state = input_data.copy()
+            error_state.update({"generation": f"Error en workflow: {str(e)}", "success": False})
+            metrics_collector.end_workflow(error_state, success=False)
+            
+            raise e
+    
+    # Compilar el workflow
+    compiled_workflow = workflow.compile()
+    
+    # Retornar tanto el workflow compilado como la función con métricas
+    compiled_workflow.invoke_with_metrics = workflow_with_metrics
+    compiled_workflow.metrics_collector = metrics_collector
+    
+    return compiled_workflow

@@ -204,3 +204,37 @@ CUBO_EN_ES = {
     "PTGAS": "admin_staff",
     "puesto": "job_positions"
 } 
+
+# Añadir al final del archivo las nuevas constantes para recuperación adaptativa
+
+# Configuración de Recuperación Adaptativa
+CHUNK_STRATEGIES = ["256", "512", "1024"]
+DEFAULT_CHUNK_STRATEGY = "512"
+MAX_RETRIES = 2  # Total 3 intentos (inicial + 2 reintentos)
+
+# Umbrales de evaluación granular
+EVALUATION_THRESHOLDS = {
+    "faithfulness": 0.7,
+    "context_precision": 0.6,
+    "context_recall": 0.6,
+    "answer_relevance": 0.7
+}
+
+# Configuración de colecciones por estrategia
+COLLECTION_CONFIG = {
+    "256": {
+        "collection_name": "segeda_collection_256",
+        "chunk_size": 256,
+        "chunk_overlap": 25
+    },
+    "512": {
+        "collection_name": "segeda_collection_512", 
+        "chunk_size": 512,
+        "chunk_overlap": 50
+    },
+    "1024": {
+        "collection_name": "segeda_collection_1024",
+        "chunk_size": 1024,
+        "chunk_overlap": 100
+    }
+} 

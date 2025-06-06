@@ -20,8 +20,7 @@ from langagent.models.llm import (
     create_llm, 
     create_rag_chain, 
     create_retrieval_grader, 
-    create_hallucination_grader, 
-    create_answer_grader, 
+    create_granular_evaluator, 
     create_query_rewriter,
     create_context_generator,
     create_rag_sql_chain,
@@ -80,13 +79,16 @@ class LangChainAgent:
         self.retriever = None
         self.rag_chain = None
         self.retrieval_grader = None
-        self.hallucination_grader = None
-        self.answer_grader = None
+        self.granular_evaluator = None
         self.workflow = None
         self.ambito_workflow = None
         self.app = None
         self.query_rewriter = None
         self.sql_interpretation_chain = None
+        
+        # Nuevos componentes para recuperación adaptativa
+        self.adaptive_retrievers = {}  # Diccionario de retrievers por estrategia
+        self.adaptive_vectorstores = {}  # Diccionario de vectorstores por estrategia
         
         # Obtener la instancia de vectorstore
         self.vectorstore_handler = VectorStoreFactory.get_vectorstore_instance(self.vector_db_type)
@@ -169,8 +171,12 @@ class LangChainAgent:
                 else:
                     logger.error("Error al crear vectorstore Chroma")
         
-        # Crear el retriever
+        # Crear el retriever principal (mantener compatibilidad)
         self.retriever = self.vectorstore_handler.create_retriever(self.vectorstore)
+        
+        # Crear retrievers adaptativos si está habilitado
+        if VECTORSTORE_CONFIG.get("use_adaptive_retrieval", False):
+            self._setup_adaptive_retrievers()
         
         # Crear cadenas
         logger.info("Creando cadenas de procesamiento...")
@@ -180,9 +186,8 @@ class LangChainAgent:
         logger.info("Usando modelo secundario para evaluación de relevancia...")
         self.retrieval_grader = create_retrieval_grader(self.llm2)
         
-        logger.info("Usando modelo terciario para evaluación de alucinaciones y respuestas...")
-        self.hallucination_grader = create_hallucination_grader(self.llm3)
-        self.answer_grader = create_answer_grader(self.llm3)
+        logger.info("Usando modelo terciario para evaluación granular...")
+        self.granular_evaluator = create_granular_evaluator(self.llm3)
         
         logger.info("Usando modelo secundario para reescritura de consultas...")
         self.query_rewriter = create_query_rewriter(self.llm2)
@@ -194,8 +199,8 @@ class LangChainAgent:
         logger.info("Creando flujos de trabajo...")
         self._create_workflows()
         
-        # Compilar workflows
-        self.app = self.workflow.compile()
+        # Compilar workflows - ya están compilados en create_workflow
+        self.app = self.workflow
         self.ambito_app = self.ambito_workflow.compile()
     
     def _create_workflows(self):
@@ -207,10 +212,10 @@ class LangChainAgent:
             retriever=self.retriever,
             rag_sql_chain=self.rag_sql_chain,
             retrieval_grader=self.retrieval_grader,
-            hallucination_grader=self.hallucination_grader,
-            answer_grader=self.answer_grader,
+            granular_evaluator=self.granular_evaluator,
             query_rewriter=self.query_rewriter,
-            sql_interpretation_chain=self.sql_interpretation_chain
+            sql_interpretation_chain=self.sql_interpretation_chain,
+            adaptive_retrievers=self.adaptive_retrievers  # Pasar retrievers adaptativos
         )
         
         # Crear el flujo de trabajo del agente de ámbito
@@ -248,11 +253,14 @@ class LangChainAgent:
                 "question": query,
                 "ambito": ambito_result["ambito"],
                 "cubos": ambito_result["cubos"],
-                "is_consulta": ambito_result.get("is_consulta", False)
+                "is_consulta": ambito_result.get("is_consulta", False),
+                "chunk_strategy": "512",  # Estrategia inicial por defecto
+                "retry_count": 0,
+                "evaluation_metrics": {}
             }
             
-            # Ejecutar el workflow principal
-            result = self.app.invoke(initial_state)
+            # Ejecutar el workflow principal con métricas
+            result = self.app.invoke_with_metrics(initial_state)
             
             # Añadir información del ámbito al resultado
             result["ambito"] = ambito_result["ambito"]
@@ -262,4 +270,61 @@ class LangChainAgent:
             return result
         
         # Si no se pudo identificar el ámbito, ejecutar el workflow principal con la consulta original
-        return self.app.invoke({"question": query}) 
+        default_state = {
+            "question": query,
+            "chunk_strategy": "512",
+            "retry_count": 0,
+            "evaluation_metrics": {}
+        }
+        return self.app.invoke_with_metrics(default_state)
+
+    def _setup_adaptive_retrievers(self):
+        """
+        Configura los retrievers adaptativos para diferentes estrategias de chunk.
+        Crea vectorstores y retrievers para chunks de 256, 512 y 1024 tokens.
+        """
+        logger.info("Configurando retrievers adaptativos...")
+        
+        adaptive_collections = VECTORSTORE_CONFIG.get("adaptive_collections", {})
+        
+        for strategy, collection_name in adaptive_collections.items():
+            logger.info(f"Configurando retriever para estrategia {strategy} tokens...")
+            
+            try:
+                # Intentar cargar vectorstore existente para esta estrategia
+                vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, collection_name)
+                
+                if vectorstore:
+                    logger.info(f"Vectorstore {collection_name} cargado correctamente")
+                    self.adaptive_vectorstores[strategy] = vectorstore
+                    # Crear retriever para esta estrategia
+                    self.adaptive_retrievers[strategy] = self.vectorstore_handler.create_retriever(vectorstore)
+                else:
+                    logger.warning(f"No se pudo cargar vectorstore {collection_name} para estrategia {strategy}")
+                    # Usar el vectorstore principal como fallback
+                    self.adaptive_vectorstores[strategy] = self.vectorstore
+                    self.adaptive_retrievers[strategy] = self.retriever
+                    
+            except Exception as e:
+                logger.error(f"Error al configurar retriever para estrategia {strategy}: {str(e)}")
+                # Usar el vectorstore principal como fallback
+                self.adaptive_vectorstores[strategy] = self.vectorstore
+                self.adaptive_retrievers[strategy] = self.retriever
+        
+        logger.info(f"Retrievers adaptativos configurados: {list(self.adaptive_retrievers.keys())}")
+    
+    def get_retriever_for_strategy(self, strategy):
+        """
+        Obtiene el retriever apropiado para la estrategia especificada.
+        
+        Args:
+            strategy (str): Estrategia de chunk ("256", "512", "1024")
+            
+        Returns:
+            Retriever: Retriever configurado para la estrategia o retriever principal como fallback
+        """
+        if strategy in self.adaptive_retrievers:
+            return self.adaptive_retrievers[strategy]
+        else:
+            logger.warning(f"Estrategia {strategy} no encontrada, usando retriever principal")
+            return self.retriever 

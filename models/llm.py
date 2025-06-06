@@ -183,45 +183,28 @@ def create_retrieval_grader(llm):
     retrieval_grader = prompt | llm | JsonOutputParser()
     return retrieval_grader
 
-def create_hallucination_grader(llm):
+def create_granular_evaluator(llm):
     """
-    Crea un evaluador para determinar si una generación contiene alucinaciones.
+    Crea un evaluador granular que evalúa múltiples métricas de calidad en una sola evaluación.
+    
+    Este evaluador reemplaza a los evaluadores individuales (hallucination_grader y answer_grader)
+    y proporciona métricas detalladas para la recuperación adaptativa.
     
     Args:
-        llm: Modelo de lenguaje a utilizar.
+        llm: Modelo de lenguaje a utilizar (debe ser qwen para tener el prompt correspondiente).
         
     Returns:
-        Chain: Cadena de evaluación configurada.
+        Chain: Cadena de evaluación granular configurada.
     """
-    # Prompt para evaluar alucinaciones
-    prompt_template = _get_prompt_template(llm, "hallucination_grader")
+    # Prompt para evaluación granular (solo disponible para qwen)
+    prompt_template = _get_prompt_template(llm, "granular_evaluator")
     prompt = PromptTemplate(
         template=prompt_template,
-        input_variables=["documents", "generation"],
+        input_variables=["question", "documents", "generation"],
     )
     
-    hallucination_grader = prompt | llm | JsonOutputParser()
-    return hallucination_grader
-
-def create_answer_grader(llm):
-    """
-    Crea un evaluador para determinar si una respuesta es útil para resolver una pregunta.
-    
-    Args:
-        llm: Modelo de lenguaje a utilizar.
-        
-    Returns:
-        Chain: Cadena de evaluación configurada.
-    """
-    # Prompt para evaluar utilidad de respuestas
-    prompt_template = _get_prompt_template(llm, "answer_grader")
-    prompt = PromptTemplate(
-        template=prompt_template,
-        input_variables=["generation", "question"],
-    )
-    
-    answer_grader = prompt | llm | JsonOutputParser()
-    return answer_grader
+    granular_evaluator = prompt | llm | JsonOutputParser()
+    return granular_evaluator
 
 def create_question_router(llm):
     """
