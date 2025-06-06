@@ -1032,6 +1032,11 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             )
             
             if metrics_below_threshold:
+                # Verificar si el próximo intento excedería el máximo ANTES de hacer RETRY
+                if new_retry_count >= MAX_RETRIES:
+                    logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido ({MAX_RETRIES + 1}). Finalizando.")
+                    return "END"
+                
                 # Mantener la misma estrategia de chunk
                 logger.info(f"Recuperación adaptativa deshabilitada. Reintentando con la misma estrategia: {current_strategy} tokens.")
                 # No cambiar state["chunk_strategy"] - mantener la actual
@@ -1045,6 +1050,11 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         # Context Recall bajo → necesitamos más contexto (chunks más grandes)
         if context_recall < EVALUATION_THRESHOLDS["context_recall"]:
             if current_strategy != "1024":
+                # Verificar si el próximo intento excedería el máximo ANTES de hacer RETRY
+                if new_retry_count >= MAX_RETRIES:
+                    logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido ({MAX_RETRIES + 1}). Finalizando.")
+                    return "END"
+                
                 state["chunk_strategy"] = "1024"
                 logger.info(f"Context Recall bajo ({context_recall}). Cambiando a chunks de 1024 tokens.")
                 return "RETRY"
@@ -1053,12 +1063,22 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         if (context_precision < EVALUATION_THRESHOLDS["context_precision"] or
             faithfulness < EVALUATION_THRESHOLDS["faithfulness"]):
             if current_strategy != "256":
+                # Verificar si el próximo intento excedería el máximo ANTES de hacer RETRY
+                if new_retry_count >= MAX_RETRIES:
+                    logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido ({MAX_RETRIES + 1}). Finalizando.")
+                    return "END"
+                
                 state["chunk_strategy"] = "256"
                 logger.info(f"Context Precision ({context_precision}) o Faithfulness ({faithfulness}) bajos. Cambiando a chunks de 256 tokens.")
                 return "RETRY"
         
         # Answer Relevance bajo → probar estrategia diferente
         if answer_relevance < EVALUATION_THRESHOLDS["answer_relevance"]:
+            # Verificar si el próximo intento excedería el máximo ANTES de hacer RETRY
+            if new_retry_count >= MAX_RETRIES:
+                logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido ({MAX_RETRIES + 1}). Finalizando.")
+                return "END"
+            
             # Ciclar entre estrategias: 512 -> 1024 -> 256 -> 512
             if current_strategy == "512":
                 state["chunk_strategy"] = "1024"
@@ -1071,6 +1091,11 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             return "RETRY"
         
         # Si llegamos aquí, las métricas no son suficientemente buenas pero no hay estrategia clara
+        # Verificar si el próximo intento excedería el máximo ANTES de hacer RETRY
+        if new_retry_count >= MAX_RETRIES:
+            logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido ({MAX_RETRIES + 1}). Finalizando.")
+            return "END"
+        
         # Probar con la estrategia contraria a la actual
         if current_strategy == "512":
             state["chunk_strategy"] = "1024"
