@@ -1215,25 +1215,6 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         }
     )
     
-    # Definir condición para después de ejecutar consulta SQL
-    def route_after_execute_query(state):
-        """
-        Determina qué hacer después de ejecutar la consulta SQL.
-        
-        Args:
-            state (dict): Estado actual del grafo.
-            
-        Returns:
-            str: Siguiente nodo a ejecutar
-        """
-        needs_interpretation = state.get("needs_sql_interpretation", False)
-        
-        if needs_interpretation:
-            logger.info("Generando interpretación de resultados SQL...")
-            return "generate_sql_interpretation"
-        else:
-            return "END"
-    
     # Añadir borde condicional desde execute_query
     workflow.add_conditional_edges(
         "execute_query",
@@ -1246,6 +1227,14 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
     
     # Añadir borde desde interpretación SQL a END
     workflow.add_edge("generate_sql_interpretation", END)
+    
+    # Compilar el workflow con configuración de recursión
+    compiled_workflow = workflow.compile(
+        debug=False,
+        checkpointer=None,
+        interrupt_before=None,
+        interrupt_after=None
+    )
     
     # Crear función wrapper para el workflow que maneje las métricas
     def workflow_with_metrics(input_data):
@@ -1271,9 +1260,9 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         metrics_collector.start_workflow(question, chunk_strategy)
         
         try:
-            # Compilar y ejecutar el workflow
-            compiled_workflow = workflow.compile()
-            result = compiled_workflow.invoke(input_data)
+            # Ejecutar el workflow con configuración explícita de recursión
+            config = {"recursion_limit": 10}  # Límite de recursión explícito
+            result = compiled_workflow.invoke(input_data, config=config)
             
             # Finalizar métricas con éxito
             metrics_collector.end_workflow(result, success=True)
@@ -1289,10 +1278,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             
             raise e
     
-    # Compilar el workflow
-    compiled_workflow = workflow.compile()
-    
-    # Retornar tanto el workflow compilado como la función con métricas
+    # Retornar el workflow compilado con la función de métricas
     compiled_workflow.invoke_with_metrics = workflow_with_metrics
     compiled_workflow.metrics_collector = metrics_collector
     
