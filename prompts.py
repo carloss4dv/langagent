@@ -481,6 +481,7 @@ PROMPTS = {
         Step 3: Identify potential cubes that might apply (PDI, PTGAS, CARGO, MATRÍCULA, RENDIMIENTO, EGRESADOS, PROYECTOS, etc.)
         Step 4: Assess available context to understand user intent and knowledge gaps through logical analysis
         Step 5: Generate helpful clarification question that guides toward specific SEGEDA scope systematically
+      
         
         CLARIFICATION GUIDELINES:
         1. Generate questions that help identify the correct SEGEDA scope through structured analysis
@@ -489,6 +490,14 @@ PROMPTS = {
         4. Keep questions clear and concise while being maximally helpful
         5. Maintain Spanish language and preserve special characters
         6. Focus on resolving scope ambiguity rather than detailed technical questions
+        7. If the question is about a specific cube, provide a clarification question that helps identify the correct cube.
+        8. If the question is about a specific scope, provide a clarification question that helps identify the correct scope.
+        9. If the question is about a specific measure, provide a clarification question that helps identify the correct measure.
+        10. If the question is about a specific dimension, provide a clarification question that helps identify the correct dimension.
+        11. If the question is about a specific attribute, provide a clarification question that helps identify the correct attribute.
+        12. If the question is about a specific value, provide a clarification question that helps identify the correct value.
+        13. If the question is about a specific period, provide a clarification question that helps identify the correct period.
+        14. If the question is about a specific unit, provide a clarification question that helps identify the correct unit.
         
         RESPONSE GUIDELINES:
         - Generate helpful clarification questions in Spanish using systematic reasoning

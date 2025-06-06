@@ -10,7 +10,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from prompts import PROMPTS
+    from prompts_old import PROMPTS
     print("✅ Importación de prompts exitosa")
 except ImportError as e:
     print(f"❌ Error al importar prompts: {e}")

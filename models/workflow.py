@@ -93,6 +93,53 @@ def normalize_name(name: str) -> str:
     
     return normalized
 
+def validate_and_clean_context(context, question):
+    """
+    Valida y limpia el contexto para asegurar que es un string válido antes de pasarlo a las cadenas RAG.
+    
+    Args:
+        context: Contexto a validar y limpiar
+        question: Pregunta a validar
+        
+    Returns:
+        Tuple[str, str]: (contexto limpio, pregunta limpia)
+    """
+    # Asegurar que el contexto es un string
+    if isinstance(context, dict):
+        logger.warning(f"Contexto es un diccionario, convirtiendo a string: {list(context.keys())}")
+        if "context" in context:
+            context = context["context"]
+        else:
+            context = str(context)
+    elif isinstance(context, list):
+        logger.warning("Contexto es una lista, uniendo elementos")
+        context = "\n".join([str(item) for item in context])
+    elif not isinstance(context, str):
+        logger.warning(f"Contexto tiene tipo inesperado {type(context)}, convirtiendo a string")
+        context = str(context)
+    
+    # Asegurar que la pregunta es un string
+    if isinstance(question, dict):
+        logger.warning(f"Pregunta es un diccionario, extrayendo: {question}")
+        if "question" in question:
+            question = question["question"]
+        else:
+            question = str(question)
+    elif not isinstance(question, str):
+        logger.warning(f"Pregunta tiene tipo inesperado {type(question)}, convirtiendo a string")
+        question = str(question)
+    
+    # Validar que no están vacíos
+    if not context.strip():
+        logger.warning("Contexto está vacío después de la limpieza")
+        context = "No hay contexto disponible."
+    
+    if not question.strip():
+        logger.warning("Pregunta está vacía después de la limpieza")
+        question = "¿Qué información necesitas?"
+    
+    return context, question
+
 def find_relevant_cubos_by_keywords(query: str, available_cubos: List[str]) -> Tuple[List[str], Optional[str]]:
     """
     Encuentra cubos relevantes basados en palabras clave y ámbitos en la consulta.
@@ -456,18 +503,34 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                     doc_string = f"\n[DOCUMENTO {idx+1} - Tipo inesperado]\n{str(doc)}\n"
                     context_docs.append(doc_string)
             
+            # Crear el contexto completo como string
             context = "\n".join(context_docs)
             
+            # Validar y limpiar el contexto y la pregunta
+            clean_context, clean_question = validate_and_clean_context(context, rewritten_question)
+            
             logger.info("Generando respuesta...")
+            logger.info(f"Tamaño del contexto: {len(clean_context)} caracteres")
+            logger.info(f"Pregunta reescrita: {clean_question}")
+            
+            # DEBUG: Mostrar una muestra del contexto para debug
+            logger.debug(f"Muestra del contexto limpio (primeros 500 caracteres): {clean_context[:500]}")
+            logger.debug(f"Tipo del contexto: {type(clean_context)}")
+            logger.debug(f"Tipo de la pregunta: {type(clean_question)}")
             
             # Determinar si usar SQL o RAG basado en si es una consulta
             if is_consulta and rag_sql_chain:
                 logger.info("Se detectó que es una consulta SQL. Generando consulta SQL...")
                 # Generar consulta SQL utilizando sql_query_chain
-                sql_query = rag_sql_chain["sql_query_chain"].invoke({
-                    "context": context,
-                    "question": rewritten_question
-                })
+                
+                # Asegurar que se pasan los parámetros correctamente
+                sql_input = {
+                    "context": clean_context,
+                    "question": clean_question
+                }
+                logger.info(f"Input para SQL query chain: context length={len(clean_context)}, question='{clean_question}'")
+                
+                sql_query = rag_sql_chain["sql_query_chain"].invoke(sql_input)
                 
                 # Guardar la consulta SQL generada
                 state["sql_query"] = sql_query
@@ -478,10 +541,15 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             else:
                 # Usar la cadena RAG estándar para preguntas regulares
                 logger.info("Generando respuesta con RAG estándar...")
-                response = rag_sql_chain["answer_chain"].invoke({
-                    "context": context,
-                    "question": rewritten_question
-                })
+                
+                # Asegurar que se pasan los parámetros correctamente
+                rag_input = {
+                    "context": clean_context,
+                    "question": clean_question
+                }
+                logger.info(f"Input para RAG chain: context length={len(clean_context)}, question='{clean_question}'")
+                
+                response = rag_sql_chain["answer_chain"].invoke(rag_input)
                 
                 # Extraer solo el campo answer si la respuesta es un diccionario
                 if isinstance(response, dict) and "answer" in response:
@@ -490,12 +558,15 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                     response_json = response
                 else:
                     logger.warning(f"Advertencia: Formato de respuesta no esperado: {type(response)}")
+                    logger.warning(f"Respuesta completa: {response}")
                     response_json = str(response)
+            
+            logger.info(f"Respuesta generada exitosamente: {response_json[:100]}...")
             
             return {
                 "documents": context_docs,
                 "question": question,
-                "rewritten_question": rewritten_question,
+                "rewritten_question": clean_question,
                 "generation": response_json,
                 "retry_count": retry_count,
                 "relevant_cubos": relevant_cubos,
@@ -507,6 +578,9 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             
         except Exception as e:
             logger.error(f"Error al generar respuesta: {str(e)}")
+            logger.error(f"Tipo de error: {type(e)}")
+            import traceback
+            logger.error(f"Traceback completo: {traceback.format_exc()}")
             response_json = f"Se produjo un error al generar la respuesta: {str(e)}"
             return {
                 "documents": documents,
@@ -644,15 +718,26 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             
             combined_context = "\n".join(context_parts)
             
+            # Preparar la pregunta de interpretación
+            interpretation_query = f"Interpreta y explica los siguientes resultados SQL para la pregunta '{rewritten_question}': {sql_result}"
+            
+            # Validar y limpiar el contexto y la pregunta
+            clean_context, clean_question = validate_and_clean_context(combined_context, interpretation_query)
+            
             # Generar interpretación usando el sql_interpretation_chain
             logger.info("Generando interpretación de resultados SQL...")
+            logger.info(f"Tamaño del contexto combinado: {len(clean_context)} caracteres")
             
             # Usar sql_interpretation_chain que está disponible en el scope
             if sql_interpretation_chain:
-                response = sql_interpretation_chain.invoke({
-                    "context": combined_context,
-                    "question": f"Interpreta y explica los siguientes resultados SQL para la pregunta '{rewritten_question}': {sql_result}"
-                })
+                # Preparar el input de manera explícita
+                interpretation_input = {
+                    "context": clean_context,
+                    "question": clean_question
+                }
+                logger.info(f"Input para interpretación SQL: context length={len(clean_context)}")
+                
+                response = sql_interpretation_chain.invoke(interpretation_input)
                 
                 # Extraer la respuesta del JSON
                 if isinstance(response, dict) and "answer" in response:
@@ -660,12 +745,16 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                 elif isinstance(response, str):
                     interpretation = response
                 else:
+                    logger.warning(f"Advertencia: Formato de respuesta de interpretación no esperado: {type(response)}")
+                    logger.warning(f"Respuesta completa de interpretación: {response}")
                     interpretation = str(response)
             else:
                 # Fallback si no hay cadena de interpretación disponible
+                logger.warning("No hay cadena de interpretación SQL disponible, usando fallback")
                 interpretation = f"Los resultados de la consulta muestran: {sql_result}. Estos datos corresponden a información del sistema SEGEDA (DATUZ) de la Universidad de Zaragoza."
             
             logger.info("Interpretación generada con éxito.")
+            logger.info(f"Interpretación generada: {interpretation[:100]}...")
             
             return {
                 **state,
@@ -675,6 +764,9 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
             
         except Exception as e:
             logger.error(f"Error al generar interpretación SQL: {str(e)}")
+            logger.error(f"Tipo de error: {type(e)}")
+            import traceback
+            logger.error(f"Traceback completo: {traceback.format_exc()}")
             return {
                 **state,
                 "generation": f"Se obtuvieron los siguientes resultados de la consulta: {sql_result}",
