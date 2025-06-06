@@ -994,11 +994,6 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         adaptive_retrieval_enabled = VECTORSTORE_CONFIG.get("use_adaptive_retrieval", False)
         logger.info(f"Recuperación adaptativa habilitada: {adaptive_retrieval_enabled}")
         
-        # Si ya hicimos el máximo de intentos, terminar siempre
-        if retry_count >= MAX_RETRIES:
-            logger.info(f"Máximo de reintentos alcanzado ({MAX_RETRIES}). Finalizando.")
-            return "END"
-        
         # Extraer métricas con valores por defecto
         faithfulness = evaluation_metrics.get("faithfulness", 0.0)
         context_precision = evaluation_metrics.get("context_precision", 0.0)
@@ -1015,9 +1010,16 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             logger.info("Todas las métricas superan los umbrales. Finalizando con éxito.")
             return "END"
         
-        # Incrementar contador de reintentos
+        # Si ya hicimos el máximo de intentos, terminar siempre
+        if retry_count >= MAX_RETRIES:
+            logger.info(f"Máximo de reintentos alcanzado ({MAX_RETRIES}). Finalizando.")
+            return "END"
+        
+        # Incrementar contador de reintentos para el PRÓXIMO intento
         new_retry_count = retry_count + 1
         state["retry_count"] = new_retry_count
+        
+        logger.info(f"Preparando reintento {new_retry_count + 1} (máximo permitido: {MAX_RETRIES + 1})")
         
         # Si la recuperación adaptativa está desactivada, mantener la misma estrategia pero permitir reintentos
         if not adaptive_retrieval_enabled:
