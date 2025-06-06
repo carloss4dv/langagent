@@ -1077,7 +1077,6 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         
         # Incrementar contador de reintentos para el PRÓXIMO intento
         new_retry_count = retry_count + 1
-        state["retry_count"] = new_retry_count
         
         logger.info(f"Preparando reintento {new_retry_count + 1} (máximo permitido: {MAX_RETRIES + 1})")
         
@@ -1170,6 +1169,26 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         logger.info(f"Métricas subóptimas. Probando estrategia alternativa: {state['chunk_strategy']} tokens.")
         return "RETRY"
 
+    def increment_retry_count(state):
+        """
+        Incrementa el contador de reintentos antes de volver a retrieve.
+        
+        Args:
+            state (dict): Estado actual del grafo.
+            
+        Returns:
+            dict: Estado actualizado con retry_count incrementado.
+        """
+        current_retry_count = state.get("retry_count", 0)
+        new_retry_count = current_retry_count + 1
+        
+        logger.info(f"Incrementando retry_count de {current_retry_count} a {new_retry_count}")
+        
+        return {
+            **state,
+            "retry_count": new_retry_count
+        }
+
     def execute_query_with_metrics(state):
         """
         Ejecuta la consulta SQL generada con métricas integradas.
@@ -1207,6 +1226,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
     workflow.add_node("grade_relevance", grade_relevance)
     workflow.add_node("generate", generate)
     workflow.add_node("evaluate_response_granular", evaluate_response_granular)
+    workflow.add_node("increment_retry_count", increment_retry_count)
     workflow.add_node("execute_query", execute_query_with_metrics)
     workflow.add_node("generate_sql_interpretation", generate_sql_interpretation)
     
@@ -1215,6 +1235,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
     workflow.add_edge("retrieve", "grade_relevance")
     workflow.add_edge("grade_relevance", "generate")
     workflow.add_edge("generate", "evaluate_response_granular")
+    workflow.add_edge("increment_retry_count", "retrieve")
     
     # Definir condición para enrutamiento después de evaluación granular
     def route_after_granular_evaluation(state):
@@ -1244,7 +1265,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         if decision == "RETRY":
             logger.info(f"Reintentando con nueva estrategia: {state.get('chunk_strategy', DEFAULT_CHUNK_STRATEGY)}")
             logger.info(f"Estado antes de RETRY - retry_count: {state.get('retry_count', 0)}")
-            return "retrieve"
+            return "increment_retry_count"
         else:  # decision == "END"
             logger.info("Finalizando workflow.")
             logger.info(f"Estado final - retry_count: {state.get('retry_count', 0)}")
@@ -1275,7 +1296,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         route_after_granular_evaluation,
         {
             "execute_query": "execute_query",
-            "retrieve": "retrieve",
+            "increment_retry_count": "increment_retry_count",
             "END": END
         }
     )
