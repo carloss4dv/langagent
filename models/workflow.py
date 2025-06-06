@@ -481,26 +481,67 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         rewritten_question = state.get("rewritten_question", question)
         retrieval_details = state.get("retrieval_details", {})
         
+        # BYPASS TEMPORAL: Saltar grading si hay problemas con el retrieval_grader
+        BYPASS_GRADING = False  # Cambiar a False cuando el retrieval_grader funcione correctamente
+        
+        if BYPASS_GRADING:
+            logger.warning("BYPASS activado: Saltando evaluación de relevancia, usando todos los documentos")
+            retrieval_details.update({
+                "relevant_count": len(documents),
+                "relevance_checked": False,
+                "bypass_used": True
+            })
+            
+            result_state = {
+                **state,
+                "documents": documents,
+                "retrieval_details": retrieval_details
+            }
+            
+            # Finalizar medición del nodo
+            metrics_collector.end_node(node_context, result_state, success=True)
+            
+            return result_state
+        
         try:
             # Comprobar si los documentos son relevantes
             relevant_docs = []
-            for doc in documents:
-                document_data = {
-                    "content": doc.page_content,
-                    "metadata": doc.metadata,
-                    "source": doc.metadata.get("source", "unknown")
-                }
+            logger.info(f"Evaluando relevancia de {len(documents)} documentos...")
+            
+            for idx, doc in enumerate(documents):
+                logger.info(f"Evaluando documento {idx + 1}/{len(documents)}")
                 
-                relevance = retrieval_grader.invoke({
-                    "content": document_data["content"],
-                    "metadata": str(document_data["metadata"]),
-                    "source": document_data["source"],
-                    "question": question,
-                    "ambito": ambito,
-                })
-                
-                if isinstance(relevance, dict) and relevance.get("score", "").lower() == "yes":
+                try:
+                    document_data = {
+                        "content": doc.page_content,
+                        "metadata": doc.metadata,
+                        "source": doc.metadata.get("source", "unknown")
+                    }
+                    
+                    # Añadir timeout/protección para evitar recursión infinita
+                    logger.debug(f"Llamando a retrieval_grader para documento {idx + 1}")
+                    
+                    relevance = retrieval_grader.invoke({
+                        "content": document_data["content"],
+                        "metadata": str(document_data["metadata"]),
+                        "source": document_data["source"],
+                        "question": question,
+                        "ambito": ambito,
+                    })
+                    
+                    logger.debug(f"Relevancia evaluada para documento {idx + 1}: {relevance}")
+                    
+                    if isinstance(relevance, dict) and relevance.get("score", "").lower() == "yes":
+                        relevant_docs.append(doc)
+                        logger.debug(f"Documento {idx + 1} marcado como relevante")
+                    else:
+                        logger.debug(f"Documento {idx + 1} marcado como no relevante")
+                        
+                except Exception as doc_error:
+                    logger.error(f"Error al evaluar relevancia del documento {idx + 1}: {str(doc_error)}")
+                    # En caso de error, incluir el documento (enfoque conservativo)
                     relevant_docs.append(doc)
+                    logger.info(f"Documento {idx + 1} incluido por defecto debido a error en evaluación")
             
             # Si no hay documentos relevantes, usar todos
             if not relevant_docs and documents:
