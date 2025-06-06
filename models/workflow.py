@@ -1051,6 +1051,25 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             logger.info("Todas las métricas superan los umbrales. Finalizando con éxito.")
             return "END"
         
+        # Detectar respuestas de "información insuficiente" para evitar bucles infinitos
+        generation = state.get("generation", "")
+        insufficient_info_phrases = [
+            "no se encontró información",
+            "no tengo suficiente información",
+            "no hay información",
+            "información no disponible",
+            "no puedo responder",
+            "no dispongo de información",
+            "no se encuentra información"
+        ]
+        
+        # Si la respuesta indica falta de información, no reintentar
+        generation_lower = generation.lower()
+        if any(phrase in generation_lower for phrase in insufficient_info_phrases):
+            logger.info("Respuesta indica información insuficiente. Terminando para evitar bucle infinito.")
+            logger.info(f"Respuesta detectada: {generation[:100]}...")
+            return "END"
+        
         # Si ya hicimos el máximo de intentos, terminar siempre
         if retry_count >= MAX_RETRIES:
             logger.info(f"Máximo de reintentos alcanzado ({MAX_RETRIES}). Finalizando.")
@@ -1077,6 +1096,9 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                 if new_retry_count >= MAX_RETRIES:
                     logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido ({MAX_RETRIES + 1}). Finalizando.")
                     return "END"
+                
+                # Verificar si la respuesta indica falta de información (ya verificado arriba, pero por consistencia)
+                # Esta verificación ya se hizo arriba, así que podemos proceder
                 
                 # Mantener la misma estrategia de chunk
                 logger.info(f"Recuperación adaptativa deshabilitada. Reintentando con la misma estrategia: {current_strategy} tokens.")
