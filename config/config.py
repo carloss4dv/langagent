@@ -29,7 +29,7 @@ VECTORSTORE_CONFIG = {
     "k_retrieval": 6,          # Número de documentos a recuperar
     "similarity_threshold": 0.7,  # Umbral mínimo de similitud para considerar un documento relevante
     "max_docs_total": 15,       # Aumentar el límite total de documentos
-    "vector_db_type": "chroma", # Tipo de base de datos vectorial (chroma o milvus)
+    "vector_db_type": "milvus", # Tipo de base de datos vectorial (chroma o milvus)
     
     # Configuración para Milvus/Zilliz Cloud
     "milvus_uri": os.getenv("ZILLIZ_CLOUD_URI", "http://localhost:19532"),
@@ -42,7 +42,7 @@ VECTORSTORE_CONFIG = {
     
     # Configuración para enfoque de colección única
     "use_single_collection": True,  # Usar una sola colección para todos los documentos
-    "collection_name": "default_collection",  # Nombre de la colección unificada
+    "collection_name": "default_collection_1024",  # Nombre de la colección unificada
     "always_update_collection": False,  # Si se deben actualizar documentos en colección existente
     "filter_by_metadata": True,  # Habilitar filtrado por metadatos en consultas
     

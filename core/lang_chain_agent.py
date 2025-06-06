@@ -140,12 +140,14 @@ class LangChainAgent:
         if self.vector_db_type == "milvus":
             self.vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, VECTORSTORE_CONFIG["collection_name"])
             if self.vectorstore:
-                logger.info("Vectorstore cargado correctamente")
+                logger.info("Vectorstore existente cargado correctamente - no se cargarán documentos")
             else:
                 logger.info("Vectorstore no encontrado, creando nueva vectorstore...")
                 logger.info("Cargando documentos en vectorstore...")
                 if self.vectorstore_handler.load_documents(chunked_documents, source_documents=source_documents, embeddings=self.embeddings):
                     logger.info("Documentos cargados en vectorstore correctamente")
+                    # Cargar el vectorstore recién creado
+                    self.vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, VECTORSTORE_CONFIG["collection_name"])
                 else:
                     logger.error("Error al cargar documentos en vectorstore")
         elif self.vector_db_type == "chroma":
@@ -154,7 +156,7 @@ class LangChainAgent:
             logger.info(f"Intentando cargar vectorstore Chroma: {collection_name}")
             self.vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, collection_name)
             if self.vectorstore:
-                logger.info("Vectorstore Chroma cargado correctamente")
+                logger.info("Vectorstore Chroma existente cargado correctamente - no se cargarán documentos")
             else:
                 logger.info("Vectorstore Chroma no encontrado, creando nueva vectorstore...")
                 self.vectorstore = self.vectorstore_handler.create_vectorstore(
