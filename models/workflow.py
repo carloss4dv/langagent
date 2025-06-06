@@ -104,29 +104,39 @@ def validate_and_clean_context(context, question):
     Returns:
         Tuple[str, str]: (contexto limpio, pregunta limpia)
     """
+    logger.debug(f"ENTRADA validate_and_clean_context - context type: {type(context)}, question type: {type(question)}")
+    
     # Asegurar que el contexto es un string
     if isinstance(context, dict):
-        logger.warning(f"Contexto es un diccionario, convirtiendo a string: {list(context.keys())}")
+        logger.warning(f"Contexto es un diccionario, convirtiendo a string. Claves: {list(context.keys())}")
+        logger.debug(f"Contenido del diccionario de contexto: {context}")
         if "context" in context:
             context = context["context"]
+            logger.debug(f"Extraído contexto de clave 'context': {type(context)}")
         else:
             context = str(context)
+            logger.warning("No se encontró clave 'context', convirtiendo diccionario completo a string")
     elif isinstance(context, list):
         logger.warning("Contexto es una lista, uniendo elementos")
         context = "\n".join([str(item) for item in context])
     elif not isinstance(context, str):
         logger.warning(f"Contexto tiene tipo inesperado {type(context)}, convirtiendo a string")
+        logger.debug(f"Valor del contexto no-string: {context}")
         context = str(context)
     
     # Asegurar que la pregunta es un string
     if isinstance(question, dict):
-        logger.warning(f"Pregunta es un diccionario, extrayendo: {question}")
+        logger.warning(f"Pregunta es un diccionario, extrayendo. Claves: {list(question.keys())}")
+        logger.debug(f"Contenido del diccionario de pregunta: {question}")
         if "question" in question:
             question = question["question"]
+            logger.debug(f"Extraída pregunta de clave 'question': {type(question)}")
         else:
             question = str(question)
+            logger.warning("No se encontró clave 'question', convirtiendo diccionario completo a string")
     elif not isinstance(question, str):
         logger.warning(f"Pregunta tiene tipo inesperado {type(question)}, convirtiendo a string")
+        logger.debug(f"Valor de la pregunta no-string: {question}")
         question = str(question)
     
     # Validar que no están vacíos
@@ -137,6 +147,10 @@ def validate_and_clean_context(context, question):
     if not question.strip():
         logger.warning("Pregunta está vacía después de la limpieza")
         question = "¿Qué información necesitas?"
+    
+    logger.debug(f"SALIDA validate_and_clean_context - context type: {type(context)}, question type: {type(question)}")
+    logger.debug(f"Context preview: {context[:100]}...")
+    logger.debug(f"Question: {question}")
     
     return context, question
 
@@ -548,6 +562,16 @@ def create_workflow(retriever, retrieval_grader, hallucination_grader, answer_gr
                     "question": clean_question
                 }
                 logger.info(f"Input para RAG chain: context length={len(clean_context)}, question='{clean_question}'")
+                logger.debug(f"DEBUGGING RAG INPUT - Estructura completa del diccionario: {rag_input}")
+                logger.debug(f"DEBUGGING RAG INPUT - Tipo de context: {type(clean_context)}")
+                logger.debug(f"DEBUGGING RAG INPUT - Tipo de question: {type(clean_question)}")
+                logger.debug(f"DEBUGGING RAG INPUT - Context preview (primeros 200 caracteres): {clean_context[:200]}")
+                
+                # Verificar que no hay anidamiento incorrecto
+                if isinstance(clean_context, dict) or isinstance(clean_question, dict):
+                    logger.error(f"ERROR: Después de limpieza, aún hay diccionarios anidados!")
+                    logger.error(f"clean_context type: {type(clean_context)}, clean_question type: {type(clean_question)}")
+                    raise ValueError("Contexto o pregunta aún contienen estructuras anidadas después de la limpieza")
                 
                 response = rag_sql_chain["answer_chain"].invoke(rag_input)
                 

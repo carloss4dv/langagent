@@ -84,8 +84,8 @@ def create_rag_sql_chain(llm, db_uri=SQL_CONFIG["db_uri"], dialect=SQL_CONFIG["d
         {
             "dialect": lambda _: dialect,
             "table_info": lambda _: table_info,
-            "context": RunnablePassthrough(),
-            "question": RunnablePassthrough()
+            "context": lambda x: x["context"] if isinstance(x, dict) and "context" in x else x,
+            "question": lambda x: x["question"] if isinstance(x, dict) and "question" in x else x
         }
         | sql_prompt
         | llm
@@ -97,7 +97,10 @@ def create_rag_sql_chain(llm, db_uri=SQL_CONFIG["db_uri"], dialect=SQL_CONFIG["d
     prompt = PromptTemplate.from_template(rag_prompt_template)
     
     answer_chain = (
-        {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
+        {
+            "context": lambda x: x["context"] if isinstance(x, dict) and "context" in x else x,
+            "question": lambda x: x["question"] if isinstance(x, dict) and "question" in x else x
+        }
         | prompt
         | llm
         | JsonOutputParser()
@@ -149,7 +152,10 @@ def create_rag_chain(llm):
     
     # Definimos la cadena de RAG
     rag_chain = (
-        {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
+        {
+            "context": lambda x: x["context"] if isinstance(x, dict) and "context" in x else x,
+            "question": lambda x: x["question"] if isinstance(x, dict) and "question" in x else x
+        }
         | prompt
         | llm
         | JsonOutputParser()
@@ -298,5 +304,13 @@ def create_sql_interpretation(llm):
     )
     
     # Definir la cadena de interpretación SQL con JsonOutputParser
-    sql_interpretation_chain = prompt | llm | JsonOutputParser()
+    sql_interpretation_chain = (
+        {
+            "context": lambda x: x["context"] if isinstance(x, dict) and "context" in x else x,
+            "question": lambda x: x["question"] if isinstance(x, dict) and "question" in x else x
+        }
+        | prompt
+        | llm
+        | JsonOutputParser()
+    )
     return sql_interpretation_chain
