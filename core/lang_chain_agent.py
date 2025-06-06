@@ -176,7 +176,10 @@ class LangChainAgent:
         
         # Crear retrievers adaptativos si está habilitado
         if VECTORSTORE_CONFIG.get("use_adaptive_retrieval", False):
+            logger.info("Recuperación adaptativa habilitada - configurando retrievers adaptativos...")
             self._setup_adaptive_retrievers()
+        else:
+            logger.info("Recuperación adaptativa deshabilitada - usando solo retriever principal")
         
         # Crear cadenas
         logger.info("Creando cadenas de procesamiento...")
@@ -207,6 +210,12 @@ class LangChainAgent:
         """
         Crea los flujos de trabajo del agente utilizando LangGraph.
         """
+        # Determinar si pasar retrievers adaptativos o None
+        adaptive_retrievers_param = self.adaptive_retrievers if VECTORSTORE_CONFIG.get("use_adaptive_retrieval", False) else None
+        
+        # Obtener el nombre de la colección para extraer la estrategia inicial
+        collection_name = VECTORSTORE_CONFIG.get("collection_name", "default_collection")
+        
         # Crear el flujo de trabajo principal
         self.workflow = create_workflow(
             retriever=self.retriever,
@@ -215,7 +224,8 @@ class LangChainAgent:
             granular_evaluator=self.granular_evaluator,
             query_rewriter=self.query_rewriter,
             sql_interpretation_chain=self.sql_interpretation_chain,
-            adaptive_retrievers=self.adaptive_retrievers  # Pasar retrievers adaptativos
+            adaptive_retrievers=adaptive_retrievers_param,  # Pasar retrievers adaptativos solo si está habilitado
+            collection_name=collection_name  # Pasar nombre de colección para extraer estrategia inicial
         )
         
         # Crear el flujo de trabajo del agente de ámbito
@@ -254,7 +264,7 @@ class LangChainAgent:
                 "ambito": ambito_result["ambito"],
                 "cubos": ambito_result["cubos"],
                 "is_consulta": ambito_result.get("is_consulta", False),
-                "chunk_strategy": "512",  # Estrategia inicial por defecto
+                # chunk_strategy se derivará del nombre de la colección en el workflow
                 "retry_count": 0,
                 "evaluation_metrics": {}
             }
@@ -272,7 +282,7 @@ class LangChainAgent:
         # Si no se pudo identificar el ámbito, ejecutar el workflow principal con la consulta original
         default_state = {
             "question": query,
-            "chunk_strategy": "512",
+            # chunk_strategy se derivará del nombre de la colección en el workflow
             "retry_count": 0,
             "evaluation_metrics": {}
         }

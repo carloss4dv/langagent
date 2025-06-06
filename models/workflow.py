@@ -69,6 +69,34 @@ class GraphState(TypedDict):
     chunk_strategy: str  # Nuevo campo para recuperación adaptativa
     evaluation_metrics: Dict[str, Any]  # Nuevo campo para métricas granulares
 
+def extract_chunk_strategy_from_name(name: str) -> str:
+    """
+    Extrae la estrategia de chunk del nombre de la colección/retriever.
+    
+    Args:
+        name (str): Nombre que debe contener _256, _512, o _1024
+        
+    Returns:
+        str: Estrategia de chunk ("256", "512", "1024")
+        
+    Raises:
+        ValueError: Si no se encuentra un patrón válido de estrategia
+    """
+    if not name:
+        raise ValueError("El nombre no puede estar vacío")
+    
+    # Buscar patrón _XXX donde XXX es 256, 512, o 1024
+    import re
+    pattern = r'_(256|512|1024)'
+    match = re.search(pattern, name)
+    
+    if match:
+        strategy = match.group(1)
+        logger.info(f"Estrategia extraída del nombre '{name}': {strategy} tokens")
+        return strategy
+    else:
+        raise ValueError(f"No se encontró un patrón válido de estrategia (_256, _512, _1024) en el nombre: '{name}'")
+
 def normalize_name(name: str) -> str:
     """
     Normaliza un nombre de cubo o ámbito eliminando acentos, espacios y convirtiendo a minúsculas.
@@ -293,7 +321,7 @@ def execute_query(state):
     
     return state
 
-def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewriter=None, rag_sql_chain=None, sql_interpretation_chain=None, adaptive_retrievers=None, metrics_collector=None):
+def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewriter=None, rag_sql_chain=None, sql_interpretation_chain=None, adaptive_retrievers=None, metrics_collector=None, collection_name=None):
     """
     Crea un flujo de trabajo para el agente utilizando LangGraph con recuperación adaptativa y recolección de métricas.
     
@@ -306,6 +334,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         sql_interpretation_chain: Cadena para generar interpretación de resultados SQL.
         adaptive_retrievers: Diccionario de retrievers por estrategia {"256": retriever, "512": retriever, "1024": retriever}.
         metrics_collector: Recolector de métricas para análisis de rendimiento.
+        collection_name: Nombre de la colección para extraer la estrategia inicial (debe contener _256, _512, o _1024).
         
     Returns:
         StateGraph: Grafo de estado configurado con recuperación adaptativa y métricas.
@@ -313,6 +342,18 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
     # Inicializar el recolector de métricas si no se proporciona
     if metrics_collector is None:
         metrics_collector = MetricsCollector()
+    
+    # Extraer estrategia inicial del nombre de la colección
+    initial_chunk_strategy = DEFAULT_CHUNK_STRATEGY  # Fallback por defecto
+    if collection_name:
+        try:
+            initial_chunk_strategy = extract_chunk_strategy_from_name(collection_name)
+            logger.info(f"Estrategia inicial establecida desde el nombre de colección: {initial_chunk_strategy} tokens")
+        except ValueError as e:
+            logger.error(f"Error al extraer estrategia del nombre de colección: {e}")
+            raise e  # Re-lanzar la excepción para que "pete"
+    else:
+        logger.warning(f"No se proporcionó nombre de colección, usando estrategia por defecto: {initial_chunk_strategy}")
     
     # Definimos el grafo de estado
     workflow = StateGraph(GraphState)
@@ -349,8 +390,10 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             if adaptive_retrievers and chunk_strategy in adaptive_retrievers:
                 current_retriever = adaptive_retrievers[chunk_strategy]
                 logger.info(f"Usando retriever adaptativo para chunks de {chunk_strategy} tokens")
+            elif adaptive_retrievers:
+                logger.info(f"Usando retriever principal (estrategia {chunk_strategy} no disponible en retrievers adaptativos)")
             else:
-                logger.info(f"Usando retriever principal (estrategia {chunk_strategy} no disponible)")
+                logger.info(f"Usando retriever principal (recuperación adaptativa deshabilitada)")
             
             # Preparar filtros si hay ámbito identificado
             filters = {}
@@ -947,6 +990,10 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         logger.info("---ROUTE NEXT STRATEGY---")
         logger.info(f"Intento actual: {retry_count + 1}, Estrategia actual: {current_strategy}")
         
+        # Verificar si la recuperación adaptativa está habilitada
+        adaptive_retrieval_enabled = VECTORSTORE_CONFIG.get("use_adaptive_retrieval", False)
+        logger.info(f"Recuperación adaptativa habilitada: {adaptive_retrieval_enabled}")
+        
         # Si ya hicimos el máximo de intentos, terminar siempre
         if retry_count >= MAX_RETRIES:
             logger.info(f"Máximo de reintentos alcanzado ({MAX_RETRIES}). Finalizando.")
@@ -972,7 +1019,26 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         new_retry_count = retry_count + 1
         state["retry_count"] = new_retry_count
         
-        # Lógica determinística para seleccionar estrategia
+        # Si la recuperación adaptativa está desactivada, mantener la misma estrategia pero permitir reintentos
+        if not adaptive_retrieval_enabled:
+            # Verificar si las métricas justifican un reintento con la misma estrategia
+            metrics_below_threshold = (
+                faithfulness < EVALUATION_THRESHOLDS["faithfulness"] or
+                context_precision < EVALUATION_THRESHOLDS["context_precision"] or
+                context_recall < EVALUATION_THRESHOLDS["context_recall"] or
+                answer_relevance < EVALUATION_THRESHOLDS["answer_relevance"]
+            )
+            
+            if metrics_below_threshold:
+                # Mantener la misma estrategia de chunk
+                logger.info(f"Recuperación adaptativa deshabilitada. Reintentando con la misma estrategia: {current_strategy} tokens.")
+                # No cambiar state["chunk_strategy"] - mantener la actual
+                return "RETRY"
+            else:
+                logger.info("Métricas aceptables con recuperación adaptativa deshabilitada. Finalizando.")
+                return "END"
+        
+        # Lógica determinística para seleccionar estrategia (solo si recuperación adaptativa está habilitada)
         
         # Context Recall bajo → necesitamos más contexto (chunks más grandes)
         if context_recall < EVALUATION_THRESHOLDS["context_recall"]:
@@ -1167,7 +1233,12 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         """
         # Extraer datos iniciales
         question = input_data.get("question", "")
-        chunk_strategy = input_data.get("chunk_strategy", DEFAULT_CHUNK_STRATEGY)
+        # Usar la estrategia inicial extraída del nombre si no se especifica otra
+        chunk_strategy = input_data.get("chunk_strategy", initial_chunk_strategy)
+        
+        # Actualizar el input_data con la estrategia inicial si no estaba presente
+        if "chunk_strategy" not in input_data:
+            input_data["chunk_strategy"] = chunk_strategy
         
         # Iniciar recolección de métricas
         metrics_collector.start_workflow(question, chunk_strategy)
