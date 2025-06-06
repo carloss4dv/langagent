@@ -29,7 +29,7 @@ VECTORSTORE_CONFIG = {
     "k_retrieval": 6,          # Número de documentos a recuperar
     "similarity_threshold": 0.7,  # Umbral mínimo de similitud para considerar un documento relevante
     "max_docs_total": 15,       # Aumentar el límite total de documentos
-    "vector_db_type": "milvus", # Tipo de base de datos vectorial (chroma o milvus)
+    "vector_db_type": "chroma", # Tipo de base de datos vectorial (chroma o milvus)
     
     # Configuración para Milvus/Zilliz Cloud
     "milvus_uri": os.getenv("ZILLIZ_CLOUD_URI", "http://localhost:19532"),
@@ -50,7 +50,7 @@ VECTORSTORE_CONFIG = {
     "use_hybrid_search": True,  # Activar búsqueda híbrida (vectorial + texto completo)
     
     # Configuración de generación de contexto
-    "use_context_generation": True,  # Activar generación de contexto para chunks
+    "use_context_generation": False,  # Activar generación de contexto para chunks
     "log_context_generation": True,  # Mostrar logs detallados de la generación de contexto
     "context_batch_size": 20,        # Chunks por lote
     "context_max_workers": 3,        # Hilos concurrentes (no más de 5 para evitar rate limits)
