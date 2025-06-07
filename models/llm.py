@@ -11,7 +11,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_community.utilities import SQLDatabase
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
-from langagent.prompts import PROMPTS 
+from langagent.prompts import get_prompt, PROMPTS
 from langagent.config.config import LLM_CONFIG, SQL_CONFIG
 
 def _get_prompt_template(llm, prompt_key: str):
@@ -21,8 +21,11 @@ def _get_prompt_template(llm, prompt_key: str):
         model_name = "llama"
     elif "qwen" in llm.model:
         model_name = "qwen"
+    elif "mistral" in llm.model:
+        model_name = "mistral-small-3.1:24b"
     try:
-        return PROMPTS[model_name][prompt_key]
+        # Usar la nueva función de utilidad get_prompt
+        return get_prompt(model_name, prompt_key)
     except KeyError:
         raise ValueError(f"No prompt found for model '{model_name}' and key '{prompt_key}'")
 

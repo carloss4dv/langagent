@@ -1,0 +1,83 @@
+digraph RecuperacionRAG {
+    // Configuración general para layout horizontal
+    rankdir=LR;
+    ranksep=1.5;
+    nodesep=0.8;
+    splines=ortho;
+    
+    // Estilos de nodos
+    node [fontname="Arial", fontsize=10, margin=0.1];
+    edge [fontname="Arial", fontsize=9];
+    
+    // NIVEL 1: Entrada del usuario
+    {rank=same; usuario}
+    usuario [shape=box, style="rounded,filled", fillcolor="#E3F2FD", 
+             label="👤 CONSULTA USUARIO\n• question: str\n• came_from_clarification: bool"];
+    
+    // NIVEL 2: Punto de entrada condicional
+    {rank=same; entry_point}
+    entry_point [shape=diamond, style="filled", fillcolor="#FFF3E0",
+                 label="🔄 ENTRY POINT\n¿came_from_clarification?"];
+    
+    // NIVEL 3: Query rewriting (condicional)
+    {rank=same; rewrite_query, retrieve_direct}
+    rewrite_query [shape=box, style="rounded,filled", fillcolor="#F3E5F5",
+                   label="✏️ QUERY REWRITING\n• LLM: mistral-small-3.1:24b\n• temperature: 0.15\n• max_tokens: 2048\n• Términos técnicos SEGEDA"];
+    
+    retrieve_direct [shape=point, style=invis];
+    
+    // NIVEL 4: Recuperación de documentos
+    {rank=same; retrieve}
+    retrieve [shape=box, style="rounded,filled", fillcolor="#E8F5E8",
+              label="🔍 RETRIEVE DOCUMENTS\n• Estrategia actual: chunk_strategy\n• Retriever adaptativo activo\n• Vector DB: Milvus/Zilliz\n• Filtros por ámbito/cubo"];
+    
+    // NIVEL 5: Configuraciones y parámetros (subgrafos paralelos)
+    {rank=same; config_retrieval, strategies, vectorstore, ambitos}
+    
+    config_retrieval [shape=record, style="filled", fillcolor="#FFFDE7",
+                      label="📋 CONFIGURACIÓN RETRIEVAL\n• k_retrieval: 6\n• max_docs_total: 15\n• similarity_threshold: 0.7\n• chunk_overlap: 50\n• use_adaptive_retrieval: bool"];
+    
+    strategies [shape=record, style="filled", fillcolor="#FFF8E1",
+                label="📏 ESTRATEGIAS CHUNK\n• 256 tokens: Precisión alta\n• 512 tokens: Balance óptimo\n• 1024 tokens: Contexto amplio\n• DEFAULT_CHUNK_STRATEGY"];
+    
+    vectorstore [shape=record, style="filled", fillcolor="#F1F8FF",
+                 label="🗄️ VECTOR STORE\n• Type: Milvus/Zilliz Cloud\n• URI: cloud endpoint\n• Token: secure auth\n• Hybrid search: true\n• Single collection: true"];
+    
+    ambitos [shape=record, style="filled", fillcolor="#F0FFF0",
+             label="🎯 ÁMBITOS SEGEDA\n• AMBITOS_CUBOS mapping\n• CUBO_TO_AMBITO dict\n• AMBITO_KEYWORDS\n• find_relevant_cubos_by_keywords()"];
+    
+    // NIVEL 6: Evaluación de relevancia
+    {rank=same; grade_relevance}
+    grade_relevance [shape=box, style="rounded,filled", fillcolor="#FDF2F8",
+                     label="📊 GRADE RELEVANCE\n• LLM: llama3.2:3bm\n• BYPASS_GRADING: configurable\n• Filtro conservativo\n• Error handling robusto"];
+    
+    // NIVEL 7: Salida
+    {rank=same; output}
+    output [shape=box, style="rounded,filled", fillcolor="#F0F9FF",
+            label="📑 DOCUMENTOS RELEVANTES\n• retrieved_documents: List[Document]\n• retrieval_details: Dict\n• relevant_count: int\n• chunk_strategy aplicada"];
+    
+    // Conexiones principales
+    usuario -> entry_point;
+    entry_point -> rewrite_query [label="true"];
+    entry_point -> retrieve_direct [label="false", style=invis];
+    retrieve_direct -> retrieve [style=invis];
+    rewrite_query -> retrieve;
+    retrieve -> grade_relevance;
+    grade_relevance -> output;
+    
+    // Conexiones de configuración (punteadas)
+    retrieve -> config_retrieval [style=dashed, color=gray];
+    retrieve -> strategies [style=dashed, color=gray];
+    retrieve -> vectorstore [style=dashed, color=gray];
+    retrieve -> ambitos [style=dashed, color=gray];
+    
+    // Etiquetas de flujo
+    entry_point -> rewrite_query [label="Si viene de\nclarificación"];
+    entry_point -> retrieve [label="Consulta directa", constraint=false];
+    
+    // Título del diagrama
+    labelloc="t";
+    label="FASE DE RECUPERACIÓN - SISTEMA RAG ADAPTATIVO CON MÚLTIPLES ESTRATEGIAS";
+    fontsize=14;
+    fontname="Arial Bold";
+} 

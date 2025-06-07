@@ -1,0 +1,175 @@
+@startuml GeneracionRAG
+!theme plain
+!define DIRECTION left to right direction
+title FASE DE GENERACIÓN - RAG CONTEXTUAL CON ÁMBITO AGENT INTEGRADO
+
+start
+
+partition "📋 ESTADO INICIAL" {
+  :🎯 **ESTADO INICIAL**
+  from Ámbito Agent;
+  note right
+    **RECIBE DEL ÁMBITO AGENT**:
+    • question: str
+    • ambito: "sostenibilidad"
+    • cubos: ["energia", "residuos"]
+    • came_from_clarification: bool
+    • retrieved_documents: List[Document]
+  end note
+  
+  :📑 **DOCUMENTOS + CONTEXTO**
+  Validated & Filtered by Ámbito;
+  note right
+    • Context validated by domain
+    • Documents filtered by ámbito
+    • validate_and_clean_context()
+    • Domain-specific context ready
+  end note
+}
+
+partition "🔀 TIPO DE CONSULTA" {
+  if (is_consulta?) then (YES - SQL Query)
+    
+    partition "💾 RAMA SQL" {
+      :💾 **SQL QUERY GENERATION**
+      Context-Specific;
+      note right
+        **CON CONTEXTO DE ÁMBITO**:
+        • LLM: mistral-small-3.1:24b
+        • rag_sql_chain['sql_query_chain']
+        • Cubo-specific context
+        • JSON parsing robusto
+      end note
+      
+      :⚡ **EXECUTE SQL QUERY**
+      Filtered by Ámbito/Cubo;
+      note right
+        **FILTRADO CONTEXTUAL**:
+        • QuerySQLDatabaseTool
+        • db_uri: sqlite:///pdi_database.db
+        • Filtered by ámbito/cubo
+        • max_results: 20
+      end note
+      
+      :📊 **SQL INTERPRETATION**
+      Domain-Specific;
+      note right
+        **INTERPRETACIÓN ESPECÍFICA**:
+        • sql_interpretation_chain
+        • LLM: mistral-small-3.1:24b
+        • Ámbito-specific interpretation
+        • context + sql_result → answer
+      end note
+    }
+    
+  else (NO - Regular RAG)
+    
+    partition "🤖 RAMA RAG" {
+      :🤖 **RAG GENERATION**
+      with Ámbito Context;
+      note right
+        **GENERACIÓN CONTEXTUAL**:
+        • LLM: mistral-small-3.1:24b
+        • temperature: 0.15
+        • max_tokens: 2048
+        • Contexto específico del ámbito
+        • answer_chain.invoke()
+      end note
+    }
+    
+  endif
+}
+
+partition "🎯 EVALUACIÓN GRANULAR" {
+  :🎯 **EVALUACIÓN GRANULAR**
+  Domain-Aware;
+  note right
+    **EVALUACIÓN POR ÁMBITO**:
+    • LLM: llama3.2:3bm
+    • granular_evaluator.invoke()
+    • Evaluación contextual por ámbito
+    • Métricas específicas del dominio
+  end note
+  
+  :📈 **EVALUATION METRICS**
+  Enhanced with Domain Context;
+  note right
+    **MÉTRICAS GRANULARES**:
+    • faithfulness ≥ 0.7 (fidelidad al ámbito)
+    • context_precision ≥ 0.7 (precisión contextual)
+    • context_recall ≥ 0.7 (cobertura del ámbito)
+    • answer_relevance ≥ 0.7 (relevancia específica)
+    • diagnosis: Dict[str, str] detallado
+  end note
+}
+
+partition "⚖️ ESTRATEGIA ADAPTATIVA" {
+  if (Métricas OK?) then (YES)
+    
+    :✅ **RESPUESTA FINAL**
+    with Ámbito Context;
+    note right
+      **OUTPUT COMPLETO**:
+      • generation: str
+      • evaluation_metrics: Dict
+      • ambito: "sostenibilidad" (preserved)
+      • cubos: ["energia", "residuos"] (used)
+      • Contexto académico completo
+    end note
+    
+  else (NO - Need Retry)
+    
+    if (retry_count < MAX_RETRIES?) then (YES)
+      
+      if (Context Recall < 0.7?) then (YES)
+        :📏 **STRATEGY → 1024**
+        Ámbito Context Expansion;
+        note right
+          • Ampliación contextual del ámbito
+          • chunk_strategy = '1024'
+          • Mantener filtros de ámbito
+        end note
+        
+      elseif (Precision/Faithfulness < 0.7?) then (YES)
+        :🎯 **STRATEGY → 256**
+        Cubo-Specific Focus;
+        note right
+          • Enfoque específico del cubo
+          • chunk_strategy = '256'
+          • Filtrado más granular
+        end note
+        
+      else (Answer Relevance < 0.7)
+        :🔄 **STRATEGY CYCLE**
+        Domain-Aware Alternation;
+        note right
+          • 512→1024→256→512
+          • Alternancia por ámbito
+          • Preservar contexto del dominio
+        end note
+        
+      endif
+      
+      :🔄 **INCREMENT RETRY**
+      Preserve Ámbito State;
+      note right
+        • retry_count++
+        • MAX_RETRIES: 3
+        • Nueva iteración con ámbito
+        • Preservar estado del Ámbito Agent
+      end note
+      
+      :🔄 **NUEVA ITERACIÓN**
+      with Enhanced Context;
+      
+    else (NO - Max Retries)
+      :❌ **MAX RETRIES REACHED**
+      Return Best Attempt;
+    endif
+    
+  endif
+}
+
+stop
+
+@enduml 

@@ -665,7 +665,7 @@ class AgentEvaluator:
                 # Evaluar solo los casos evaluables
                 results = evaluate(cache_config=CacheConfig(write_cache=False),
                                    error_config=ErrorConfig(ignore_errors=False),
-                                   async_config=AsyncConfig(throttle_value = 5, max_concurrent= 20),
+                                   async_config=AsyncConfig(throttle_value = 10, max_concurrent= 4),
                                    test_cases=casos_evaluables, metrics=metrics)
                 return {
                     "results": results,

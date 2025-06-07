@@ -10,10 +10,11 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from prompts_old import PROMPTS
-    print("✅ Importación de prompts exitosa")
+    from prompts import PROMPTS, list_models, list_prompt_types
+    print("✅ Importación de prompts exitosa (nueva estructura modular)")
 except ImportError as e:
     print(f"❌ Error al importar prompts: {e}")
+    print("Asegúrate de que el módulo prompts esté correctamente configurado")
     sys.exit(1)
 
 def remove_accents(text):
@@ -91,7 +92,9 @@ def generate_latex():
     latex_content = []
     models_processed = 0
     
-    print(f"📊 Modelos disponibles: {list(PROMPTS.keys())}")
+    # Usar las funciones de utilidad del nuevo módulo
+    available_models = list_models()
+    print(f"📊 Modelos disponibles: {available_models}")
     
     for model_key, model_data in PROMPTS.items():
         print(f"🔍 Procesando modelo: {model_key}")
@@ -158,12 +161,13 @@ def main():
         file_size = os.path.getsize(output_file)
         print(f"📄 Tamaño del archivo: {file_size} bytes")
         
-        # Mostrar un resumen
+        # Mostrar un resumen usando las funciones de utilidad
         print("\n📋 Resumen de contenido generado:")
-        for model_key in PROMPTS.keys():
-            if model_key in ["llama", "mistral-small-3.1:24b", "qwen"]:
-                prompt_count = len(PROMPTS[model_key])
-                print(f"   • {model_key}: {prompt_count} prompts")
+        for model_key in list_models():
+            prompt_types = list_prompt_types(model_key)
+            prompt_count = len(prompt_types)
+            print(f"   • {model_key}: {prompt_count} prompts")
+            print(f"     Tipos: {', '.join(prompt_types)}")
         
         # Mostrar las primeras líneas del archivo generado
         print(f"\n🔍 Primeras líneas del archivo generado:")

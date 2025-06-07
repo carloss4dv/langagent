@@ -193,7 +193,7 @@ class LangChainAgent:
         self.granular_evaluator = create_granular_evaluator(self.llm3)
         
         logger.info("Usando modelo secundario para reescritura de consultas...")
-        self.query_rewriter = create_query_rewriter(self.llm2)
+        self.query_rewriter = create_query_rewriter(self.llm3)
         
         logger.info("Usando modelo principal para interpretación de resultados SQL...")
         self.sql_interpretation_chain = create_sql_interpretation(self.llm)

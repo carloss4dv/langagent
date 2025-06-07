@@ -49,6 +49,7 @@ class GraphState(TypedDict):
         needs_sql_interpretation: indica si se necesita generar interpretación de resultados SQL
         chunk_strategy: estrategia de chunk actual (256, 512, 1024)
         evaluation_metrics: métricas granulares del evaluador
+        came_from_clarification: indica si la pregunta viene de una clarificación previa
     """
     question: str
     rewritten_question: str
@@ -68,6 +69,7 @@ class GraphState(TypedDict):
     needs_sql_interpretation: bool
     chunk_strategy: str  # Nuevo campo para recuperación adaptativa
     evaluation_metrics: Dict[str, Any]  # Nuevo campo para métricas granulares
+    came_from_clarification: bool  # Nuevo campo para query rewriting condicional
 
 def extract_chunk_strategy_from_name(name: str) -> str:
     """
@@ -358,6 +360,89 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
     # Definimos el grafo de estado
     workflow = StateGraph(GraphState)
     
+    def rewrite_query(state):
+        """
+        Reescribe la consulta para mejorar la recuperación usando términos técnicos de SEGEDA.
+        Solo se ejecuta cuando la pregunta viene de una clarificación previa.
+        
+        Args:
+            state (dict): Estado actual del grafo.
+            
+        Returns:
+            dict: Estado actualizado con la pregunta reescrita.
+        """
+        # Iniciar medición del nodo
+        node_context = metrics_collector.start_node("rewrite_query")
+        
+        question = state["question"]
+        logger.info("---REWRITE QUERY---")
+        logger.info(f"Reescribiendo consulta que viene de clarificación: {question}")
+        
+        try:
+            if query_rewriter:
+                # Ejecutar el rewriter
+                rewrite_result = query_rewriter.invoke({"question": question})
+                
+                # Extraer la pregunta reescrita del resultado
+                if isinstance(rewrite_result, dict) and "rewritten_question" in rewrite_result:
+                    rewritten_question = rewrite_result["rewritten_question"]
+                elif isinstance(rewrite_result, str):
+                    rewritten_question = rewrite_result
+                else:
+                    logger.warning(f"Formato inesperado del query rewriter: {type(rewrite_result)}")
+                    rewritten_question = str(rewrite_result)
+                
+                logger.info(f"Consulta reescrita: {rewritten_question}")
+            else:
+                logger.warning("Query rewriter no disponible, usando pregunta original")
+                rewritten_question = question
+            
+            result_state = {
+                **state,
+                "rewritten_question": rewritten_question
+            }
+            
+            # Finalizar medición del nodo
+            metrics_collector.end_node(node_context, result_state, success=True)
+            
+            return result_state
+            
+        except Exception as e:
+            logger.error(f"Error al reescribir consulta: {str(e)}")
+            # En caso de error, usar la pregunta original
+            error_state = {
+                **state,
+                "rewritten_question": question
+            }
+            
+            # Finalizar medición del nodo con error
+            metrics_collector.end_node(node_context, error_state, success=False)
+            
+            return error_state
+    
+    def route_entry_point(state):
+        """
+        Determina si se debe hacer rewrite de la consulta o ir directamente a retrieve.
+        Solo hace rewrite si la pregunta viene de una clarificación previa.
+        
+        Args:
+            state (dict): Estado actual del grafo.
+            
+        Returns:
+            str: Siguiente nodo a ejecutar ("rewrite_query" o "retrieve")
+        """
+        came_from_clarification = state.get("came_from_clarification", False)
+        
+        if came_from_clarification:
+            logger.info("Pregunta viene de clarificación. Ejecutando query rewriting.")
+            return "rewrite_query"
+        else:
+            logger.info("Pregunta directa del usuario. Saltando rewriting.")
+            # Asegurar que rewritten_question esté inicializada
+            if "rewritten_question" not in state:
+                state["rewritten_question"] = state["question"]
+            return "retrieve"
+
     def retrieve(state):
         """
         Recupera documentos relevantes para la pregunta.
@@ -1158,16 +1243,22 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido ({MAX_RETRIES + 1}). Finalizando.")
             return "END"
         
-        # Probar con la estrategia contraria a la actual
-        if current_strategy == "512":
-            state["chunk_strategy"] = "1024"
-        elif current_strategy == "1024":
-            state["chunk_strategy"] = "256"
+        # Solo cambiar estrategia si la recuperación adaptativa está habilitada
+        if adaptive_retrieval_enabled:
+            # Probar con la estrategia contraria a la actual
+            if current_strategy == "512":
+                state["chunk_strategy"] = "1024"
+            elif current_strategy == "1024":
+                state["chunk_strategy"] = "256"
+            else:
+                state["chunk_strategy"] = "512"
+            
+            logger.info(f"Métricas subóptimas. Probando estrategia alternativa: {state['chunk_strategy']} tokens.")
+            return "RETRY"
         else:
-            state["chunk_strategy"] = "512"
-        
-        logger.info(f"Métricas subóptimas. Probando estrategia alternativa: {state['chunk_strategy']} tokens.")
-        return "RETRY"
+            # Si adaptive retrieval está desactivado, terminar en lugar de cambiar estrategia
+            logger.info("Adaptive retrieval desactivado y métricas subóptimas. Finalizando sin cambiar estrategia.")
+            return "END"
 
     def increment_retry_count(state):
         """
@@ -1222,6 +1313,8 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             return error_state
 
     # Añadir nodos al grafo
+    workflow.add_node("entry_point", lambda state: state)  # Nodo dummy para entrada condicional
+    workflow.add_node("rewrite_query", rewrite_query)
     workflow.add_node("retrieve", retrieve)
     workflow.add_node("grade_relevance", grade_relevance)
     workflow.add_node("generate", generate)
@@ -1230,8 +1323,17 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
     workflow.add_node("execute_query", execute_query_with_metrics)
     workflow.add_node("generate_sql_interpretation", generate_sql_interpretation)
     
-    # Definir bordes - flujo con recuperación adaptativa
-    workflow.set_entry_point("retrieve")
+    # Definir entrada condicional - flujo con query rewriting condicional
+    workflow.set_entry_point("entry_point")
+    workflow.add_conditional_edges(
+        "entry_point",
+        route_entry_point,
+        {
+            "rewrite_query": "rewrite_query",
+            "retrieve": "retrieve"
+        }
+    )
+    workflow.add_edge("rewrite_query", "retrieve")
     workflow.add_edge("retrieve", "grade_relevance")
     workflow.add_edge("grade_relevance", "generate")
     workflow.add_edge("generate", "evaluate_response_granular")
@@ -1341,6 +1443,10 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         # Actualizar el input_data con la estrategia inicial si no estaba presente
         if "chunk_strategy" not in input_data:
             input_data["chunk_strategy"] = chunk_strategy
+        
+        # Inicializar came_from_clarification si no está presente
+        if "came_from_clarification" not in input_data:
+            input_data["came_from_clarification"] = False
         
         # Iniciar recolección de métricas
         metrics_collector.start_workflow(question, chunk_strategy)
