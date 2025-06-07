@@ -32,7 +32,7 @@ VECTORSTORE_CONFIG = {
     "vector_db_type": "milvus", # Tipo de base de datos vectorial (chroma o milvus)
     
     # Configuración para Milvus/Zilliz Cloud
-    "milvus_uri": os.getenv("ZILLIZ_CLOUD_URI", "http://localhost:19532"),
+    "milvus_uri": os.getenv("ZILLIZ_CLOUD_URI", "http://localhost:19534"),
     "milvus_token": os.getenv("ZILLIZ_CLOUD_TOKEN", ""),
     "milvus_secure": os.getenv("ZILLIZ_CLOUD_SECURE", "True").lower() in ("true", "1", "t"),     # Usar conexión segura (para Zilliz Cloud)
     
@@ -59,9 +59,9 @@ VECTORSTORE_CONFIG = {
     
     # Configuración de Recuperación Adaptativa - Múltiples Colecciones
     "adaptive_collections": {
-        "256": "segeda_collection_256",
-        "512": "segeda_collection_512", 
-        "1024": "segeda_collection_1024"
+        "256": "default_collection_256",
+        "512": "default_collection_512", 
+        "1024": "default_collection_1024"
     },
     "use_adaptive_retrieval": False,  # Activar recuperación adaptativa
 }
