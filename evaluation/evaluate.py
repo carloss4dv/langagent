@@ -606,8 +606,10 @@ class AgentEvaluator:
                 ]
                 
                 # Evaluar solo los casos evaluables
-                results = evaluate(async_config=AsyncConfig(throttle_value = 5, max_concurrent= 10), test_cases=casos_evaluables, metrics=metrics)
-                
+                results = evaluate(cache_config=CacheConfig(write_cache=True, use_cache=True),
+                                   error_config=ErrorConfig(ignore_errors=False),
+                                   async_config=AsyncConfig(run_async=False),
+                                   test_cases=casos_evaluables, metrics=metrics)
                 return {
                     "results": results,
                     "test_cases": test_cases,  # Incluir todos los casos (evaluables y no evaluables)
@@ -663,9 +665,9 @@ class AgentEvaluator:
                 ]
                 
                 # Evaluar solo los casos evaluables
-                results = evaluate(cache_config=CacheConfig(write_cache=False),
+                results = evaluate(cache_config=CacheConfig(write_cache=True, use_cache=True),
                                    error_config=ErrorConfig(ignore_errors=False),
-                                   async_config=AsyncConfig(throttle_value = 10, max_concurrent= 4),
+                                   async_config=AsyncConfig(run_async=False),
                                    test_cases=casos_evaluables, metrics=metrics)
                 return {
                     "results": results,
