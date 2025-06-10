@@ -32,7 +32,7 @@ VECTORSTORE_CONFIG = {
     "vector_db_type": "milvus", # Tipo de base de datos vectorial (chroma o milvus)
     
     # Configuración para Milvus/Zilliz Cloud
-    "milvus_uri": os.getenv("ZILLIZ_CLOUD_URI", "http://localhost:19534"),
+    "milvus_uri": os.getenv("ZILLIZ_CLOUD_URI", "http://localhost:19536"),
     "milvus_token": os.getenv("ZILLIZ_CLOUD_TOKEN", ""),
     "milvus_secure": os.getenv("ZILLIZ_CLOUD_SECURE", "True").lower() in ("true", "1", "t"),     # Usar conexión segura (para Zilliz Cloud)
     
