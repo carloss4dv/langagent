@@ -1,4 +1,4 @@
-# LangAgent: Agente con LangGraph, LLaMA3 y bases de datos vectoriales
+# RAGDWAREuz: Agente con LangGraph, LLaMA3 y bases de datos vectoriales
 
 <div align="center">
   <img src="logos/NEAT-AMBIENCE-logo.png" alt="NEAT-AMBIENCE Logo" width="400"/>
