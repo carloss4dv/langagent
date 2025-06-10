@@ -1,6 +1,19 @@
 # Script simplificado para instalar herramientas de diagramacion
 Write-Host "=== INSTALADOR DE HERRAMIENTAS PARA DIAGRAMAS ===" -ForegroundColor Green
 
+# Cambiar al directorio raíz del proyecto
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$rootDir = Split-Path -Parent $scriptDir
+Set-Location $rootDir
+
+Write-Host "Directorio de trabajo: $rootDir" -ForegroundColor Yellow
+
+# Crear directorio tools si no existe
+if (!(Test-Path "tools")) {
+    Write-Host "Creando directorio tools..." -ForegroundColor Yellow
+    New-Item -ItemType Directory -Path "tools" -Force | Out-Null
+}
+
 # Verificar si Chocolatey esta instalado
 if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
     Write-Host "Instalando Chocolatey..." -ForegroundColor Yellow
@@ -33,15 +46,15 @@ try {
 Write-Host ""
 Write-Host "=== DESCARGANDO PLANTUML ===" -ForegroundColor Cyan
 $plantUMLUrl = "https://github.com/plantuml/plantuml/releases/latest/download/plantuml-1.2024.7.jar"
-$plantUMLPath = ".\plantuml.jar"
+$plantUMLPath = "tools/plantuml.jar"
 
 try {
     if (!(Test-Path $plantUMLPath)) {
-        Write-Host "Descargando PlantUML..." -ForegroundColor Yellow
+        Write-Host "Descargando PlantUML a $plantUMLPath..." -ForegroundColor Yellow
         Invoke-WebRequest -Uri $plantUMLUrl -OutFile $plantUMLPath
         Write-Host "PlantUML descargado correctamente" -ForegroundColor Green
     } else {
-        Write-Host "PlantUML ya existe en el directorio" -ForegroundColor Green
+        Write-Host "PlantUML ya existe en $plantUMLPath" -ForegroundColor Green
     }
 } catch {
     Write-Host "Error descargando PlantUML: $($_.Exception.Message)" -ForegroundColor Red
@@ -70,11 +83,16 @@ if (Get-Command java -ErrorAction SilentlyContinue) {
 
 # Verificar PlantUML
 if (Test-Path $plantUMLPath) {
-    Write-Host "OK PlantUML: $plantUMLPath" -ForegroundColor Green
+    $plantUMLSize = [math]::Round((Get-Item $plantUMLPath).Length / 1MB, 1)
+    Write-Host "OK PlantUML: $plantUMLPath ($plantUMLSize MB)" -ForegroundColor Green
 } else {
-    Write-Host "ERROR PlantUML no encontrado" -ForegroundColor Red
+    Write-Host "ERROR PlantUML no encontrado en $plantUMLPath" -ForegroundColor Red
 }
 
 Write-Host ""
 Write-Host "=== INSTALACION COMPLETADA ===" -ForegroundColor Green
-Write-Host "Si hay errores, puede que necesites reiniciar PowerShell" -ForegroundColor Yellow 
+Write-Host "Si hay errores, puede que necesites reiniciar PowerShell" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "=== ESTRUCTURA CREADA ===" -ForegroundColor Cyan
+Write-Host "tools/plantuml.jar - Herramienta PlantUML" -ForegroundColor Gray
+Write-Host "Para generar diagramas ejecuta: ./generate.ps1" -ForegroundColor Yellow 

@@ -1,0 +1,39 @@
+@startuml
+skinparam style strictuml
+
+title Naive RAG Workflow
+
+participant "Usuario" as User
+participant "Sistema" as System
+participant "Modelo de Embedding" as EmbeddingModel
+participant "Base de Datos Vectorial" as VectorDB
+participant "Recuperador (Retriever)" as Retriever
+participant "LLM (Generador)" as LLM
+
+User -> System: Envía Consulta (Query)
+activate System
+
+System -> EmbeddingModel: Convierte Consulta a Embedding
+activate EmbeddingModel
+EmbeddingModel --> System: Query Embedding
+deactivate EmbeddingModel
+
+System -> VectorDB: Busca similitud (Query Embedding)
+activate VectorDB
+VectorDB --> System: IDs de Documentos/Chunks relevantes
+deactivate VectorDB
+
+System -> Retriever: Recupera Documentos/Chunks por ID
+activate Retriever
+Retriever --> System: Documentos/Chunks Recuperados
+deactivate Retriever
+
+System -> LLM: Envía (Query + Documentos Recuperados)
+activate LLM
+LLM --> System: Genera Respuesta
+deactivate LLM
+
+System --> User: Envía Respuesta Final
+deactivate System
+
+@enduml

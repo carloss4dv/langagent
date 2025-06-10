@@ -1,0 +1,366 @@
+[
+  {
+    "pregunta": "Cuantos alumnos estan matriculados en un plan de estudios oficial en un curso academico?",
+    "respuesta_esperada": "El cubo MATRICULA del ambito ACADEMICO incluye la medida 'Alumnos Matriculados' que proporciona el numero total de estudiantes matriculados en planes de estudios oficiales. Se debe introducir en la consulta la dimension 'CURSO ACADEMICO' para evitar acumular el total de estudiantes de todos los cursos."
+  },
+  {
+    "pregunta": "Que son los creditos matriculados y como se contabilizan?",
+    "respuesta_esperada": "Los creditos matriculados son el numero total de creditos ECTS en los que se han matriculado los estudiantes. El cubo MATRICULA del ambito ACADEMICO contiene la medida 'Creditos Matriculados' que representa esta informacion. Se contabilizan sumando todos los creditos de las asignaturas en las que cada estudiante se ha inscrito, excluyendo creditos reconocidos, adaptados o convalidados."
+  },
+  {
+    "pregunta": "Como se calcula la tasa de exito academico?",
+    "respuesta_esperada": "La tasa de exito es el cociente entre el numero de creditos superados y el numero de creditos presentados a examen, expresado en porcentaje. Esta medida se encuentra en el cubo RENDIMIENTO del ambito ACADEMICO y mide la eficacia del proceso de ensenanza-aprendizaje. El cubo de Rendimiento no la tiene con ese nombre, pero si con el nombre 'Tasa de Exito'."
+  },
+  {
+    "pregunta": "Que diferencia hay entre creditos evaluados y creditos superados?",
+    "respuesta_esperada": "Los creditos evaluados son el numero total de creditos de los que los estudiantes se han examinado (presentados), mientras que los creditos superados son aquellos en los que han obtenido una calificacion igual o superior a 5. Ambas medidas estan disponibles en el cubo RENDIMIENTO del ambito ACADEMICO con los nombres 'Creditos Presentados' y 'Creditos Superados'."
+  },
+  {
+    "pregunta": "Como se calcula la tasa de rendimiento academico?",
+    "respuesta_esperada": "La tasa de rendimiento es el cociente entre el numero de creditos superados y el numero de creditos matriculados, expresado en porcentaje. Esta medida del cubo RENDIMIENTO, llamada 'Tasa de Rendimiento', evalua el aprovechamiento academico global de los estudiantes en relacion con su carga de matricula."
+  },
+  {
+    "pregunta": "Que define a un alumno de nuevo ingreso?",
+    "respuesta_esperada": "Un alumno de nuevo ingreso es aquel que se matricula por primera vez en un plan de estudios determinado en la Universidad de Zaragoza. El cubo MATRICULA contiene la medida 'Alumnos de Nuevo Ingreso' para contabilizarlos. Ademas, la dimension 'Acceso' en el mismo cubo tiene un atributo 'Nuevo Ingreso (S/N)' que permite filtrar por estos estudiantes."
+  },
+  {
+    "pregunta": "Cuantos estudiantes egresan anualmente de la Universidad de Zaragoza?",
+    "respuesta_esperada": "El termino 'egresado' puede referirse a distintas situaciones. El cubo EGRESADOS del ambito ACADEMICO permite analizar esta informacion a traves de varias medidas. Para saber cuantos estudiantes finalizan sus estudios obteniendo un titulo, se debe usar la medida 'Alumnos graduados'. Para aquellos que abandonan, se puede usar 'Alumnos que interrumpen sus estudios'. Y para los que se van a otra universidad, 'Alumnos que se trasladan a otra universidad'. Es fundamental usar la dimension 'CURSO ACADEMICO' para obtener datos anuales."
+  },
+  {
+    "pregunta": "Como se determina la nota media de admision?",
+    "respuesta_esperada": "La nota media de admision es la nota media de todos los estudiantes que participan en el proceso de admision, segun se define en el cubo ADMISION. Si se introduce el plan de estudios en la consulta, el indicador sera especifico para ese plan. Es recomendable incluir la dimension 'cupo adjudicacion' para distinguir entre el cupo general y los cupos de reserva. La medida exacta en el cubo es 'Nota Media Admision'."
+  },
+  {
+    "pregunta": "Como se plazas de nuevo ingreso se ofertan cada ano?",
+    "respuesta_esperada": "El cubo OFERTA PLAZAS del ambito ADMISION incluye la medida 'Plazas Ofertadas' que indica el numero de plazas disponibles para estudiantes de nuevo ingreso en cada curso academico. Los datos se pueden clasificar por centro, titulacion y tipo de acceso."
+  },
+  {
+    "pregunta": "Que tipos de responsabilidad docente existen en el sistema?",
+    "respuesta_esperada": "Segun el cubo DOCENCIA PDI, la dimension 'Responsabilidad' permite clasificar los datos segun el tipo de responsabilidad asumida por el profesor que imparte la asignatura. Los valores posibles son: 'Coordinar docencia', 'Impartir docencia' y 'Dirigir'."
+  },
+  {
+    "pregunta": "Que tipos de docencia se imparten en la universidad?",
+    "respuesta_esperada": "El cubo DOCENCIA PDI incluye la dimension 'Tipo de docencia' que clasifica la docencia segun los siguientes valores: clases magistrales, resolucion de problemas y casos, trabajos, practicas de laboratorio, practicas especiales, practicas externas curriculares, docencia tutorizada, entre otros."
+  },
+  {
+    "pregunta": "Cuantos estudiantes se matriculan en Estudios Propios?",
+    "respuesta_esperada": "El cubo MATRIEEPP (Matricula de Estudios Propios) del ambito ESTUDIOS PROPIOS proporciona la medida 'Alumnos Matriculados' que indica el numero total de estudiantes matriculados en Estudios Propios. Se debe introducir la dimension 'CURSO ACADEMICO' para evitar acumular el total de todos los cursos."
+  },
+  {
+    "pregunta": "Cuantos grupos de investigacion estan constituidos en la universidad?",
+    "respuesta_esperada": "El cubo GRUPOS DE INVESTIGACION del ambito I+D+i incluye la medida 'Numero de grupos' que indica los grupos de investigacion constituidos. Se recomienda incorporar la dimension 'ano' para obtener datos especificos y evitar mostrar acumulados de todos los anos."
+  },
+  {
+    "pregunta": "Cuantos investigadores pertenecen a grupos de investigacion?",
+    "respuesta_esperada": "La medida 'Numero de investigadores' del cubo GRUPOS DE INVESTIGACION indica el numero de investigadores en la Universidad de Zaragoza que pertenecen a un grupo de investigacion. Se recomienda incluir la dimension 'ano' para datos especificos temporales."
+  },
+  {
+    "pregunta": "Cuantos proyectos de I+D+i estan vigentes actualmente?",
+    "respuesta_esperada": "El cubo PROYECTOS del ambito I+D+i incluye la medida 'Proyectos vigentes' que indica el numero de proyectos/contratos de I+D+i vigentes en una fecha determinada. Se recomienda especificar el ano natural para obtener datos precisos."
+  },
+  {
+    "pregunta": "Cuantos articulos cientificos se publican anualmente?",
+    "respuesta_esperada": "El cubo PRODUCCION CIENTIFICA del ambito I+D+i incluye la medida 'Articulos' que indica el numero de articulos publicados. Se recomienda incorporar la dimension 'ANO' para obtener datos anuales especificos, de lo contrario se acumularan todos los articulos desde que existen datos."
+  },
+  {
+    "pregunta": "Cual es la tasa de exito en las convocatorias de proyectos de I+D+i?",
+    "respuesta_esperada": "La tasa de exito en convocatorias es el cociente entre el numero de solicitudes concedidas y el total de solicitudes. El cubo SOLICITUD CONVOCATORIA del ambito I+D+i contiene la medida 'Tasa de exito de la convocatoria' que representa este calculo. Se recomienda incorporar la dimension 'ANO DE CONVOCATORIA' para datos anuales especificos."
+  },
+  {
+    "pregunta": "Cuantos estudiantes participan en programas de movilidad de entrada?",
+    "respuesta_esperada": "El cubo ESTUDIANTES IN del ambito MOVILIDAD proporciona la medida 'Estudiantes de intercambio' que indica el numero de estudiantes internacionales que vienen a estudiar a la Universidad de Zaragoza. Se debe especificar el curso academico para obtener datos precisos."
+  },
+  {
+    "pregunta": "Cuantos estudiantes de la UZ participan en programas de movilidad de salida?",
+    "respuesta_esperada": "El cubo ESTUDIANTES OUT del ambito MOVILIDAD incluye la medida 'Estudiantes de intercambio que realizan la estancia' sobre estudiantes de la Universidad de Zaragoza que realizan estancias en universidades extranjeras. Los datos se pueden clasificar por programa de movilidad, destino y duracion de la estancia."
+  },
+  {
+    "pregunta": "Cuantas solicitudes de movilidad se presentan anualmente?",
+    "respuesta_esperada": "El cubo SOLICITUDES MOVILIDAD OUT del ambito MOVILIDAD incluye la medida 'Total solicitudes' que indica el numero total de solicitudes de movilidad presentadas por estudiantes de la Universidad de Zaragoza, clasificadas por programa y destino."
+  },
+  {
+    "pregunta": "Cuantos cargos administrativos existen en la universidad?",
+    "respuesta_esperada": "El cubo CARGO del ambito RRHH incluye la medida 'Numero de cargos' que indica el numero de organos unipersonales de representacion, incluyendo cargos del Consejo de Direccion, de los Centros, de los Departamentos y de los Institutos Universitarios de Investigacion."
+  },
+  {
+    "pregunta": "Cuantos efectivos de PDI hay en la universidad?",
+    "respuesta_esperada": "El cubo PDI del ambito RRHH proporciona la medida 'Numero de efectivos' que indica el numero total de Personal Docente e Investigador en la Universidad de Zaragoza. Se recomienda incorporar la dimension 'tiempo' para obtener datos de una fecha especifica."
+  },
+  {
+    "pregunta": "Cuantos empleados de PTGAS trabajan en la universidad?",
+    "respuesta_esperada": "El cubo PTGAS del ambito RRHH incluye la medida 'Numero de efectivos' que indica el numero total de Personal de Administracion y Servicios. Los datos se pueden clasificar por categoria, centro, departamento y tipo de contrato."
+  },
+  {
+    "pregunta": "Cuantos puestos de trabajo existen en la Universidad de Zaragoza?",
+    "respuesta_esperada": "El cubo PUESTO del ambito RRHH proporciona la medida 'Numero de puestos' que indica los puestos de trabajo existentes en la UZ, incluyendo todos los puestos de RPT y los puestos fuera de RPT que esten ocupados."
+  },
+  {
+    "pregunta": "Que categorias de PDI existen en la universidad?",
+    "respuesta_esperada": "Segun el cubo PDI, la dimension 'PDI: Categoria' clasifica al personal en categorias como: Catedraticos de Universidad, Titulares de Universidad, Catedraticos de Escuelas Universitarias, Titulares de Escuelas Universitarias, Asociados, Contratados Doctores, Ayudantes Doctores, entre otros. La lista completa se encuentra en la documentacion del cubo."
+  },
+  {
+    "pregunta": "Que grupos laborales existen para el PTGAS?",
+    "respuesta_esperada": "Segun el cubo PTGAS, la dimension 'Pertenencia' clasifica al personal en los siguientes grupos: 'Funcionario A1', 'Funcionario A2', 'Funcionario C1', 'Funcionario C2', 'Laboral LA', 'Laboral LB', 'Laboral LC', 'Laboral LD'."
+  },
+  {
+    "pregunta": "Como se clasifican los estudiantes por rango de edad?",
+    "respuesta_esperada": "La dimension 'Alumno' presente en multiples cubos como MATRICULA, ADMISION y RENDIMIENTO, tiene el atributo 'Rango de Edad' que permite clasificar a los estudiantes en intervalos de edad. Por ejemplo, en el cubo de Matricula los rangos son: 18 anos o menos, 19, 20, 21, etc."
+  },
+  {
+    "pregunta": "Que macroareas de conocimiento se contemplan en el sistema?",
+    "respuesta_esperada": "Las macroareas de conocimiento son: Artes y Humanidades, Ciencias, Ciencias Sociales y Juridicas, Ciencias de la Salud, e Ingenieria y Arquitectura. Esta clasificacion esta disponible como el atributo 'Rama de Conocimiento' en la dimension 'Titulacion' en varios cubos para organizar la informacion academica y de investigacion."
+  },
+  {
+    "pregunta": "Como se clasifican los estudios por tipo?",
+    "respuesta_esperada": "La dimension 'Titulacion' en cubos como ADMISION, MATRICULA y EGRESADOS tiene un atributo 'Tipo de estudio' que los clasifica en: grado, master, doctorado, licenciatura o equivalente, diplomatura o equivalente."
+  },
+  {
+    "pregunta": "Que tipos de centros universitarios existen?",
+    "respuesta_esperada": "La dimension de Centro (como 'Centro Egreso' o 'Centro de Matrícula') tiene un atributo 'Tipo' que clasifica los centros en: facultad, escuela universitaria, centro adscrito, entre otros. Esta clasificacion se utiliza en multiples cubos para organizar la informacion."
+  },
+  {
+    "pregunta": "Como se clasifican las asignaturas por tipo?",
+    "respuesta_esperada": "Las asignaturas se clasifican por su 'Clase'. El cubo DOCENCIA ASIGNATURA tiene la dimension 'Asignatura' con el atributo 'Clase' cuyos valores pueden ser: formacion basica, obligatoria, optativa, libre eleccion, troncal, practicas externas, etc."
+  },
+  {
+    "pregunta": "Que modalidades de estudios propios existen?",
+    "respuesta_esperada": "Las modalidades de imparticion de los estudios propios se encuentran en la dimension 'Estudio Propio' del cubo MATRIEEPP. Los valores son: Presencial, Semipresencial, y A distancia."
+  },
+  {
+    "pregunta": "Como se clasifican los proyectos de investigacion por agrupacion?",
+    "respuesta_esperada": "Los proyectos se clasifican por 'Agrupacion'. El cubo PROYECTOS del ambito I+D+i tiene una dimension con este nombre y sus valores son: Proyectos de Investigacion Basica (no Europeos), Proyectos de Investigacion Basica Europeos, Proyectos colaborativos con Empresa, y Contratos y Convenios."
+  },
+  {
+    "pregunta": "Que ambitos territoriales se consideran para los proyectos?",
+    "respuesta_esperada": "Los ambitos territoriales para proyectos son: local, autonomico, nacional, europeo e internacional. Esta clasificacion esta disponible en la dimension 'Ambito territorial' en los cubos PROYECTOS y SOLICITUD CONVOCATORIA."
+  },
+  {
+    "pregunta": "Como se mide la produccion cientifica de la universidad?",
+    "respuesta_esperada": "La produccion cientifica se mide a traves de varias medidas en el cubo PRODUCCION CIENTIFICA. Algunas de ellas son: 'Articulos', 'Tesis', 'Libros', 'Capitulos de libro' y 'Actividades en congresos'. Se recomienda incorporar la dimension 'ANO' para datos especificos temporales."
+  },
+  {
+    "pregunta": "Que informacion contiene el cubo de indices bibliometricos?",
+    "respuesta_esperada": "El cubo INDICES BIBLIOMETRICOS del ambito I+D+i contiene medidas como 'Numero de citas', 'Numero de documentos', 'Porcentaje de documentos citados', entre otros. Permite analizar el impacto de la produccion cientifica."
+  },
+  {
+    "pregunta": "Como se clasifican las movilidades de I+D+i?",
+    "respuesta_esperada": "Las movilidades de I+D+i se clasifican segun el cubo MOVILIDAD I+D+i del ambito MOVILIDAD. Utiliza dimensiones como 'Movilidad' con atributos como 'Tipo de investigador' o 'Modalidad de la movilidad' (ej. Estancia de investigacion, Intercambio docente)."
+  },
+  {
+    "pregunta": "Que tipos de acuerdos bilaterales maneja la universidad?",
+    "respuesta_esperada": "El cubo ACUERDOS BILATERALES del ambito MOVILIDAD gestiona informacion sobre los convenios internacionales, que se pueden analizar por dimensiones como 'Universidad Socia' (con atributos como pais) o 'Area de Estudio'."
+  },
+  {
+    "pregunta": "Como se determina si un puesto es de investigacion?",
+    "respuesta_esperada": "La dimension 'Puesto' del cubo PUESTO incluye el atributo 'Puesto de Investigacion (S/N)' que permite identificar si un puesto de trabajo esta vinculado a actividades de investigacion (S) o no (N)."
+  },
+  {
+    "pregunta": "Que especialidades RPT existen para el PTGAS?",
+    "respuesta_esperada": "El cubo PTGAS no parece contener una dimension con las especialidades de RPT. La informacion sobre la Relacion de Puestos de Trabajo y sus especialidades no esta desglosada de esa forma en el cubo PTGAS."
+  },
+  {
+    "pregunta": "Como se clasifica el personal segun su situacion administrativa?",
+    "respuesta_esperada": "La situacion administrativa del personal se clasifica en la dimension 'Situacion Administrativa' disponible en los cubos PDI y PTGAS. Algunos valores son: 'Servicio activo', 'Excedencia', 'Servicios especiales'."
+  },
+  {
+    "pregunta": "Que tipos de dedicacion existen para los puestos de trabajo?",
+    "respuesta_esperada": "En el cubo PDI, la dimension 'Dedicacion' clasifica la dedicacion del personal. Algunos valores son: 'Tiempo completo', 'Tiempo parcial', 'Asociado', etc. Para PTGAS, la dedicacion no parece ser una dimension principal."
+  },
+  {
+    "pregunta": "Como se clasifican los investigadores por nivel formativo?",
+    "respuesta_esperada": "El cubo GRUPOS DE INVESTIGACION contiene la dimension 'Investigador' con el atributo 'Nivel formativo', que clasifica a los investigadores en: 'Doctor', 'Master (EEES)', 'Licenciados o equivalente', 'Diplomados o equivalente', etc."
+  },
+  {
+    "pregunta": "Que son los sexenios de investigacion?",
+    "respuesta_esperada": "Los sexenios son tramos de investigacion reconocidos. El cubo RRHHidi contiene la medida 'Numero de sexenios reconocidos' y la dimension 'Sexenios' con atributos para clasificar al personal segun los sexenios obtenidos."
+  },
+  {
+    "pregunta": "Como se calcula el importe concedido en proyectos?",
+    "respuesta_esperada": "El cubo SOLICITUD CONVOCATORIA contiene la medida 'Importe concedido', que se refiere a las cantidades aprobadas en la resolucion de convocatorias de proyectos de I+D+i. Se recomienda usar la dimension 'ANO DE CONVOCATORIA'."
+  },
+  {
+    "pregunta": "Que oficinas gestoras participan en la investigacion?",
+    "respuesta_esperada": "Las oficinas gestoras se pueden identificar en la dimension 'Oficina Gestora' del cubo PROYECTOS. Los valores son: Oficina de Proyectos Europeos (OPE), Oficina de Transferencia de Resultados de Investigacion (OTRI), y Servicio de Gestion de la Investigacion (SGI)."
+  },
+  {
+    "pregunta": "Como se clasifican las actividades en congresos por ambito?",
+    "respuesta_esperada": "Las actividades en congresos se clasifican por ambito en la dimension 'Ambito del congreso' en el cubo PRODUCCION CIENTIFICA. Los valores pueden ser: 'Internacional', 'Nacional', y 'Autonomico/Local'."
+  },
+  {
+    "pregunta": "Que tipos de oportunidad existen para proyectos?",
+    "respuesta_esperada": "Los tipos de oportunidad para proyectos estan en la dimension 'Oportunidad' de los cubos PROYECTOS y SOLICITUD CONVOCATORIA. Los valores son: 'Convocatoria', 'Contrato', 'Convenio' y 'Subcontratacion convocatoria'."
+  },
+  {
+    "pregunta": "Como se determina si un investigador es responsable de grupo?",
+    "respuesta_esperada": "La dimension 'Investigador' del cubo GRUPOS DE INVESTIGACION tiene el atributo 'Responsable de Grupo (S/N)' que permite identificar a los responsables de un grupo de investigacion (S)."
+  },
+  {
+    "pregunta": "Que informacion proporciona la dimension de tesis dirigidas?",
+    "respuesta_esperada": "La dimension 'Tesis' en el cubo RRHHidi permite clasificar a los investigadores. Tiene atributos como 'Numero de tesis dirigidas' o 'Tesis dirigidas con mencion internacional' para analizar la direccion de tesis doctorales."
+  },
+  {
+    "pregunta": "Como se clasifica el personal segun su regimen juridico?",
+    "respuesta_esperada": "El personal se clasifica por su 'Regimen Juridico'. Esta dimension existe en los cubos de PDI y PTGAS. Para PDI los valores son 'Funcionario', 'Laboral', 'Atipico', y 'Contratado administrativo'. Para PTGAS son 'Funcionario' y 'Laboral'."
+  },
+  {
+    "pregunta": "Que modalidades de personal investigador existen?",
+    "respuesta_esperada": "La dimension 'Modalidad' en el cubo PDI y PTGAS permite clasificar al personal. Algunos valores son: 'De carrera', 'Interino', 'Indefinido fijo', 'Temporal'. Es util cruzarla con la dimension 'Tipo de Personal' (PDI/PTGAS)."
+  },
+  {
+    "pregunta": "Como se clasifican los estudiantes por universidad de origen?",
+    "respuesta_esperada": "La dimension 'Acceso' del cubo ADMISION tiene el atributo 'Universidad de Origen', que clasifica a los estudiantes segun la universidad donde cursaron estudios previos o superaron las pruebas de acceso."
+  },
+  {
+    "pregunta": "Que cupos de adjudicacion existen en el proceso de admision?",
+    "respuesta_esperada": "La dimension 'Acceso' del cubo ADMISION tiene el atributo 'Cupo adjudicacion'. Incluye el cupo general (EVAU-PAU, CFGS, etc.) y los cupos de reserva (titulados universitarios, mayores de 25/45 anos, deportistas, etc.)."
+  },
+  {
+    "pregunta": "Como se determina la nota de corte en las titulaciones?",
+    "respuesta_esperada": "La nota de corte es la menor nota de admision con la que se adjudica plaza. El cubo OFERTA PLAZAS incluye la medida 'Nota de Corte'. Puede haber diferencias entre la convocatoria ordinaria y extraordinaria."
+  },
+  {
+    "pregunta": "Que informacion contiene la dimension de traslados?",
+    "respuesta_esperada": "La dimension 'Traslado' del cubo EGRESADOS permite clasificar a los estudiantes a los que se les cierra el expediente por traslado a otra universidad. Tiene atributos como 'Centro' o 'Estudio' de destino. Se debe usar con la medida 'alumnos que se trasladan a otra universidad'."
+  },
+  {
+    "pregunta": "Como se clasifican los estudios por interuniversitariedad?",
+    "respuesta_esperada": "La dimension 'Titulacion' en varios cubos academicos tiene los atributos 'Interuniversitario (S/N)' e 'Interuniversitario coordina Unizar (S/N)' para identificar si un estudio se imparte en colaboracion con otras universidades."
+  },
+  {
+    "pregunta": "Que campus tiene la Universidad de Zaragoza?",
+    "respuesta_esperada": "La dimension 'Centro' en varios cubos tiene un atributo 'Campus' que permite organizar la informacion geograficamente segun el campus al que pertenece el centro (Zaragoza, Huesca, Teruel, La Almunia)."
+  },
+  {
+    "pregunta": "Como se determina si un cargo es remunerado?",
+    "respuesta_esperada": "La dimension 'Cargo' del cubo CARGO tiene el atributo 'Remunerado (S/N)' que permite clasificar los cargos segun si conllevan compensacion economica (S) o no (N)."
+  },
+  {
+    "pregunta": "Que informacion proporciona la fecha de actualizacion?",
+    "respuesta_esperada": "La dimension 'Fecha de actualizacion' indica cuando se realizo la ultima recarga de datos en el sistema. Esta presente en todos los cubos para garantizar la trazabilidad temporal de la informacion."
+  },
+  {
+    "pregunta": "Como se clasifican los puestos por situacion?",
+    "respuesta_esperada": "La dimension 'Puesto' del cubo PUESTO tiene un atributo 'Situacion' que clasifica los puestos en 'Ocupado', 'Vacante', etc., para la planificacion de recursos humanos."
+  },
+  {
+    "pregunta": "Que tipos de estudios previos dan acceso a la universidad?",
+    "respuesta_esperada": "La dimension 'Acceso' del cubo ADMISION tiene el atributo 'Estudio previo' que identifica como accedieron los estudiantes. Valores: 'Pruebas de Acceso', 'FP', 'Titulados Universitarios', 'Mayores de 25', etc."
+  },
+  {
+    "pregunta": "Como se calcula el ratio de creditos por alumno matriculado?",
+    "respuesta_esperada": "El cubo MATRICULA del ambito ACADEMICO contiene la medida 'Ratio Creditos/Alumnos Matriculados', que es el cociente entre los creditos matriculados y el numero de alumnos matriculados."
+  },
+  {
+    "pregunta": "Que modalidades de contrato existen para el personal investigador?",
+    "respuesta_esperada": "En los cubos de personal como PDI o RRHHidi, la dimension 'Modalidad' clasifica al personal en categorias como: 'De carrera', 'Interino', 'Indefinido fijo', 'Temporal'. Esto aplica tanto a PDI como a PTGAS de investigacion."
+  },
+  {
+    "pregunta": "Como se determina si un investigador participa en proyectos?",
+    "respuesta_esperada": "El cubo RRHHidi no parece tener una dimension directa para saber si un investigador participa en un proyecto. Sin embargo, se podria inferir cruzando informacion con el cubo de PROYECTOS, aunque no es una clasificacion directa."
+  },
+  {
+    "pregunta": "Que centros de investigacion distintos a los IUI se consideran?",
+    "respuesta_esperada": "Los cubos de I+D+i, como GRUPOS DE INVESTIGACION, tienen una dimension 'Instituto Investigacion' que lista los Institutos Universitarios de Investigacion (IUI). Otros centros como el IIS Aragon no parecen estar en una dimension especifica, pero pueden aparecer en otras clasificaciones."
+  },
+  {
+    "pregunta": "Como se clasifican las tesis con mencion internacional?",
+    "respuesta_esperada": "La dimension 'Tesis' en el cubo RRHHidi tiene el atributo 'Tesis dirigidas con mencion internacional', que permite clasificar a los investigadores segun el numero de tesis con esta distincion que han dirigido."
+  },
+  {
+    "pregunta": "Que informacion contiene la dimension de permanencia del profesorado?",
+    "respuesta_esperada": "La dimension 'Personal' del cubo DOCENCIA PDI contiene el atributo 'Permanente (S/N)' que clasifica a los profesores segun si su relacion contractual es permanente (S) o temporal (N)."
+  },
+  {
+    "pregunta": "Como se determina el pais de obtencion del titulo de doctor?",
+    "respuesta_esperada": "La dimension 'Doctor' del cubo PDI permite clasificar al personal segun el atributo 'Pais de obtencion del titulo'."
+  },
+  {
+    "pregunta": "Que universidades otorgan titulos de doctor al personal de la UZ?",
+    "respuesta_esperada": "La dimension 'Doctor' del cubo PDI tiene el atributo 'Universidad' que clasifica al personal segun la universidad donde obtuvieron el titulo de Doctor."
+  },
+  {
+    "pregunta": "Como se clasifican los profesores asociados sanitarios?",
+    "respuesta_esperada": "La dimension 'Personal' del cubo PDI tiene el atributo 'Asociado Sanitario (S/N)' que permite distinguir a los profesores asociados de ciencias de la salud (S) del resto (N)."
+  },
+  {
+    "pregunta": "Que informacion proporciona la carga docente semanal?",
+    "respuesta_esperada": "El cubo de PDI no parece incluir una dimension directa sobre la 'Carga Docente Semanal'. El cubo de DOCENCIA PDI mide las horas de docencia, pero no estan agregadas por PDI en una dimension de carga semanal."
+  },
+  {
+    "pregunta": "Como se determina el grado de complemento del PTGAS?",
+    "respuesta_esperada": "La dimension 'Personal' del cubo PTGAS incluye el atributo 'Grado complemento' que agrupa los datos segun el grado de complemento personal consolidado por los empleados."
+  },
+  {
+    "pregunta": "Que niveles de titulacion se reconocen para el PTGAS?",
+    "respuesta_esperada": "La dimension 'Personal' del cubo PTGAS incluye el atributo 'Nivel de Titulacion', con valores como: 'Doctor', 'Master', 'Grado', 'Licenciados o equivalentes', etc."
+  },
+  {
+    "pregunta": "Como se determina si el PTGAS trabaja en investigacion?",
+    "respuesta_esperada": "La dimension 'Personal' del cubo PTGAS incluye el atributo 'PTGAS de Investigacion (S/N)' que permite distinguir si los efectivos se remuneran con cargo a proyectos de investigacion (S) o no (N)."
+  },
+  {
+    "pregunta": "Que categorias de puestos de trabajo existen?",
+    "respuesta_esperada": "El cubo PUESTO contiene la dimension 'Puesto' con el atributo 'Categoria' que se define segun la clasificacion administrativa del personal que puede desempenarlos."
+  },
+  {
+    "pregunta": "Como se determina el desempeno de los puestos?",
+    "respuesta_esperada": "La dimension 'Puesto' en el cubo PUESTO tiene el atributo 'Puesto Desempeno' que clasifica los puestos segun si estan siendo desempenados, vacantes o en proceso de provision. La documentacion no provee esa informacion."
+  },
+  {
+    "pregunta": "Que unidades organizativas se consideran en la estructura?",
+    "respuesta_esperada": "La dimension 'Unidad' esta presente en varios cubos (PDI, PTGAS, PUESTO) y permite clasificar la informacion por las diferentes estructuras administrativas: servicios, departamentos, centros, institutos, etc."
+  },
+  {
+    "pregunta": "Como se clasifican los grupos de puestos de trabajo?",
+    "respuesta_esperada": "La dimension 'Puesto' del cubo PUESTO incluye el atributo 'Grupos puesto' que clasifica los puestos segun el grupo de pertenencia de los empleados que pueden desempenarlos (A1, A2, C1, C2, etc.)."
+  },
+  {
+    "pregunta": "Que informacion proporciona el nivel de complemento de los puestos?",
+    "respuesta_esperada": "La dimension 'Puesto' del cubo PUESTO incluye el atributo 'Nivel complemento' que agrupa los puestos segun el nivel de complemento especifico que tienen asignado."
+  },
+  {
+    "pregunta": "Como se determinan los tipos de puesto existentes?",
+    "respuesta_esperada": "La dimension 'Puesto' del cubo PUESTO incluye el atributo 'Tipo de puesto' que los clasifica segun su naturaleza funcional (por ejemplo, 'EVENTUAL', 'FUNCIONARIO', 'LABORAL')."
+  },
+  {
+    "pregunta": "Que programas de movilidad internacional maneja la universidad?",
+    "respuesta_esperada": "Los programas se detallan en la dimension 'Programa de Movilidad' en los cubos del ambito MOVILIDAD. Incluyen 'Erasmus', 'Movilidad Iberoamerica', 'UZ/Norteamerica, Oceania y Asia', entre otros."
+  },
+  {
+    "pregunta": "Como se determina la duracion de las estancias de movilidad?",
+    "respuesta_esperada": "La duracion de las estancias se puede analizar a traves de la dimension 'Movilidad' en los cubos de ESTUDIANTES OUT y ESTUDIANTES IN. Esta dimension tiene atributos como 'Duracion de la estancia'."
+  },
+  {
+    "pregunta": "Que idiomas se consideran en los contratos de estudios?",
+    "respuesta_esperada": "La informacion sobre el idioma de imparticion se encuentra en la dimension 'Movilidad' del cubo ESTUDIANTES OUT, con el atributo 'Idioma de imparticion'."
+  },
+  {
+    "pregunta": "Como se clasifican las areas de estudio en los acuerdos de movilidad?",
+    "respuesta_esperada": "Los cubos de movilidad, como ACUERDOS BILATERALES, utilizan la dimension 'Area de Estudio' para clasificar los convenios por el campo academico al que aplican."
+  },
+  {
+    "pregunta": "Que tipos de renuncias se contabilizan en movilidad?",
+    "respuesta_esperada": "El cubo SOLICITUDES MOVILIDAD OUT tiene una medida llamada 'Total renuncias'. La dimension 'Renuncia' permite clasificar las renuncias en 'Expresa' o 'Tacita'."
+  },
+  {
+    "pregunta": "Como se determina el nivel de estudios de los estudiantes de movilidad?",
+    "respuesta_esperada": "En los cubos de movilidad, la dimension 'Titulacion' (o similar) y su atributo 'Tipo de estudio' permite clasificar a los estudiantes por su nivel academico: grado, master, doctorado."
+  },
+  {
+    "pregunta": "Que universidades de destino estan disponibles para movilidad?",
+    "respuesta_esperada": "Los cubos de movilidad, como ESTUDIANTES OUT, incluyen la dimension 'Universidad Socia' que contiene la informacion de las universidades de destino, incluyendo su pais."
+  },
+  {
+    "pregunta": "Como se gestionan los acuerdos bilaterales de investigacion?",
+    "respuesta_esperada": "El cubo ACUERDOS BILATERALES gestiona convenios internacionales, pero no distingue explicitamente entre los de docencia o investigacion. La clasificacion se hace por 'Area de Estudio' o 'Tipo de Movilidad', lo que podria dar pistas sobre su naturaleza."
+  },
+  {
+    "pregunta": "Que modalidades de movilidad de investigadores existen?",
+    "respuesta_esperada": "El cubo MOVILIDAD I+D+i tiene la dimension 'Movilidad' con el atributo 'Modalidad de la movilidad' que incluye valores como: 'Estancia de investigacion', 'Intercambio docente', 'Asistencia a congresos', entre otros."
+  },
+  {
+    "pregunta": "Como se determina si una movilidad incluye prorroga?",
+    "respuesta_esperada": "El cubo MOVILIDAD I+D+i incluye la dimension 'Movilidad' con un atributo 'Prorroga (S/N)' para identificar si una estancia ha sido extendida."
+  }
+]

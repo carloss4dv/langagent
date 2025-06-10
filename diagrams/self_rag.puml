@@ -1,0 +1,39 @@
+@startuml
+skinparam style strictuml
+
+title Workflow de SELF-RAG
+
+participant "Usuario" as User
+participant "Sistema SELF-RAG" as SELFRAGSystem
+participant "Retriever Externo" as ExternalRetriever
+participant "Base de Conocimiento" as KnowledgeBase
+
+User -> SELFRAGSystem: Envía Consulta (Query)
+activate SELFRAGSystem
+
+loop Mientras no se genere el token de fin
+    SELFRAGSystem -> SELFRAGSystem: Decide si Recuperar
+    alt Decidir Recuperar
+        SELFRAGSystem -> ExternalRetriever: Solicita Recuperación (Query + Generación Actual)
+        activate ExternalRetriever
+        ExternalRetriever -> KnowledgeBase: Recupera Pasajes
+        activate KnowledgeBase
+        KnowledgeBase --> ExternalRetriever: Devuelve Pasajes
+        deactivate KnowledgeBase
+        ExternalRetriever --> SELFRAGSystem: Devuelve Pasajes
+        deactivate ExternalRetriever
+        SELFRAGSystem -> SELFRAGSystem: Genera Tokens de Crítica para Pasajes
+        alt Pasajes Relevantes
+            SELFRAGSystem -> SELFRAGSystem: Genera Continuación con Pasajes
+        else
+            SELFRAGSystem -> SELFRAGSystem: Genera Continuación sin Pasajes
+        end
+    else
+        SELFRAGSystem -> SELFRAGSystem: Genera Siguiente Segmento sin Recuperación
+    end
+end
+
+SELFRAGSystem --> User: Envía Respuesta Final
+deactivate SELFRAGSystem
+
+@enduml

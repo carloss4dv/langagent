@@ -1,0 +1,57 @@
+@startuml
+skinparam style strictuml
+
+title Corrective RAG (CRAG) Workflow
+
+participant "Usuario" as User
+participant "Sistema CRAG" as CRAGSystem
+participant "Recuperador (Retriever)" as Retriever
+participant "Base de Conocimiento (Vector DB)" as VectorDB
+participant "Evaluador de Relevancia (LLM)" as Evaluator
+participant "Reformulador de Consulta (LLM)" as QueryRewriter
+participant "Herramienta de Búsqueda Web" as WebSearchTool
+participant "LLM (Generador)" as LLM
+
+User -> CRAGSystem: Envía Consulta (Query)
+activate CRAGSystem
+
+CRAGSystem -> Retriever: Recupera Documentos Iniciales
+activate Retriever
+Retriever -> VectorDB: Búsqueda de Documentos
+activate VectorDB
+VectorDB --> Retriever: Documentos Iniciales
+deactivate VectorDB
+Retriever --> CRAGSystem: Documentos Iniciales Recuperados
+deactivate Retriever
+
+CRAGSystem -> Evaluator: Evalúa Relevancia (Query, Documentos Iniciales)
+activate Evaluator
+Evaluator --> CRAGSystem: Decisión de Relevancia (Relevante/Irrelevante)
+deactivate Evaluator
+
+alt Documentos IRRELEVANTES (Ej. < 70% relevantes)
+    CRAGSystem -> QueryRewriter: Transforma Query (Query Original)
+    activate QueryRewriter
+    QueryRewriter --> CRAGSystem: Query Reformulada
+    deactivate QueryRewriter
+
+    CRAGSystem -> WebSearchTool: Realiza Búsqueda Web (Query Reformulada)
+    activate WebSearchTool
+    WebSearchTool --> CRAGSystem: Resultados de Búsqueda Web
+    deactivate WebSearchTool
+
+    CRAGSystem -> LLM: Genera Respuesta (Query, Doc. Iniciales, Resultados Web)
+    activate LLM
+    LLM --> CRAGSystem: Respuesta Final
+    deactivate LLM
+else Documentos RELEVANTES
+    CRAGSystem -> LLM: Genera Respuesta (Query, Documentos Iniciales)
+    activate LLM
+    LLM --> CRAGSystem: Respuesta Final
+    deactivate LLM
+end
+
+CRAGSystem --> User: Envía Respuesta Final
+deactivate CRAGSystem
+
+@enduml

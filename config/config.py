@@ -26,7 +26,7 @@ LLM_CONFIG = {
 VECTORSTORE_CONFIG = {
     "chunk_size": 512,         # Tamaño de los fragmentos de texto para indexación
     "chunk_overlap": 50,        # Superposición entre fragmentos
-    "k_retrieval": 6,          # Número de documentos a recuperar
+    "k_retrieval": 12,          # Número de documentos a recuperar
     "similarity_threshold": 0.7,  # Umbral mínimo de similitud para considerar un documento relevante
     "max_docs_total": 15,       # Aumentar el límite total de documentos
     "vector_db_type": "milvus", # Tipo de base de datos vectorial (chroma o milvus)

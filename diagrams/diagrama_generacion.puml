@@ -1,0 +1,164 @@
+@startuml GeneracionRAG
+!theme plain
+title FASE DE GENERACION - Sistema MoG Mejorado
+
+skinparam backgroundColor white
+skinparam defaultFontSize 12
+skinparam defaultFontName Arial
+
+skinparam partition {
+    BackgroundColor lightblue
+    BorderColor black
+    FontStyle bold
+    FontSize 14
+}
+
+skinparam activity {
+    BackgroundColor lightyellow
+    BorderColor black
+    FontSize 11
+}
+
+skinparam note {
+    BackgroundColor lightgreen
+    BorderColor darkgreen
+    FontSize 11
+    MaxMessageSize 150
+}
+
+start
+
+partition "  **ESTADO INICIAL**  " {
+  :**RECIBE DE RECUPERACION**;
+  note right
+    **DATOS DE ENTRADA:**
+    - question + rewritten_question
+    - ambito + cubos relevantes  
+    - retrieved_documents
+    - chunk_strategy (256|512|1024)
+    - granularity_history: List[Dict]
+  end note
+  
+  :**VALIDACION CONTEXTO**
+  **validate_and_clean_context()**;
+}
+
+partition "  **GENERACION**  " {
+  if (is_consulta?) then (SQL)
+    :**SQL GENERATION**
+    **rag_sql_chain**;
+    
+    :**EXECUTE QUERY**
+    **QuerySQLDatabaseTool**;
+    
+    :**SQL INTERPRETATION**;
+    
+  else (RAG)
+    :**RAG GENERATION**
+    **mistral-small-3.1:24b**;
+  endif
+}
+
+partition "  **EVALUACION GRANULAR**  " {
+  :**EVALUACION GRANULAR**
+  **@evaluate_response_granular**;
+  note right
+    **  METRICAS OBJETIVO (>= 0.7):  **
+    
+    - faithfulness
+    - context_precision 
+    - context_recall
+    - answer_relevance
+  end note
+}
+
+partition "  **ACTUALIZACION HISTORICO**  " {
+  :**UPDATE GRANULARITY HISTORY**
+  **@update_granularity_history**;
+  note right
+    **  REGISTRO SISTEMATICO:  **
+    
+    - Estrategia actual
+    - Metricas obtenidas
+    - Exito determinado
+    - Ultimas 5 entradas
+  end note
+}
+
+partition "  **DECISION MoG**  " {
+  :**ROUTE AFTER UPDATE HISTORY**;
+  
+  if (SQL pendiente?) then (YES)
+    :**EXECUTE SQL**;
+    stop
+    
+  else (RAG Flow)
+    :**ROUTE NEXT STRATEGY**;
+    
+    if (Metricas OK?) then (YES)
+      :**FINALIZACION EXITOSA**;
+      stop
+      
+    elseif (Info insuficiente?) then (YES)
+      :**FINALIZACION TEMPRANA**;
+      stop
+      
+    elseif (Max retries?) then (YES)
+      :**FINALIZACION LIMITE**;
+      stop
+      
+    else (RETRY)
+      
+      partition "  **ANALISIS SEGEDA**  " {
+        :**ANALYZE QUERY COMPLEXITY**
+        **Con historico integrado**;
+        note right
+          **  INDICADORES DE GRANULARIDAD:  **
+          
+          - Especificos (256): metricas exactas
+          - Analiticos (512): procesos, comparaciones
+          - Amplios (1024): tendencias, panorama
+          
+          **  CON HISTORICO INTEGRADO:  **
+          
+          - tried_strategies extraidas
+          - Evita estrategias fallidas
+          - history_adjustment aplicado
+        end note
+      }
+      
+      partition "  **ESTRATEGIA MoG**  " {
+        :**SUGGEST ALTERNATIVE STRATEGY**;
+        note right
+          **  LOGICA INTELIGENTE:  **
+          
+          - Context Recall bajo -> mas contexto
+          - Precision bajo -> mas precision
+          - Answer Relevance -> segun tipo consulta
+          - Anti-bucles con historico
+        end note
+        
+        :**UPDATE CHUNK STRATEGY**;
+        note right
+          **  NUEVA ESTRATEGIA:  **
+          
+          - Basada en analisis MoG
+          - Considera metricas especificas
+          - Usa experiencia previa
+        end note
+      }
+      
+      :**INCREMENT RETRY COUNT**;
+      
+      :**NUEVA ITERACION**
+      **Con estrategia optimizada**;
+      
+      :**BACK TO RECUPERACION**;
+      
+    endif
+  endif
+}
+
+stop
+
+@enduml 

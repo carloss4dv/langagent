@@ -1,0 +1,36 @@
+@startuml RAG_Triad
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 16
+
+skinparam rectangle {
+    BackgroundColor #f8f9fa
+    BorderColor #34495e
+    BorderThickness 3
+    RoundCorner 25
+    FontStyle bold
+    FontSize 18
+}
+
+skinparam arrow {
+    FontSize 11
+    FontStyle bold
+    FontColor #2c3e50
+}
+
+title RAG TRIAD
+
+' Definir todos los rectángulos primero
+rectangle "CONSULTA\n(Query)" as Query #lightblue
+rectangle "RESPUESTA\n(Response)" as Response #lightgreen
+rectangle "CONTEXTO\n(Context)" as Context #lightyellow
+
+' Layout para separar la base del triángulo
+Response -[hidden]right- Context
+
+' Conexiones formando triángulo perfecto
+Query --> Response : <b>Relevancia de Respuesta</b>\n<i>(Answer Relevance)</i>
+Query --> Context : <b>Relevancia de Contexto</b>\n<i>(Context Relevance)</i>
+Response --> Context : <b>Fundamentación</b>\n<i>(Groundedness)</i>
+
+@enduml

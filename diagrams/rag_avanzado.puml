@@ -1,0 +1,48 @@
+@startuml
+skinparam style strictuml
+
+title RAG Avanzado Workflow
+
+participant "Usuario" as User
+participant "Procesador de Consultas" as QueryProcessor
+participant "Recuperador Avanzado (DPR/CoBERT)" as AdvancedRetriever
+participant "Base de Conocimiento Vectorial" as VectorDB
+participant "Reordenador de Documentos" as DocumentReranker
+participant "Generador (LLM) con Chain of Note" as LLMGenerator
+
+User -> QueryProcessor: Envía Consulta Inicial
+activate QueryProcessor
+
+QueryProcessor -> QueryProcessor: Transformación y Descomposición de Consulta
+note right of QueryProcessor: Etapa de preprocesamiento\ny enrutamiento
+
+QueryProcessor -> AdvancedRetriever: Envía Subconsultas Transformadas
+activate AdvancedRetriever
+
+AdvancedRetriever -> VectorDB: Recuperación Densa (Embeddings Semánticos)
+activate VectorDB
+note right of AdvancedRetriever: Uso de embeddings\nsemánticos avanzados
+VectorDB --> AdvancedRetriever: Documentos Candidatos
+deactivate VectorDB
+
+AdvancedRetriever --> DocumentReranker: Envía Documentos Recuperados
+deactivate AdvancedRetriever
+activate DocumentReranker
+
+DocumentReranker -> DocumentReranker: Reordenación basada en Relevancia Semántica
+note right of DocumentReranker: Optimización de contexto\npara mejor precisión
+
+DocumentReranker --> LLMGenerator: Envía Documentos Reordenados
+deactivate DocumentReranker
+activate LLMGenerator
+
+LLMGenerator -> LLMGenerator: Generación con Chain of Note (CoN)
+note right of LLMGenerator: Reducción de alucinaciones\ny mejora de fundamentación
+
+LLMGenerator --> QueryProcessor: Respuesta Generada
+deactivate LLMGenerator
+
+QueryProcessor --> User: Entrega de Respuesta Final
+deactivate QueryProcessor
+
+@enduml

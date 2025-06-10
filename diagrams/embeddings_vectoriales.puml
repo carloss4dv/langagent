@@ -1,0 +1,34 @@
+@startuml
+skinparam packageStyle rect
+
+package "Proceso de Creación de Embeddings" {
+  [Texto Original\n(p. ej., 'El cielo es azul')] as Texto
+  [Modelo de Embedding] as ModeloEmbedding1
+  [Vector Embedding] as VectorEmbedding
+  note right of VectorEmbedding : [0.1, 0.9, ...]
+
+  Texto --> ModeloEmbedding1
+  ModeloEmbedding1 --> VectorEmbedding
+}
+
+package "Búsqueda Semántica" {
+  [Consulta del Usuario\n(p. ej., '¿De qué color es el cielo?')] as Consulta
+  [Modelo de Embedding] as ModeloEmbedding2
+  [Vector de Consulta] as VectorConsulta
+  note right of VectorConsulta : [0.12, 0.88, ...]
+  database "Base de Datos de Vectores" as DBVectores
+  [Cálculo de Similitud] as Similitud
+  [Resultados Relevantes] as Resultados
+
+  Consulta --> ModeloEmbedding2
+  ModeloEmbedding2 --> VectorConsulta
+  
+  VectorConsulta --> Similitud
+  DBVectores --> Similitud
+  Similitud --> Resultados
+}
+
+' El vector generado se almacena en la base de datos
+VectorEmbedding --> DBVectores : Almacenamiento
+
+@enduml

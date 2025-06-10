@@ -1,0 +1,23 @@
+@startuml
+!theme plain
+
+|Sistema|
+start
+
+:Cargar documentos fuente;
+:Dividir documentos en fragmentos;
+:Limpiar y preprocesar fragmentos;
+
+|Embeddings|
+:Generar embeddings para cada fragmento;
+
+|VectorStore|
+:Almacenar embeddings en base de datos vectorial;
+:Crear índices para búsqueda eficiente;
+
+|Sistema|
+:Validar integridad de la base de conocimiento;
+
+stop
+
+@enduml 

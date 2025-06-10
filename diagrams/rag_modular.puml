@@ -1,0 +1,17 @@
+@startuml
+component "Nodo de Política" as NP
+component "Módulo de Recuperación" as MR
+component "Módulo de Generación" as MG
+component "Módulo de Fusión" as MF
+
+NP --> MR: Configuración dinámica
+NP --> MG: Selección de modelo
+MR --> MF: Resultados de recuperación
+MG --> MF: Resultados de generación
+MF --> NP: Retroalimentación para iteración
+
+note right of NP: Control del flujo y toma de decisiones
+note right of MR: Soporte para múltiples algoritmos (e.g., DPR, BM25)
+note right of MG: Integración de LLMs configurables
+note right of MF: Combinación y normalización de datos
+@enduml

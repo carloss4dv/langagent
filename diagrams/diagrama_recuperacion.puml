@@ -1,0 +1,136 @@
+@startuml RecuperacionRAG
+!theme plain
+title FASE DE RECUPERACIÓN
+
+start
+
+if (Vectorstore existe?) then (NO)
+  partition "CARGA INICIAL" {
+    :CARGA DOCUMENTOS;
+    note right
+      • VectorStoreFactory.get_vectorstore_instance()
+      • Metadatos: {cubo_source, ambito, chunk_size}
+    end note
+    
+    :EMBEDDINGS + CONTEXT
+    @vectorstore/embeddings.py;
+    note right
+      intfloat/multilingual-e5-large-instruct
+      • Device: cuda/cpu fallback
+      • Vectors: float (1024 dim)
+      CONTEXT GENERATION (Primera vez)
+      • Generated context for chunks
+      • Enhanced chunk understanding
+      • Domain-specific enrichment
+    end note
+    
+    :MILVUS COLLECTIONS
+    @vectorstore/milvus.py;
+    note right
+      BM25 + Vector Indexing
+      • Collections: cubo_256, cubo_512, cubo_1024
+      • Hybrid: Vector + Full-text search
+      • URI: Zilliz Cloud / localhost:19534
+      HYBRID RETRIEVER SETUP
+      • MilvusCollectionHybridSearchRetriever
+      • WeightedRanker combination
+      • Embedding + BM25 integration
+    end note
+  }
+else (SI)
+  :CARGAR EXISTENTE;
+endif
+
+partition "ÁMBITO AGENT" {
+  :ANÁLISIS INICIAL
+  @ambito_agent.py;
+  note right
+    • identify_ambito() 
+    • AMBITOS_CUBOS mapping
+    • confidence > 0.7
+  end note
+  
+  if (needs clarification?) then (YES)
+    :CLARIFICACIÓN;
+    :USER RESPONDS;
+    :RE-PROCESS;
+  endif
+  
+  :OUTPUT ÁMBITO;
+  note right
+    • ambito: "sostenibilidad"
+    • cubos: ["energia", "residuos"] 
+    • is_consulta: bool
+    • came_from_clarification: bool
+  end note
+}
+
+partition "RECUPERACIÓN HÍBRIDA" {
+  if (came_from_clarification?) then (YES)
+    :QUERY REWRITING
+    mistral-small-3.1:24b;
+  endif
+  
+  :MILVUS HYBRID SEARCH
+  @config/config.py;
+  note right
+    MilvusCollectionHybridSearchRetriever
+    • Vector Search: multilingual-e5 embeddings (1024 dim)
+    • BM25: Full-text keyword matching  
+    • WeightedRanker combination (0.7 vector + 0.3 BM25)
+    • Filters: {"ambito": "sostenibilidad"}
+    • Collections: 256/512/1024 adaptive
+    EMBEDDINGS 
+    • HuggingFaceEmbeddings instance
+    • Query embedding generation
+    • Similarity computation with stored vectors
+  end note
+  
+  :RELEVANCE GRADING
+  llama3.2:3bm;
+  note right
+    • Domain-specific evaluation
+  end note
+  
+  :RECIBE N DOCUMENTOS
+  Retrieved from hybrid search;
+  note right
+    • N documents from Milvus hybrid
+    • Similarity scores preserved
+    • Metadata with cubo/ambito
+    • Raw retrieved content
+  end note
+  
+  :ESTRUCTURA DOCUMENTO + CONTEXTO
+  Add context and format;
+  note right
+    • Add generated context to chunks
+    • Structure document content
+    • Preserve similarity metadata
+    • Enhance with domain context
+  end note
+  
+  repeat
+    :VALIDAR DOCUMENTO;
+    note right
+      • Check document relevance
+      • Validate context coherence
+      • Filter by ambito/cubo
+      • Score document quality
+    end note
+  repeat while (more documents to validate?)
+  
+  :DOCUMENTOS VALIDADOS FINALES;
+  note right
+    **READY FOR GENERATION**
+    • retrieved_documents: List[Document]
+    • ambito + cubos preserved
+    • chunk_strategy: adaptive
+    • Context-enriched and validated
+    • All N documents processed
+  end note
+}
+
+stop
+
+@enduml 

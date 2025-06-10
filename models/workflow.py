@@ -22,6 +22,18 @@ from langagent.models.constants import (
 )
 from langagent.models.metrics_collector import MetricsCollector
 
+# Importar utilidades refactorizadas
+from langagent.models.workflow_utils import (
+    extract_chunk_strategy_from_name, normalize_name, validate_and_clean_context,
+    find_relevant_cubos_by_keywords, detect_insufficient_info_response, 
+    extract_sql_query_from_response, check_metrics_success, should_terminate_workflow,
+    execute_sql_query
+)
+from langagent.models.query_analysis import (
+    analyze_segeda_query_complexity, suggest_alternative_strategy_mog,
+    update_granularity_history_entry
+)
+
 # Usar el sistema de logging centralizado
 from langagent.config.logging_config import get_logger
 logger = get_logger(__name__)
@@ -50,6 +62,7 @@ class GraphState(TypedDict):
         chunk_strategy: estrategia de chunk actual (256, 512, 1024)
         evaluation_metrics: métricas granulares del evaluador
         came_from_clarification: indica si la pregunta viene de una clarificación previa
+        granularity_history: histórico de granularidades probadas
     """
     question: str
     rewritten_question: str
@@ -70,258 +83,11 @@ class GraphState(TypedDict):
     chunk_strategy: str  # Nuevo campo para recuperación adaptativa
     evaluation_metrics: Dict[str, Any]  # Nuevo campo para métricas granulares
     came_from_clarification: bool  # Nuevo campo para query rewriting condicional
+    granularity_history: List[Dict[str, Any]]
 
-def extract_chunk_strategy_from_name(name: str) -> str:
-    """
-    Extrae la estrategia de chunk del nombre de la colección/retriever.
-    
-    Args:
-        name (str): Nombre que debe contener _256, _512, o _1024
-        
-    Returns:
-        str: Estrategia de chunk ("256", "512", "1024")
-        
-    Raises:
-        ValueError: Si no se encuentra un patrón válido de estrategia
-    """
-    if not name:
-        raise ValueError("El nombre no puede estar vacío")
-    
-    # Buscar patrón _XXX donde XXX es 256, 512, o 1024
-    import re
-    pattern = r'_(256|512|1024)'
-    match = re.search(pattern, name)
-    
-    if match:
-        strategy = match.group(1)
-        logger.info(f"Estrategia extraída del nombre '{name}': {strategy} tokens")
-        return strategy
-    else:
-        raise ValueError(f"No se encontró un patrón válido de estrategia (_256, _512, _1024) en el nombre: '{name}'")
 
-def normalize_name(name: str) -> str:
-    """
-    Normaliza un nombre de cubo o ámbito eliminando acentos, espacios y convirtiendo a minúsculas.
-    
-    Args:
-        name (str): Nombre a normalizar
-        
-    Returns:
-        str: Nombre normalizado
-    """
-    if not name:
-        return ""
-        
-    # Mapeo de caracteres con acento a sin acento
-    accent_map = {
-        'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
-        'Á': 'a', 'É': 'e', 'Í': 'i', 'Ó': 'o', 'Ú': 'u',
-        'ñ': 'n', 'Ñ': 'n'
-    }
-    
-    # Convertir a minúsculas y reemplazar caracteres con acento
-    normalized = name.lower()
-    for accented, unaccented in accent_map.items():
-        normalized = normalized.replace(accented, unaccented)
-    
-    # Eliminar espacios y caracteres especiales
-    normalized = re.sub(r'[^a-z0-9]', '', normalized)
-    
-    return normalized
 
-def validate_and_clean_context(context, question):
-    """
-    Valida y limpia el contexto para asegurar que es un string válido antes de pasarlo a las cadenas RAG.
-    
-    Args:
-        context: Contexto a validar y limpiar
-        question: Pregunta a validar
-        
-    Returns:
-        Tuple[str, str]: (contexto limpio, pregunta limpia)
-    """
-    logger.debug(f"ENTRADA validate_and_clean_context - context type: {type(context)}, question type: {type(question)}")
-    
-    # Asegurar que el contexto es un string
-    if isinstance(context, dict):
-        logger.warning(f"Contexto es un diccionario, convirtiendo a string. Claves: {list(context.keys())}")
-        logger.debug(f"Contenido del diccionario de contexto: {context}")
-        if "context" in context:
-            context = context["context"]
-            logger.debug(f"Extraído contexto de clave 'context': {type(context)}")
-        else:
-            context = str(context)
-            logger.warning("No se encontró clave 'context', convirtiendo diccionario completo a string")
-    elif isinstance(context, list):
-        logger.warning("Contexto es una lista, uniendo elementos")
-        context = "\n".join([str(item) for item in context])
-    elif not isinstance(context, str):
-        logger.warning(f"Contexto tiene tipo inesperado {type(context)}, convirtiendo a string")
-        logger.debug(f"Valor del contexto no-string: {context}")
-        context = str(context)
-    
-    # Asegurar que la pregunta es un string
-    if isinstance(question, dict):
-        logger.warning(f"Pregunta es un diccionario, extrayendo. Claves: {list(question.keys())}")
-        logger.debug(f"Contenido del diccionario de pregunta: {question}")
-        if "question" in question:
-            question = question["question"]
-            logger.debug(f"Extraída pregunta de clave 'question': {type(question)}")
-        else:
-            question = str(question)
-            logger.warning("No se encontró clave 'question', convirtiendo diccionario completo a string")
-    elif not isinstance(question, str):
-        logger.warning(f"Pregunta tiene tipo inesperado {type(question)}, convirtiendo a string")
-        logger.debug(f"Valor de la pregunta no-string: {question}")
-        question = str(question)
-    
-    # Validar que no están vacíos
-    if not context.strip():
-        logger.warning("Contexto está vacío después de la limpieza")
-        context = "No hay contexto disponible."
-    
-    if not question.strip():
-        logger.warning("Pregunta está vacía después de la limpieza")
-        question = "¿Qué información necesitas?"
-    
-    logger.debug(f"SALIDA validate_and_clean_context - context type: {type(context)}, question type: {type(question)}")
-    logger.debug(f"Context preview: {context[:100]}...")
-    logger.debug(f"Question: {question}")
-    
-    return context, question
 
-def find_relevant_cubos_by_keywords(query: str, available_cubos: List[str]) -> Tuple[List[str], Optional[str]]:
-    """
-    Encuentra cubos relevantes basados en palabras clave y ámbitos en la consulta.
-    Si se identifica un ámbito, devuelve todos los cubos asociados a ese ámbito.
-    
-    Args:
-        query: La consulta del usuario
-        available_cubos: Lista de cubos disponibles
-        
-    Returns:
-        Tuple[List[str], Optional[str]]: (Lista de cubos relevantes, ámbito identificado)
-    """
-    query_lower = query.lower()
-    
-    # Buscar referencias explícitas a ámbitos
-    explicit_ambito_pattern = r"(?:ámbito|ambito)\s+(\w+)"
-    ambito_matches = re.findall(explicit_ambito_pattern, query_lower)
-    
-    # Verificar ámbitos explícitos
-    for match in ambito_matches:
-        ambito_key = match.lower().replace(" ", "_")
-        if ambito_key in AMBITOS_CUBOS:
-            # Devolver todos los cubos disponibles del ámbito
-            relevant_cubos = [
-                cubo for cubo in AMBITOS_CUBOS[ambito_key]["cubos"]
-                if cubo in available_cubos
-            ]
-            return relevant_cubos, ambito_key
-    
-    # Buscar referencias explícitas a cubos
-    explicit_cubo_pattern = r"(?:del|en el|del cubo|en el cubo)\s+(\w+)"
-    cubo_matches = re.findall(explicit_cubo_pattern, query_lower)
-    
-    for match in cubo_matches:
-        if match in available_cubos:
-            # Identificar el ámbito del cubo
-            ambito = CUBO_TO_AMBITO.get(match)
-            if ambito:
-                # Devolver todos los cubos del ámbito
-                relevant_cubos = [
-                    cubo for cubo in AMBITOS_CUBOS[ambito]["cubos"]
-                    if cubo in available_cubos
-                ]
-                return relevant_cubos, ambito
-            return [match], None
-    
-    # Buscar keywords de ámbitos
-    ambito_scores = {}
-    for ambito, keywords in AMBITO_KEYWORDS.items():
-        score = sum(1 for keyword in keywords if keyword in query_lower)
-        if score > 0:
-            ambito_scores[ambito] = score
-    
-    # Si encontramos ámbitos por keywords
-    if ambito_scores:
-        # Seleccionar el ámbito con mayor puntuación
-        selected_ambito = max(ambito_scores.items(), key=lambda x: x[1])[0]
-        relevant_cubos = [
-            cubo for cubo in AMBITOS_CUBOS[selected_ambito]["cubos"]
-            if cubo in available_cubos
-        ]
-        return relevant_cubos, selected_ambito
-    
-    # Si no encontramos nada, devolver todos los cubos disponibles
-    return list(available_cubos), None
-
-def execute_query(state):
-    """
-    Ejecuta la consulta SQL generada.
-    
-    Args:
-        state (dict): Estado actual del grafo.
-        
-    Returns:
-        dict: Estado actualizado con el resultado de la consulta SQL.
-    """
-    # Obtener la consulta SQL del estado
-    sql_query = state.get("sql_query")
-    if not sql_query:
-        logger.info("No hay consulta SQL para ejecutar.")
-        return state
-    
-    logger.info("---EXECUTE QUERY---")
-    
-    # Comprobar si sql_query es un string JSON 
-    if isinstance(sql_query, str):
-        try:
-            # Intentar parsear como JSON
-            if sql_query.strip().startswith('{'):
-                query_data = json.loads(sql_query)
-                if isinstance(query_data, dict):
-                    # Buscar la consulta en diferentes claves posibles
-                    if "query" in query_data:
-                        sql_query = query_data["query"]
-                        logger.info("Consulta SQL extraída del objeto JSON (clave 'query').")
-                    elif "sql" in query_data:
-                        sql_query = query_data["sql"]
-                        logger.info("Consulta SQL extraída del objeto JSON (clave 'sql').")
-        except json.JSONDecodeError:
-            # Si no es JSON válido, usar el string como está
-            pass
-    
-    logger.info(f"Ejecutando consulta SQL: {sql_query}")
-    
-    try:
-        # Crear la conexión a la base de datos y herramienta de consulta
-        if SQL_CONFIG.get("db_uri"):
-            db = SQLDatabase.from_uri(SQL_CONFIG.get("db_uri"))
-            execute_query_tool = QuerySQLDatabaseTool(db=db)
-            
-            # Ejecutar la consulta
-            result = execute_query_tool.invoke(sql_query)
-            state["sql_result"] = result
-            logger.info("Consulta ejecutada con éxito.")
-            
-        else:
-            state["sql_result"] = "Error: No se ha configurado la URI de la base de datos"
-            
-    except Exception as e:
-        error = f"Error al ejecutar la consulta SQL: {str(e)}"
-        state["sql_result"] = error
-        logger.error(error)
-        
-    # También notificar si hay problemas de permisos o conexión
-    if state.get("sql_result", "").startswith("Error"):
-        error = f"Error en la ejecución de la consulta: {state['sql_result']}"
-        logger.error(error)
-    
-    # Marcar que necesita interpretación de resultados SQL
-    state["needs_sql_interpretation"] = True
-    
-    return state
 
 def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewriter=None, rag_sql_chain=None, sql_interpretation_chain=None, adaptive_retrievers=None, metrics_collector=None, collection_name=None):
     """
@@ -566,27 +332,6 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         rewritten_question = state.get("rewritten_question", question)
         retrieval_details = state.get("retrieval_details", {})
         
-        # BYPASS TEMPORAL: Saltar grading si hay problemas con el retrieval_grader
-        BYPASS_GRADING = False  # Cambiar a False cuando el retrieval_grader funcione correctamente
-        
-        if BYPASS_GRADING:
-            logger.warning("BYPASS activado: Saltando evaluación de relevancia, usando todos los documentos")
-            retrieval_details.update({
-                "relevant_count": len(documents),
-                "relevance_checked": False,
-                "bypass_used": True
-            })
-            
-            result_state = {
-                **state,
-                "documents": documents,
-                "retrieval_details": retrieval_details
-            }
-            
-            # Finalizar medición del nodo
-            metrics_collector.end_node(node_context, result_state, success=True)
-            
-            return result_state
         
         try:
             # Comprobar si los documentos son relevantes
@@ -1095,25 +840,216 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             
             return error_state
     
-    def route_next_strategy(state):
+
+
+    def suggest_alternative_strategy_mog(current_strategy: str, metrics: Dict[str, float], query_analysis: Dict[str, Any], granularity_history: List[Dict[str, Any]] = None) -> str:
         """
-        Determina la próxima estrategia de recuperación basada en métricas granulares.
+        Sugiere una estrategia alternativa basada en el análisis MoG y las métricas actuales.
         
-        Utiliza lógica determinística simple (sin LLM) para decidir:
-        - Si continuar con más intentos
-        - Qué estrategia de chunk usar en el siguiente intento
+        Args:
+            current_strategy (str): Estrategia actual de chunking
+            metrics (Dict[str, float]): Métricas de evaluación actuales
+            query_analysis (Dict[str, Any]): Análisis de la consulta
+            granularity_history (List[Dict]): Histórico de granularidades probadas
+            
+        Returns:
+            str: Estrategia alternativa recomendada
+        """
+        
+        # Extraer métricas relevantes
+        context_recall = metrics.get("context_recall", 0.0)
+        context_precision = metrics.get("context_precision", 0.0)
+        faithfulness = metrics.get("faithfulness", 0.0)
+        answer_relevance = metrics.get("answer_relevance", 0.0)
+        
+        # Estrategia recomendada por análisis de consulta
+        optimal_strategy = query_analysis.get("recommended_granularity", "512")
+        confidence = query_analysis.get("confidence", 0.5)
+        
+        # Analizar histórico para evitar bucles
+        tried_strategies = []
+        if granularity_history:
+            tried_strategies = [entry.get('strategy', '') for entry in granularity_history[-3:]]  # Últimos 3 intentos
+        
+        # Si la confianza del análisis es alta (>0.75), priorizar la estrategia óptima
+        if confidence > 0.75 and current_strategy != optimal_strategy and optimal_strategy not in tried_strategies:
+            return optimal_strategy
+        
+        # Lógica específica basada en problemas de métricas con conocimiento del dominio SEGEDA
+        
+        # Problema de recall bajo: necesitamos más contexto
+        if context_recall < 0.6:
+            # Para consultas sobre medidas específicas, el recall bajo puede indicar que necesitamos
+            # más contexto sobre las definiciones y observaciones
+            if query_analysis.get("medida_mentions") and current_strategy == "256":
+                return "512"  # Las medidas necesitan contexto sobre observaciones
+            elif current_strategy == "512":
+                return "1024"  # Necesitamos más contexto general
+            elif current_strategy == "256":
+                return "512"  # Incrementar moderadamente
+            else:  # current_strategy == "1024"
+                return "1024"  # Ya en máximo, mantener
+        
+        # Problema de precisión/faithfulness bajo: necesitamos más precisión
+        if context_precision < 0.6 or faithfulness < 0.6:
+            # Para consultas con términos técnicos específicos, la precisión baja indica chunks demasiado amplios
+            if query_analysis.get("technical_terms") and current_strategy == "1024":
+                return "256"  # Términos técnicos necesitan contexto específico
+            elif current_strategy == "1024":
+                return "512"  # Decrementar moderadamente
+            elif current_strategy == "512":
+                return "256"  # Decrementar más
+            else:  # current_strategy == "256"
+                return "256"  # Ya en mínimo, mantener
+        
+        # Problema de relevancia: estrategias específicas por tipo de consulta
+        if answer_relevance < 0.6:
+            # Para consultas específicas sobre cubos pero usando granularidad gruesa
+            if query_analysis.get("cubo_mentions") and query_analysis.get("specific_indicators", 0) > 0 and current_strategy != "256":
+                return "256"
+            
+            # Para consultas amplias pero usando granularidad fina
+            if query_analysis.get("broad_indicators", 0) > 0 and current_strategy != "1024":
+                return "1024"
+            
+            # Para consultas sobre procesos/procedimientos, usar granularidad media
+            if query_analysis.get("analytical_indicators", 0) > 0 and current_strategy != "512":
+                return "512"
+            
+            # Si tenemos alta puntuación de dominio SEGEDA, ajustar según el tipo de contenido
+            segeda_score = query_analysis.get("segeda_domain_score", 0)
+            if segeda_score >= 3:
+                # Alto conocimiento del dominio → usar estrategia según indicadores dominantes
+                if query_analysis.get("specific_indicators", 0) >= query_analysis.get("broad_indicators", 0):
+                    return "256" if current_strategy != "256" else "512"
+                else:
+                    return "1024" if current_strategy != "1024" else "512"
+        
+        # Evitar estrategias recién probadas para prevenir bucles
+        if len(tried_strategies) >= 2:
+            available_strategies = ['256', '512', '1024']
+            for strategy in tried_strategies:
+                if strategy in available_strategies:
+                    available_strategies.remove(strategy)
+            
+            if available_strategies:
+                # Elegir la mejor estrategia disponible basada en el análisis
+                if optimal_strategy in available_strategies:
+                    return optimal_strategy
+                else:
+                    return available_strategies[0]
+        
+        # Si no hay problemas claros, usar la estrategia óptima del análisis
+        if optimal_strategy != current_strategy:
+            return optimal_strategy
+        
+        # Como último recurso, probar la estrategia no usada
+        all_strategies = ['256', '512', '1024']
+        if current_strategy in all_strategies:
+            all_strategies.remove(current_strategy)
+        
+        # Preferir estrategia según el tipo de consulta detectado
+        if query_analysis.get("specific_indicators", 0) > 0 and "256" in all_strategies:
+            return "256"
+        elif query_analysis.get("broad_indicators", 0) > 0 and "1024" in all_strategies:
+            return "1024"
+        elif "512" in all_strategies:
+            return "512"
+        
+        return all_strategies[0] if all_strategies else current_strategy
+
+    def update_granularity_history(state):
+        """
+        Actualiza el histórico de granularidades con la estrategia actual y sus métricas.
+        Esta función debe llamarse antes de cada decisión de routing para capturar métricas.
         
         Args:
             state (dict): Estado actual del grafo.
             
         Returns:
-            str: Siguiente acción a tomar ("END", "RETRY")
+            dict: Estado actualizado con histórico actualizado.
         """
         retry_count = state.get("retry_count", 0)
         evaluation_metrics = state.get("evaluation_metrics", {})
         current_strategy = state.get("chunk_strategy", DEFAULT_CHUNK_STRATEGY)
+        granularity_history = state.get("granularity_history", [])
         
-        logger.info("---ROUTE NEXT STRATEGY---")
+        # Extraer métricas con valores por defecto
+        faithfulness = evaluation_metrics.get("faithfulness", 0.0)
+        context_precision = evaluation_metrics.get("context_precision", 0.0)
+        context_recall = evaluation_metrics.get("context_recall", 0.0)
+        answer_relevance = evaluation_metrics.get("answer_relevance", 0.0)
+        
+        # Verificar si todas las métricas están por encima de los umbrales
+        metrics_successful = (
+            faithfulness >= EVALUATION_THRESHOLDS["faithfulness"] and
+            context_precision >= EVALUATION_THRESHOLDS["context_precision"] and
+            context_recall >= EVALUATION_THRESHOLDS["context_recall"] and
+            answer_relevance >= EVALUATION_THRESHOLDS["answer_relevance"]
+        )
+        
+        # Solo añadir al histórico si tenemos métricas válidas (retry_count > 0 o métricas exitosas)
+        if retry_count > 0 or metrics_successful:
+            current_entry = {
+                "strategy": current_strategy,
+                "retry_count": retry_count,
+                "metrics": {
+                    "faithfulness": faithfulness,
+                    "context_precision": context_precision,
+                    "context_recall": context_recall,
+                    "answer_relevance": answer_relevance
+                },
+                "success": metrics_successful,
+                "timestamp": retry_count
+            }
+            
+            # Evitar duplicados: verificar si ya existe una entrada para este retry_count y estrategia
+            existing_entry = next(
+                (entry for entry in granularity_history 
+                 if entry.get('retry_count') == retry_count and entry.get('strategy') == current_strategy),
+                None
+            )
+            
+            if not existing_entry:
+                granularity_history.append(current_entry)
+                
+                # Mantener solo las últimas 5 entradas para evitar consumo excesivo de memoria
+                if len(granularity_history) > 5:
+                    granularity_history = granularity_history[-5:]
+                
+                logger.info(f"Histórico de granularidades actualizado. Entrada añadida: estrategia={current_strategy}, retry={retry_count}, éxito={metrics_successful}")
+                logger.info(f"Histórico actual - Total entradas: {len(granularity_history)}")
+                for i, entry in enumerate(granularity_history):
+                    logger.info(f"  [{i+1}] Estrategia: {entry['strategy']}, Retry: {entry['retry_count']}, Éxito: {entry['success']}")
+            else:
+                logger.info(f"Entrada ya existente en el histórico para retry_count={retry_count} y estrategia={current_strategy}")
+        
+        return {
+            **state,
+            "granularity_history": granularity_history
+        }
+
+    def route_next_strategy(state):
+        """
+        Determina la próxima estrategia de recuperación basada en análisis granular de la consulta
+        y métricas de evaluación, inspirado en Mix-of-Granularity (MoG).
+        
+        NOTA: Esta función ya no modifica el estado directamente. Las actualizaciones del histórico
+        se manejan en el nodo update_granularity_history.
+        
+        Args:
+            state (dict): Estado actual del grafo.
+            
+        Returns:
+            str: Siguiente acción a tomar ("END", "RETRY", "UPDATE_HISTORY_AND_END", "UPDATE_HISTORY_AND_RETRY")
+        """
+        retry_count = state.get("retry_count", 0)
+        evaluation_metrics = state.get("evaluation_metrics", {})
+        current_strategy = state.get("chunk_strategy", DEFAULT_CHUNK_STRATEGY)
+        question = state.get("question", "").lower()
+        rewritten_question = state.get("rewritten_question", "").lower()
+        
+        logger.info("---ROUTE NEXT STRATEGY (MoG-INSPIRED)---")
         logger.info(f"Intento actual: {retry_count + 1}, Estrategia actual: {current_strategy}")
         
         # Verificar si la recuperación adaptativa está habilitada
@@ -1134,7 +1070,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             context_recall >= EVALUATION_THRESHOLDS["context_recall"] and
             answer_relevance >= EVALUATION_THRESHOLDS["answer_relevance"]):
             logger.info("Todas las métricas superan los umbrales. Finalizando con éxito.")
-            return "END"
+            return "UPDATE_HISTORY_AND_END"
         
         # Detectar respuestas de "información insuficiente" para evitar bucles infinitos
         generation = state.get("generation", "")
@@ -1153,21 +1089,20 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         if any(phrase in generation_lower for phrase in insufficient_info_phrases):
             logger.info("Respuesta indica información insuficiente. Terminando para evitar bucle infinito.")
             logger.info(f"Respuesta detectada: {generation[:100]}...")
-            return "END"
+            return "UPDATE_HISTORY_AND_END"
         
         # Si ya hicimos el máximo de intentos, terminar siempre
         if retry_count >= MAX_RETRIES:
             logger.info(f"Máximo de reintentos alcanzado ({MAX_RETRIES}). Finalizando.")
-            return "END"
+            return "UPDATE_HISTORY_AND_END"
         
         # Incrementar contador de reintentos para el PRÓXIMO intento
         new_retry_count = retry_count + 1
         
         logger.info(f"Preparando reintento {new_retry_count + 1} (máximo permitido: {MAX_RETRIES + 1})")
         
-        # Si la recuperación adaptativa está desactivada, mantener la misma estrategia pero permitir reintentos
+        # Si la recuperación adaptativa está desactivada, usar lógica simple
         if not adaptive_retrieval_enabled:
-            # Verificar si las métricas justifican un reintento con la misma estrategia
             metrics_below_threshold = (
                 faithfulness < EVALUATION_THRESHOLDS["faithfulness"] or
                 context_precision < EVALUATION_THRESHOLDS["context_precision"] or
@@ -1176,89 +1111,227 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             )
             
             if metrics_below_threshold:
-                # Verificar si el próximo intento excedería el máximo ANTES de hacer RETRY
                 if new_retry_count >= MAX_RETRIES:
                     logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido ({MAX_RETRIES + 1}). Finalizando.")
-                    return "END"
+                    return "UPDATE_HISTORY_AND_END"
                 
-                # Verificar si la respuesta indica falta de información (ya verificado arriba, pero por consistencia)
-                # Esta verificación ya se hizo arriba, así que podemos proceder
-                
-                # Mantener la misma estrategia de chunk
                 logger.info(f"Recuperación adaptativa deshabilitada. Reintentando con la misma estrategia: {current_strategy} tokens.")
-                # No cambiar state["chunk_strategy"] - mantener la actual
-                return "RETRY"
+                return "UPDATE_HISTORY_AND_RETRY"
             else:
                 logger.info("Métricas aceptables con recuperación adaptativa deshabilitada. Finalizando.")
-                return "END"
+                return "UPDATE_HISTORY_AND_END"
         
-        # Lógica determinística para seleccionar estrategia (solo si recuperación adaptativa está habilitada)
+        # LÓGICA DETERMINÍSTICA AVANZADA INSPIRADA EN MoG
+        # Analizar la granularidad de la consulta para determinar estrategia óptima
         
-        # Context Recall bajo → necesitamos más contexto (chunks más grandes)
-        if context_recall < EVALUATION_THRESHOLDS["context_recall"]:
-            if current_strategy != "1024":
-                # Verificar si el próximo intento excedería el máximo ANTES de hacer RETRY
+        # Usar la pregunta reescrita si está disponible, sino la original
+        query_to_analyze = rewritten_question if rewritten_question else question
+        
+        # Obtener histórico de granularidades del estado actual
+        granularity_history = state.get("granularity_history", [])
+        
+        # Obtener análisis de complejidad de la consulta con histórico
+        query_analysis = analyze_segeda_query_complexity(query_to_analyze, granularity_history)
+        
+        # Log detallado del análisis de consulta
+        logger.info(f"Análisis de consulta SEGEDA (con histórico):")
+        logger.info(f"  - Granularidad recomendada: {query_analysis['recommended_granularity']} tokens")
+        logger.info(f"  - Confianza: {query_analysis['confidence']:.2f}")
+        logger.info(f"  - Razón: {query_analysis['reason']}")
+        logger.info(f"  - Indicadores específicos: {query_analysis['specific_indicators']}")
+        logger.info(f"  - Indicadores analíticos: {query_analysis['analytical_indicators']}")
+        logger.info(f"  - Indicadores amplios: {query_analysis['broad_indicators']}")
+        logger.info(f"  - Puntuación dominio SEGEDA: {query_analysis['segeda_domain_score']}")
+        logger.info(f"  - Ajuste por histórico: {query_analysis['history_adjustment']}")
+        if query_analysis['cubo_mentions']:
+            logger.info(f"  - Cubos mencionados: {query_analysis['cubo_mentions']}")
+        if query_analysis['medida_mentions']:
+            logger.info(f"  - Medidas mencionadas: {query_analysis['medida_mentions']}")
+        if query_analysis['dimension_mentions']:
+            logger.info(f"  - Dimensiones mencionadas: {query_analysis['dimension_mentions']}")
+        if query_analysis['technical_terms']:
+            logger.info(f"  - Términos técnicos: {query_analysis['technical_terms']}")
+        if query_analysis['tried_strategies']:
+            logger.info(f"  - Estrategias probadas previamente: {query_analysis['tried_strategies']}")
+        
+        # Sugerir estrategia alternativa basada en análisis MoG con histórico
+        alternative_strategy = suggest_alternative_strategy_mog(current_strategy, evaluation_metrics, query_analysis, granularity_history)
+        
+        logger.info(f"Estrategia alternativa sugerida por MoG: {alternative_strategy} tokens")
+        
+        # LÓGICA DE DECISIÓN BASADA EN MÉTRICAS Y ESTRATEGIA ÓPTIMA
+        
+        # Si la estrategia actual es la óptima pero las métricas son bajas,
+        # ajustar según el problema específico
+        if current_strategy == alternative_strategy:
+            logger.info("Estrategia actual coincide con la alternativa sugerida. Analizando métricas específicas...")
+            
+            # Context Recall bajo → necesitamos más contexto (estrategia mayor)
+            if context_recall < EVALUATION_THRESHOLDS["context_recall"]:
                 if new_retry_count >= MAX_RETRIES:
-                    logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido ({MAX_RETRIES + 1}). Finalizando.")
-                    return "END"
+                    logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido. Finalizando.")
+                    return "UPDATE_HISTORY_AND_END"
                 
-                state["chunk_strategy"] = "1024"
-                logger.info(f"Context Recall bajo ({context_recall}). Cambiando a chunks de 1024 tokens.")
-                return "RETRY"
-        
-        # Context Precision bajo O Faithfulness bajo → necesitamos más precisión (chunks más pequeños)
-        if (context_precision < EVALUATION_THRESHOLDS["context_precision"] or
-            faithfulness < EVALUATION_THRESHOLDS["faithfulness"]):
-            if current_strategy != "256":
-                # Verificar si el próximo intento excedería el máximo ANTES de hacer RETRY
+                # Incrementar granularidad para obtener más contexto
+                if current_strategy == "256":
+                    logger.info(f"Context Recall bajo ({context_recall}). Aumentando de 256 a 512 tokens para más contexto.")
+                    return "UPDATE_HISTORY_AND_RETRY"  # El cambio de estrategia se hará en otro nodo
+                elif current_strategy == "512":
+                    logger.info(f"Context Recall bajo ({context_recall}). Aumentando de 512 a 1024 tokens para más contexto.")
+                    return "UPDATE_HISTORY_AND_RETRY"
+                else:  # current_strategy == "1024"
+                    # Ya estamos en la granularidad máxima, no cambiar
+                    logger.info("Ya en granularidad máxima con recall bajo. Context Recall podría mejorar con datos adicionales.")
+                    return "UPDATE_HISTORY_AND_END"
+            
+            # Context Precision bajo O Faithfulness bajo → necesitamos más precisión (estrategia menor)
+            if (context_precision < EVALUATION_THRESHOLDS["context_precision"] or
+                faithfulness < EVALUATION_THRESHOLDS["faithfulness"]):
                 if new_retry_count >= MAX_RETRIES:
-                    logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido ({MAX_RETRIES + 1}). Finalizando.")
-                    return "END"
+                    logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido. Finalizando.")
+                    return "UPDATE_HISTORY_AND_END"
                 
-                state["chunk_strategy"] = "256"
-                logger.info(f"Context Precision ({context_precision}) o Faithfulness ({faithfulness}) bajos. Cambiando a chunks de 256 tokens.")
-                return "RETRY"
-        
-        # Answer Relevance bajo → probar estrategia diferente
-        if answer_relevance < EVALUATION_THRESHOLDS["answer_relevance"]:
-            # Verificar si el próximo intento excedería el máximo ANTES de hacer RETRY
-            if new_retry_count >= MAX_RETRIES:
-                logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido ({MAX_RETRIES + 1}). Finalizando.")
-                return "END"
+                # Decrementar granularidad para obtener más precisión
+                if current_strategy == "1024":
+                    logger.info(f"Context Precision ({context_precision}) o Faithfulness ({faithfulness}) bajos. Reduciendo de 1024 a 512 tokens para más precisión.")
+                    return "UPDATE_HISTORY_AND_RETRY"
+                elif current_strategy == "512":
+                    logger.info(f"Context Precision ({context_precision}) o Faithfulness ({faithfulness}) bajos. Reduciendo de 512 a 256 tokens para más precisión.")
+                    return "UPDATE_HISTORY_AND_RETRY"
+                else:  # current_strategy == "256"
+                    # Ya estamos en la granularidad mínima, no cambiar
+                    logger.info("Ya en granularidad mínima con precision/faithfulness bajos. Podría necesitarse mejor filtrado de contenido.")
+                    return "UPDATE_HISTORY_AND_END"
             
-            # Ciclar entre estrategias: 512 -> 1024 -> 256 -> 512
-            if current_strategy == "512":
-                state["chunk_strategy"] = "1024"
-            elif current_strategy == "1024":
-                state["chunk_strategy"] = "256"
-            else:  # current_strategy == "256"
-                state["chunk_strategy"] = "512"
-            
-            logger.info(f"Answer Relevance bajo ({answer_relevance}). Cambiando de {current_strategy} a {state['chunk_strategy']} tokens.")
-            return "RETRY"
+            # Answer Relevance bajo con estrategia óptima → probar estrategias adyacentes inteligentemente
+            if answer_relevance < EVALUATION_THRESHOLDS["answer_relevance"]:
+                if new_retry_count >= MAX_RETRIES:
+                    logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido. Finalizando.")
+                    return "UPDATE_HISTORY_AND_END"
+                
+                # Usar análisis de consulta para decidir qué estrategia probar
+                if query_analysis['specific_indicators'] > 0 and current_strategy != "256":
+                    logger.info(f"Answer Relevance bajo ({answer_relevance}) con consulta específica detectada. Probando granularidad fina (256 tokens).")
+                    return "UPDATE_HISTORY_AND_RETRY"
+                elif query_analysis['broad_indicators'] > 0 and current_strategy != "1024":
+                    logger.info(f"Answer Relevance bajo ({answer_relevance}) con consulta amplia detectada. Probando granularidad gruesa (1024 tokens).")
+                    return "UPDATE_HISTORY_AND_RETRY"
+                elif query_analysis['analytical_indicators'] > 0 and current_strategy != "512":
+                    logger.info(f"Answer Relevance bajo ({answer_relevance}) con consulta analítica detectada. Probando granularidad media (512 tokens).")
+                    return "UPDATE_HISTORY_AND_RETRY"
+                else:
+                    # Probar estrategia adyacente como fallback
+                    if current_strategy == "512":
+                        logger.info(f"Answer Relevance bajo ({answer_relevance}). Probando granularidad más específica (256 tokens).")
+                        return "UPDATE_HISTORY_AND_RETRY"
+                    elif current_strategy == "256":
+                        logger.info(f"Answer Relevance bajo ({answer_relevance}). Probando granularidad amplia (1024 tokens).")
+                        return "UPDATE_HISTORY_AND_RETRY"
+                    elif current_strategy == "1024":
+                        logger.info(f"Answer Relevance bajo ({answer_relevance}). Probando granularidad específica (256 tokens).")
+                        return "UPDATE_HISTORY_AND_RETRY"
         
-        # Si llegamos aquí, las métricas no son suficientemente buenas pero no hay estrategia clara
-        # Verificar si el próximo intento excedería el máximo ANTES de hacer RETRY
-        if new_retry_count >= MAX_RETRIES:
-            logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido ({MAX_RETRIES + 1}). Finalizando.")
-            return "END"
-        
-        # Solo cambiar estrategia si la recuperación adaptativa está habilitada
-        if adaptive_retrieval_enabled:
-            # Probar con la estrategia contraria a la actual
-            if current_strategy == "512":
-                state["chunk_strategy"] = "1024"
-            elif current_strategy == "1024":
-                state["chunk_strategy"] = "256"
-            else:
-                state["chunk_strategy"] = "512"
-            
-            logger.info(f"Métricas subóptimas. Probando estrategia alternativa: {state['chunk_strategy']} tokens.")
-            return "RETRY"
+        # Si la estrategia actual NO es la óptima, cambiar a la óptima
         else:
-            # Si adaptive retrieval está desactivado, terminar en lugar de cambiar estrategia
-            logger.info("Adaptive retrieval desactivado y métricas subóptimas. Finalizando sin cambiar estrategia.")
-            return "END"
+            if new_retry_count >= MAX_RETRIES:
+                logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido. Finalizando.")
+                return "UPDATE_HISTORY_AND_END"
+            
+            logger.info(f"Cambiando de estrategia subóptima ({current_strategy}) a estrategia óptima ({alternative_strategy}) tokens.")
+            logger.info(f"Justificación del cambio: {query_analysis['reason']}")
+            return "UPDATE_HISTORY_AND_RETRY"
+        
+        # Si llegamos aquí con estrategia óptima y métricas no muy bajas, terminar
+        logger.info("Estrategia óptima en uso y métricas aceptables para los umbrales actuales. Finalizando.")
+        return "UPDATE_HISTORY_AND_END"
+
+    def update_chunk_strategy(state):
+        """
+        Actualiza la estrategia de chunk basada en el análisis MoG y las métricas actuales.
+        
+        Args:
+            state (dict): Estado actual del grafo.
+            
+        Returns:
+            dict: Estado actualizado con la nueva estrategia de chunk.
+        """
+        retry_count = state.get("retry_count", 0)
+        evaluation_metrics = state.get("evaluation_metrics", {})
+        current_strategy = state.get("chunk_strategy", DEFAULT_CHUNK_STRATEGY)
+        question = state.get("question", "").lower()
+        rewritten_question = state.get("rewritten_question", "").lower()
+        
+        logger.info("---UPDATE CHUNK STRATEGY---")
+        logger.info(f"Estrategia actual: {current_strategy}")
+        
+        # Usar la pregunta reescrita si está disponible, sino la original
+        query_to_analyze = rewritten_question if rewritten_question else question
+        
+        # Obtener histórico de granularidades del estado actual
+        granularity_history = state.get("granularity_history", [])
+        
+        # Obtener análisis de complejidad de la consulta con histórico
+        query_analysis = analyze_segeda_query_complexity(query_to_analyze, granularity_history)
+        
+        # Sugerir estrategia alternativa basada en análisis MoG con histórico
+        alternative_strategy = suggest_alternative_strategy_mog(current_strategy, evaluation_metrics, query_analysis, granularity_history)
+        
+        # Extraer métricas para determinar el tipo de cambio necesario
+        context_recall = evaluation_metrics.get("context_recall", 0.0)
+        context_precision = evaluation_metrics.get("context_precision", 0.0)
+        faithfulness = evaluation_metrics.get("faithfulness", 0.0)
+        answer_relevance = evaluation_metrics.get("answer_relevance", 0.0)
+        
+        new_strategy = current_strategy  # Por defecto, mantener estrategia actual
+        
+        # Determinar nueva estrategia basada en las métricas y análisis
+        if current_strategy == alternative_strategy:
+            # Misma estrategia recomendada, ajustar según métricas específicas
+            if context_recall < EVALUATION_THRESHOLDS["context_recall"]:
+                # Necesitamos más contexto
+                if current_strategy == "256":
+                    new_strategy = "512"
+                elif current_strategy == "512":
+                    new_strategy = "1024"
+                # Si ya estamos en 1024, mantener
+            elif (context_precision < EVALUATION_THRESHOLDS["context_precision"] or
+                  faithfulness < EVALUATION_THRESHOLDS["faithfulness"]):
+                # Necesitamos más precisión
+                if current_strategy == "1024":
+                    new_strategy = "512"
+                elif current_strategy == "512":
+                    new_strategy = "256"
+                # Si ya estamos en 256, mantener
+            elif answer_relevance < EVALUATION_THRESHOLDS["answer_relevance"]:
+                # Problema de relevancia, usar análisis de consulta
+                if query_analysis['specific_indicators'] > 0 and current_strategy != "256":
+                    new_strategy = "256"
+                elif query_analysis['broad_indicators'] > 0 and current_strategy != "1024":
+                    new_strategy = "1024"
+                elif query_analysis['analytical_indicators'] > 0 and current_strategy != "512":
+                    new_strategy = "512"
+                else:
+                    # Fallback: probar estrategia adyacente
+                    if current_strategy == "512":
+                        new_strategy = "256"
+                    elif current_strategy == "256":
+                        new_strategy = "1024"
+                    elif current_strategy == "1024":
+                        new_strategy = "256"
+        else:
+            # Usar la estrategia alternativa recomendada
+            new_strategy = alternative_strategy
+        
+        if new_strategy != current_strategy:
+            logger.info(f"Cambiando estrategia de {current_strategy} a {new_strategy} tokens")
+            logger.info(f"Justificación: {query_analysis.get('reason', 'Análisis MoG')}")
+        else:
+            logger.info(f"Manteniendo estrategia actual: {current_strategy} tokens")
+        
+        return {
+            **state,
+            "chunk_strategy": new_strategy
+        }
 
     def increment_retry_count(state):
         """
@@ -1319,6 +1392,8 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
     workflow.add_node("grade_relevance", grade_relevance)
     workflow.add_node("generate", generate)
     workflow.add_node("evaluate_response_granular", evaluate_response_granular)
+    workflow.add_node("update_granularity_history", update_granularity_history)
+    workflow.add_node("update_chunk_strategy", update_chunk_strategy)
     workflow.add_node("increment_retry_count", increment_retry_count)
     workflow.add_node("execute_query", execute_query_with_metrics)
     workflow.add_node("generate_sql_interpretation", generate_sql_interpretation)
@@ -1337,14 +1412,16 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
     workflow.add_edge("retrieve", "grade_relevance")
     workflow.add_edge("grade_relevance", "generate")
     workflow.add_edge("generate", "evaluate_response_granular")
+    workflow.add_edge("evaluate_response_granular", "update_granularity_history")
+    workflow.add_edge("update_chunk_strategy", "increment_retry_count")
     workflow.add_edge("increment_retry_count", "retrieve")
     
-    # Definir condición para enrutamiento después de evaluación granular
-    def route_after_granular_evaluation(state):
+    # Definir condición para enrutamiento después de actualizar histórico
+    def route_after_update_history(state):
         """
-        Determina qué hacer después de la evaluación granular:
+        Determina qué hacer después de actualizar el histórico de granularidades:
         - Ejecutar SQL si es una consulta
-        - Reintentar con nueva estrategia si las métricas no son suficientes
+        - Actualizar estrategia y reintentar si las métricas no son suficientes
         - Finalizar si las métricas son buenas o se alcanzó el máximo de reintentos
         
         Args:
@@ -1364,13 +1441,14 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         # Usar la lógica de route_next_strategy para decidir si reintentar
         decision = route_next_strategy(state)
         
-        if decision == "RETRY":
-            logger.info(f"Reintentando con nueva estrategia: {state.get('chunk_strategy', DEFAULT_CHUNK_STRATEGY)}")
-            logger.info(f"Estado antes de RETRY - retry_count: {state.get('retry_count', 0)}")
-            return "increment_retry_count"
-        else:  # decision == "END"
-            logger.info("Finalizando workflow.")
-            logger.info(f"Estado final - retry_count: {state.get('retry_count', 0)}")
+        if decision == "UPDATE_HISTORY_AND_RETRY":
+            logger.info("Actualizando estrategia y reintentando")
+            return "update_chunk_strategy"
+        elif decision in ["UPDATE_HISTORY_AND_END", "END"]:
+            logger.info("Finalizando workflow después de actualizar histórico.")
+            return "END"
+        else:  # Fallback
+            logger.warning(f"Decisión no reconocida: {decision}. Finalizando.")
             return "END"
     
     # Definir condición para después de ejecutar consulta SQL
@@ -1392,13 +1470,13 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         else:
             return "END"
     
-    # Añadir borde condicional desde evaluate_response_granular
+    # Añadir borde condicional desde update_granularity_history
     workflow.add_conditional_edges(
-        "evaluate_response_granular",
-        route_after_granular_evaluation,
+        "update_granularity_history",
+        route_after_update_history,
         {
             "execute_query": "execute_query",
-            "increment_retry_count": "increment_retry_count",
+            "update_chunk_strategy": "update_chunk_strategy",
             "END": END
         }
     )
@@ -1447,6 +1525,10 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         # Inicializar came_from_clarification si no está presente
         if "came_from_clarification" not in input_data:
             input_data["came_from_clarification"] = False
+        
+        # Inicializar granularity_history si no está presente
+        if "granularity_history" not in input_data:
+            input_data["granularity_history"] = []
         
         # Iniciar recolección de métricas
         metrics_collector.start_workflow(question, chunk_strategy)
