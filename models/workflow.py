@@ -842,121 +842,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
     
 
 
-    def suggest_alternative_strategy_mog(current_strategy: str, metrics: Dict[str, float], query_analysis: Dict[str, Any], granularity_history: List[Dict[str, Any]] = None) -> str:
-        """
-        Sugiere una estrategia alternativa basada en el análisis MoG y las métricas actuales.
-        
-        Args:
-            current_strategy (str): Estrategia actual de chunking
-            metrics (Dict[str, float]): Métricas de evaluación actuales
-            query_analysis (Dict[str, Any]): Análisis de la consulta
-            granularity_history (List[Dict]): Histórico de granularidades probadas
-            
-        Returns:
-            str: Estrategia alternativa recomendada
-        """
-        
-        # Extraer métricas relevantes
-        context_recall = metrics.get("context_recall", 0.0)
-        context_precision = metrics.get("context_precision", 0.0)
-        faithfulness = metrics.get("faithfulness", 0.0)
-        answer_relevance = metrics.get("answer_relevance", 0.0)
-        
-        # Estrategia recomendada por análisis de consulta
-        optimal_strategy = query_analysis.get("recommended_granularity", "512")
-        confidence = query_analysis.get("confidence", 0.5)
-        
-        # Analizar histórico para evitar bucles
-        tried_strategies = []
-        if granularity_history:
-            tried_strategies = [entry.get('strategy', '') for entry in granularity_history[-3:]]  # Últimos 3 intentos
-        
-        # Si la confianza del análisis es alta (>0.75), priorizar la estrategia óptima
-        if confidence > 0.75 and current_strategy != optimal_strategy and optimal_strategy not in tried_strategies:
-            return optimal_strategy
-        
-        # Lógica específica basada en problemas de métricas con conocimiento del dominio SEGEDA
-        
-        # Problema de recall bajo: necesitamos más contexto
-        if context_recall < 0.6:
-            # Para consultas sobre medidas específicas, el recall bajo puede indicar que necesitamos
-            # más contexto sobre las definiciones y observaciones
-            if query_analysis.get("medida_mentions") and current_strategy == "256":
-                return "512"  # Las medidas necesitan contexto sobre observaciones
-            elif current_strategy == "512":
-                return "1024"  # Necesitamos más contexto general
-            elif current_strategy == "256":
-                return "512"  # Incrementar moderadamente
-            else:  # current_strategy == "1024"
-                return "1024"  # Ya en máximo, mantener
-        
-        # Problema de precisión/faithfulness bajo: necesitamos más precisión
-        if context_precision < 0.6 or faithfulness < 0.6:
-            # Para consultas con términos técnicos específicos, la precisión baja indica chunks demasiado amplios
-            if query_analysis.get("technical_terms") and current_strategy == "1024":
-                return "256"  # Términos técnicos necesitan contexto específico
-            elif current_strategy == "1024":
-                return "512"  # Decrementar moderadamente
-            elif current_strategy == "512":
-                return "256"  # Decrementar más
-            else:  # current_strategy == "256"
-                return "256"  # Ya en mínimo, mantener
-        
-        # Problema de relevancia: estrategias específicas por tipo de consulta
-        if answer_relevance < 0.6:
-            # Para consultas específicas sobre cubos pero usando granularidad gruesa
-            if query_analysis.get("cubo_mentions") and query_analysis.get("specific_indicators", 0) > 0 and current_strategy != "256":
-                return "256"
-            
-            # Para consultas amplias pero usando granularidad fina
-            if query_analysis.get("broad_indicators", 0) > 0 and current_strategy != "1024":
-                return "1024"
-            
-            # Para consultas sobre procesos/procedimientos, usar granularidad media
-            if query_analysis.get("analytical_indicators", 0) > 0 and current_strategy != "512":
-                return "512"
-            
-            # Si tenemos alta puntuación de dominio SEGEDA, ajustar según el tipo de contenido
-            segeda_score = query_analysis.get("segeda_domain_score", 0)
-            if segeda_score >= 3:
-                # Alto conocimiento del dominio → usar estrategia según indicadores dominantes
-                if query_analysis.get("specific_indicators", 0) >= query_analysis.get("broad_indicators", 0):
-                    return "256" if current_strategy != "256" else "512"
-                else:
-                    return "1024" if current_strategy != "1024" else "512"
-        
-        # Evitar estrategias recién probadas para prevenir bucles
-        if len(tried_strategies) >= 2:
-            available_strategies = ['256', '512', '1024']
-            for strategy in tried_strategies:
-                if strategy in available_strategies:
-                    available_strategies.remove(strategy)
-            
-            if available_strategies:
-                # Elegir la mejor estrategia disponible basada en el análisis
-                if optimal_strategy in available_strategies:
-                    return optimal_strategy
-                else:
-                    return available_strategies[0]
-        
-        # Si no hay problemas claros, usar la estrategia óptima del análisis
-        if optimal_strategy != current_strategy:
-            return optimal_strategy
-        
-        # Como último recurso, probar la estrategia no usada
-        all_strategies = ['256', '512', '1024']
-        if current_strategy in all_strategies:
-            all_strategies.remove(current_strategy)
-        
-        # Preferir estrategia según el tipo de consulta detectado
-        if query_analysis.get("specific_indicators", 0) > 0 and "256" in all_strategies:
-            return "256"
-        elif query_analysis.get("broad_indicators", 0) > 0 and "1024" in all_strategies:
-            return "1024"
-        elif "512" in all_strategies:
-            return "512"
-        
-        return all_strategies[0] if all_strategies else current_strategy
+
 
     def update_granularity_history(state):
         """
@@ -974,59 +860,17 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         current_strategy = state.get("chunk_strategy", DEFAULT_CHUNK_STRATEGY)
         granularity_history = state.get("granularity_history", [])
         
-        # Extraer métricas con valores por defecto
-        faithfulness = evaluation_metrics.get("faithfulness", 0.0)
-        context_precision = evaluation_metrics.get("context_precision", 0.0)
-        context_recall = evaluation_metrics.get("context_recall", 0.0)
-        answer_relevance = evaluation_metrics.get("answer_relevance", 0.0)
-        
-        # Verificar si todas las métricas están por encima de los umbrales
-        metrics_successful = (
-            faithfulness >= EVALUATION_THRESHOLDS["faithfulness"] and
-            context_precision >= EVALUATION_THRESHOLDS["context_precision"] and
-            context_recall >= EVALUATION_THRESHOLDS["context_recall"] and
-            answer_relevance >= EVALUATION_THRESHOLDS["answer_relevance"]
+        # Usar la función utilitaria para actualizar el histórico
+        updated_history = update_granularity_history_entry(
+            granularity_history,
+            current_strategy,
+            retry_count,
+            evaluation_metrics
         )
-        
-        # Solo añadir al histórico si tenemos métricas válidas (retry_count > 0 o métricas exitosas)
-        if retry_count > 0 or metrics_successful:
-            current_entry = {
-                "strategy": current_strategy,
-                "retry_count": retry_count,
-                "metrics": {
-                    "faithfulness": faithfulness,
-                    "context_precision": context_precision,
-                    "context_recall": context_recall,
-                    "answer_relevance": answer_relevance
-                },
-                "success": metrics_successful,
-                "timestamp": retry_count
-            }
-            
-            # Evitar duplicados: verificar si ya existe una entrada para este retry_count y estrategia
-            existing_entry = next(
-                (entry for entry in granularity_history 
-                 if entry.get('retry_count') == retry_count and entry.get('strategy') == current_strategy),
-                None
-            )
-            
-            if not existing_entry:
-                granularity_history.append(current_entry)
-                
-                # Mantener solo las últimas 5 entradas para evitar consumo excesivo de memoria
-                if len(granularity_history) > 5:
-                    granularity_history = granularity_history[-5:]
-                
-                logger.info(f"Histórico de granularidades actualizado. Entrada añadida: estrategia={current_strategy}, retry={retry_count}, éxito={metrics_successful}")
-                logger.info(f"Histórico actual - Total entradas: {len(granularity_history)}")
-                for i, entry in enumerate(granularity_history):
-                    logger.info(f"  [{i+1}] Estrategia: {entry['strategy']}, Retry: {entry['retry_count']}, Éxito: {entry['success']}")
-            else:
-                logger.info(f"Entrada ya existente en el histórico para retry_count={retry_count} y estrategia={current_strategy}")
         
         return {
             **state,
-            "granularity_history": granularity_history
+            "granularity_history": updated_history
         }
 
     def route_next_strategy(state):
