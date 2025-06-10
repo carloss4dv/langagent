@@ -8,7 +8,7 @@
 
 ## Descripción
 
-LangAgent es un sistema de respuesta a preguntas que implementa un agente utilizando LangGraph, Ollama y bases de datos vectoriales. El sistema organiza la información en "cubos" temáticos dentro de diferentes "ámbitos", permitiendo dirigir las preguntas de manera adecuada y reintentar cuando las respuestas no son satisfactorias.
+RAGDWAREuz es un sistema de respuesta a preguntas que implementa un agente utilizando LangGraph, Ollama y bases de datos vectoriales. El sistema organiza la información en "cubos" temáticos dentro de diferentes "ámbitos", permitiendo dirigir las preguntas de manera adecuada y reintentar cuando las respuestas no son satisfactorias.
 
 ## Características principales
 
