@@ -18,6 +18,7 @@ from dataclasses import dataclass
 import nltk
 from nltk.tokenize import sent_tokenize, word_tokenize
 import numpy as np
+from collections import Counter
 
 # Descargar recursos de NLTK si es necesario
 try:
@@ -207,28 +208,358 @@ class ChunkOptimizer:
     def __init__(self, text_units: List[Dict[str, Any]]):
         self.text_units = text_units
         self.df = pd.DataFrame(text_units)
+    
+    def calculate_additional_metrics(self):
+        """Calcula métricas adicionales para enriquecer el análisis"""
+        print("\n" + "="*80)
+        print("🔬 ANÁLISIS DETALLADO DE MÉTRICAS TEXTUALES")
+        print("="*80)
         
-    def analyze_unit_statistics(self):
-        """Analiza estadísticas por tipo de unidad"""
-        print("\n" + "="*60)
-        print("ESTADÍSTICAS POR TIPO DE UNIDAD")
-        print("="*60)
+        # Métricas generales del corpus
+        total_units = len(self.df)
+        total_chars = self.df['char_count'].sum()
+        total_words = self.df['word_count'].sum()
+        unique_files = self.df['filename'].nunique()
+        
+        print(f"\n📊 RESUMEN GENERAL DEL CORPUS:")
+        print(f"   📁 Archivos analizados: {unique_files}")
+        print(f"   📝 Total de unidades textuales: {total_units:,}")
+        print(f"   📏 Total de caracteres: {total_chars:,}")
+        print(f"   📖 Total de palabras: {total_words:,}")
+        print(f"   📈 Promedio chars/palabra: {total_chars/total_words:.2f}")
+        print(f"   📉 Densidad textual: {total_chars/total_units:.1f} chars/unidad")
+        
+        # Análisis por documento
+        print(f"\n📋 ANÁLISIS POR DOCUMENTO:")
+        doc_stats = self.df.groupby('filename').agg({
+            'char_count': ['count', 'sum', 'mean', 'std'],
+            'word_count': ['sum', 'mean'],
+            'unit_type': lambda x: x.value_counts().to_dict()
+        }).round(2)
+        
+        for filename in self.df['filename'].unique():
+            doc_data = self.df[self.df['filename'] == filename]
+            doc_chars = doc_data['char_count'].sum()
+            doc_words = doc_data['word_count'].sum()
+            doc_units = len(doc_data)
+            
+            # Distribución por tipo de unidad
+            unit_dist = doc_data['unit_type'].value_counts()
+            
+            print(f"\n   📄 {filename}:")
+            print(f"      🔢 Unidades totales: {doc_units}")
+            print(f"      📏 Caracteres: {doc_chars:,} ({doc_chars/total_chars*100:.1f}% del total)")
+            print(f"      📖 Palabras: {doc_words:,}")
+            print(f"      📊 Distribución: ", end="")
+            for unit_type, count in unit_dist.items():
+                print(f"{unit_type}s={count}", end=" ")
+            print()
+            print(f"      🎯 Densidad: {doc_chars/doc_units:.1f} chars/unidad")
+        
+        # Análisis de densidad léxica
+        print(f"\n🎯 ANÁLISIS DE DENSIDAD LÉXICA:")
+        for unit_type in ['sentence', 'paragraph', 'section']:
+            units = self.df[self.df['unit_type'] == unit_type]
+            if len(units) > 0:
+                avg_chars_per_word = (units['char_count'] / units['word_count']).mean()
+                lexical_density = units['word_count'] / units['char_count'] * 100
+                
+                print(f"   📝 {unit_type.upper()}S:")
+                print(f"      📐 Promedio chars/palabra: {avg_chars_per_word:.2f}")
+                print(f"      📊 Densidad léxica: {lexical_density.mean():.2f}% (±{lexical_density.std():.2f})")
+                print(f"      📏 Eficiencia textual: {1/avg_chars_per_word:.3f} palabras/char")
+    
+    def calculate_distribution_metrics(self):
+        """Calcula métricas de distribución estadística avanzadas"""
+        print(f"\n📈 MÉTRICAS DE DISTRIBUCIÓN ESTADÍSTICA:")
         
         for unit_type in ['sentence', 'paragraph', 'section']:
             units = self.df[self.df['unit_type'] == unit_type]
             if len(units) > 0:
-                print(f"\n{unit_type.upper()}S:")
-                print(f"  Cantidad: {len(units)}")
-                print(f"  Caracteres - Media: {units['char_count'].mean():.1f}, "
-                      f"Mediana: {units['char_count'].median():.1f}, "
-                      f"Std: {units['char_count'].std():.1f}")
-                print(f"  Palabras - Media: {units['word_count'].mean():.1f}, "
-                      f"Mediana: {units['word_count'].median():.1f}, "
-                      f"Std: {units['word_count'].std():.1f}")
-                print(f"  Percentiles (chars): P25={units['char_count'].quantile(0.25):.0f}, "
-                      f"P75={units['char_count'].quantile(0.75):.0f}, "
-                      f"P90={units['char_count'].quantile(0.90):.0f}")
+                chars = units['char_count']
+                words = units['word_count']
+                
+                # Métricas de forma de distribución
+                char_skewness = chars.skew()
+                char_kurtosis = chars.kurtosis()
+                char_cv = chars.std() / chars.mean()  # Coeficiente de variación
+                
+                # Métricas de dispersión
+                char_range = chars.max() - chars.min()
+                char_iqr = chars.quantile(0.75) - chars.quantile(0.25)
+                
+                # Percentiles extendidos
+                percentiles = [1, 5, 10, 25, 50, 75, 90, 95, 99]
+                char_percentiles = [chars.quantile(p/100) for p in percentiles]
+                
+                print(f"\n   📊 {unit_type.upper()}S - CARACTERES:")
+                print(f"      📏 Rango: {char_range} (min: {chars.min()}, max: {chars.max()})")
+                print(f"      📐 Rango intercuartílico: {char_iqr:.1f}")
+                print(f"      📊 Coeficiente de variación: {char_cv:.3f}")
+                print(f"      📈 Asimetría (skewness): {char_skewness:.3f}", end="")
+                if char_skewness > 1:
+                    print(" (muy sesgada a la derecha)")
+                elif char_skewness > 0.5:
+                    print(" (sesgada a la derecha)")
+                elif char_skewness < -1:
+                    print(" (muy sesgada a la izquierda)")
+                elif char_skewness < -0.5:
+                    print(" (sesgada a la izquierda)")
+                else:
+                    print(" (aproximadamente simétrica)")
+                
+                print(f"      📉 Curtosis: {char_kurtosis:.3f}", end="")
+                if char_kurtosis > 3:
+                    print(" (leptocúrtica - más puntiaguda)")
+                elif char_kurtosis < -1:
+                    print(" (platicúrtica - más aplanada)")
+                else:
+                    print(" (aproximadamente normal)")
+                
+                print(f"      📊 Percentiles: ", end="")
+                for i, (p, val) in enumerate(zip(percentiles, char_percentiles)):
+                    if i > 0 and i % 4 == 0:
+                        print(f"\n                      ", end="")
+                    print(f"P{p}={val:.0f}", end=" ")
+                print()
+                
+                # Análisis de outliers
+                q1 = chars.quantile(0.25)
+                q3 = chars.quantile(0.75)
+                iqr = q3 - q1
+                lower_bound = q1 - 1.5 * iqr
+                upper_bound = q3 + 1.5 * iqr
+                outliers = chars[(chars < lower_bound) | (chars > upper_bound)]
+                
+                print(f"      🎯 Outliers detectados: {len(outliers)} ({len(outliers)/len(units)*100:.1f}%)")
+                if len(outliers) > 0:
+                    print(f"         Valores extremos: {outliers.min():.0f} - {outliers.max():.0f}")
     
+    def calculate_chunk_efficiency_metrics(self):
+        """Calcula métricas de eficiencia para diferentes tamaños de chunk"""
+        print(f"\n⚡ ANÁLISIS DE EFICIENCIA DE CHUNKING:")
+        
+        # Tamaños de chunk comunes para analizar
+        chunk_sizes = [256, 512, 768, 1024, 1536, 2048]
+        
+        sentences = self.df[self.df['unit_type'] == 'sentence']
+        paragraphs = self.df[self.df['unit_type'] == 'paragraph']
+        
+        if len(sentences) > 0 and len(paragraphs) > 0:
+            avg_sentence = sentences['char_count'].mean()
+            avg_paragraph = paragraphs['char_count'].mean()
+            
+            print(f"\n   📊 EFICIENCIA POR TAMAÑO DE CHUNK:")
+            print(f"   {'Chunk Size':<12} {'Oraciones':<12} {'Párrafos':<12} {'Fragmentación':<15} {'Utilización':<12} {'Eficiencia':<12}")
+            print(f"   {'-'*80}")
+            
+            for chunk_size in chunk_sizes:
+                # Estimaciones basadas en oraciones
+                sentences_per_chunk = chunk_size / avg_sentence
+                sentence_utilization = (sentences_per_chunk % 1) * 100  # % de oración parcial
+                
+                # Estimaciones basadas en párrafos
+                paragraphs_per_chunk = chunk_size / avg_paragraph
+                paragraph_fragmentation = paragraphs_per_chunk % 1  # Fragmentación de párrafo
+                
+                # Métrica de eficiencia compuesta
+                efficiency = (1 - paragraph_fragmentation) * (sentence_utilization / 100)
+                
+                print(f"   {chunk_size:<12} {sentences_per_chunk:<12.1f} {paragraphs_per_chunk:<12.1f} "
+                      f"{paragraph_fragmentation:<15.3f} {sentence_utilization:<12.1f}% {efficiency:<12.3f}")
+        
+        # Análisis de cobertura semántica
+        print(f"\n   🎯 ANÁLISIS DE COBERTURA SEMÁNTICA:")
+        
+        for unit_type in ['paragraph', 'section']:
+            units = self.df[self.df['unit_type'] == unit_type]
+            if len(units) > 0:
+                median_size = units['char_count'].median()
+                
+                print(f"\n   📝 {unit_type.upper()}S como base de chunking:")
+                for multiplier in [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]:
+                    target_size = int(median_size * multiplier)
+                    coverage = len(units[units['char_count'] <= target_size]) / len(units) * 100
+                    semantic_completeness = multiplier * 100  # Proxy para completitud semántica
+                    
+                    print(f"      📏 {target_size:4d} chars: {coverage:5.1f}% cobertura, "
+                          f"{semantic_completeness:5.1f}% completitud semántica")
+    
+    def analyze_text_quality_metrics(self):
+        """Analiza métricas de calidad del texto"""
+        print(f"\n🔍 ANÁLISIS DE CALIDAD TEXTUAL:")
+        
+        # Análisis de longitud de palabras
+        all_words = []
+        all_sentences = []
+        
+        for idx, row in self.df.iterrows():
+            words = word_tokenize(row['content'])
+            all_words.extend(words)
+            if row['unit_type'] == 'sentence':
+                all_sentences.append(row['content'])
+        
+        # Métricas de palabras
+        word_lengths = [len(word) for word in all_words if word.isalpha()]
+        
+        if word_lengths:
+            print(f"\n   📝 ANÁLISIS DE PALABRAS ({len(word_lengths):,} palabras):")
+            print(f"      📏 Longitud promedio: {np.mean(word_lengths):.2f} caracteres")
+            print(f"      📊 Longitud mediana: {np.median(word_lengths):.1f} caracteres")
+            print(f"      📈 Desviación estándar: {np.std(word_lengths):.2f}")
+            print(f"      📐 Rango: {min(word_lengths)} - {max(word_lengths)} caracteres")
+            
+            # Distribución de longitudes de palabras
+            word_length_dist = Counter(word_lengths)
+            print(f"      📊 Distribución por longitud:")
+            for length in sorted(word_length_dist.keys())[:10]:  # Top 10
+                count = word_length_dist[length]
+                pct = count / len(word_lengths) * 100
+                print(f"         {length} chars: {count:,} palabras ({pct:.1f}%)")
+        
+        # Análisis de complejidad sintáctica
+        if all_sentences:
+            print(f"\n   🔤 ANÁLISIS DE COMPLEJIDAD SINTÁCTICA:")
+            
+            # Métricas de puntuación
+            punctuation_counts = Counter()
+            for sentence in all_sentences:
+                for char in sentence:
+                    if char in '.,;:!?()[]{}"-':
+                        punctuation_counts[char] += 1
+            
+            total_punct = sum(punctuation_counts.values())
+            total_chars = sum(len(s) for s in all_sentences)
+            punct_density = total_punct / total_chars * 100
+            
+            print(f"      🎯 Densidad de puntuación: {punct_density:.2f}%")
+            print(f"      📊 Signos más frecuentes:", end="")
+            for punct, count in punctuation_counts.most_common(5):
+                print(f" '{punct}':{count}", end="")
+            print()
+            
+            # Análisis de estructura de oraciones
+            sentence_complexities = []
+            for sentence in all_sentences:
+                # Proxy de complejidad: número de cláusulas (comas + punto y coma)
+                clauses = sentence.count(',') + sentence.count(';') + 1
+                words_in_sentence = len(word_tokenize(sentence))
+                complexity = clauses * (words_in_sentence / clauses) if clauses > 0 else words_in_sentence
+                sentence_complexities.append(complexity)
+            
+            if sentence_complexities:
+                print(f"      🧠 Complejidad sintáctica promedio: {np.mean(sentence_complexities):.2f}")
+                print(f"      📊 Distribución de complejidad:")
+                complexity_percentiles = [25, 50, 75, 90, 95]
+                for p in complexity_percentiles:
+                    val = np.percentile(sentence_complexities, p)
+                    print(f"         P{p}: {val:.1f}", end="  ")
+                print()
+    
+    def analyze_unit_statistics(self):
+        """Analiza estadísticas completas por tipo de unidad"""
+        print("\n" + "="*80)
+        print("📊 ESTADÍSTICAS DETALLADAS POR TIPO DE UNIDAD")
+        print("="*80)
+        
+        # Primero ejecutar análisis adicionales
+        self.calculate_additional_metrics()
+        self.calculate_distribution_metrics()
+        self.calculate_chunk_efficiency_metrics()
+        self.analyze_text_quality_metrics()
+        
+        # Análisis estadístico principal mejorado
+        print("\n" + "="*80)
+        print("📈 ESTADÍSTICAS DESCRIPTIVAS COMPLETAS")
+        print("="*80)
+        
+        for unit_type in ['sentence', 'paragraph', 'section']:
+            units = self.df[self.df['unit_type'] == unit_type]
+            if len(units) > 0:
+                chars = units['char_count']
+                words = units['word_count']
+                
+                print(f"\n🔷 {unit_type.upper()}S ({len(units):,} unidades):")
+                
+                # Estadísticas de caracteres
+                print(f"   📏 CARACTERES:")
+                print(f"      📊 Media: {chars.mean():.1f} ± {chars.std():.1f}")
+                print(f"      📐 Mediana: {chars.median():.1f}")
+                print(f"      📈 Moda: {chars.mode().iloc[0] if not chars.mode().empty else 'N/A'}")
+                print(f"      📉 Rango: {chars.min()} - {chars.max()} (amplitud: {chars.max() - chars.min()})")
+                print(f"      📊 Cuartiles: Q1={chars.quantile(0.25):.0f}, Q2={chars.median():.0f}, Q3={chars.quantile(0.75):.0f}")
+                print(f"      🎯 Percentiles clave: P5={chars.quantile(0.05):.0f}, P10={chars.quantile(0.10):.0f}, "
+                      f"P90={chars.quantile(0.90):.0f}, P95={chars.quantile(0.95):.0f}")
+                print(f"      📏 Rango intercuartílico: {chars.quantile(0.75) - chars.quantile(0.25):.1f}")
+                print(f"      📈 Coeficiente de variación: {chars.std() / chars.mean():.3f}")
+                
+                # Estadísticas de palabras
+                print(f"   📖 PALABRAS:")
+                print(f"      📊 Media: {words.mean():.1f} ± {words.std():.1f}")
+                print(f"      📐 Mediana: {words.median():.1f}")
+                print(f"      📉 Rango: {words.min()} - {words.max()}")
+                print(f"      📊 Cuartiles: Q1={words.quantile(0.25):.0f}, Q2={words.median():.0f}, Q3={words.quantile(0.75):.0f}")
+                
+                # Relaciones y ratios
+                char_per_word = chars / words
+                print(f"   🔗 RELACIONES:")
+                print(f"      📐 Caracteres por palabra: {char_per_word.mean():.2f} ± {char_per_word.std():.2f}")
+                print(f"      📊 Densidad léxica: {(words / chars * 100).mean():.2f}% palabras por char")
+                print(f"      🎯 Eficiencia textual: {(chars / words).mean():.2f} chars por palabra")
+                
+                # Análisis de forma de distribución
+                char_skew = chars.skew()
+                char_kurt = chars.kurtosis()
+                
+                print(f"   📈 FORMA DE DISTRIBUCIÓN:")
+                print(f"      📊 Asimetría: {char_skew:.3f}", end="")
+                if abs(char_skew) < 0.5:
+                    print(" (aproximadamente simétrica)")
+                elif char_skew > 0.5:
+                    print(" (cola derecha larga)")
+                else:
+                    print(" (cola izquierda larga)")
+                
+                print(f"      📉 Curtosis: {char_kurt:.3f}", end="")
+                if char_kurt > 0:
+                    print(" (más puntiaguda que normal)")
+                elif char_kurt < 0:
+                    print(" (más aplanada que normal)")
+                else:
+                    print(" (similar a distribución normal)")
+                
+                # Análisis de categorización por tamaño
+                print(f"   🏷️  CATEGORIZACIÓN POR TAMAÑO:")
+                q1, q2, q3 = chars.quantile(0.25), chars.median(), chars.quantile(0.75)
+                
+                small = len(chars[chars <= q1])
+                medium_small = len(chars[(chars > q1) & (chars <= q2)])
+                medium_large = len(chars[(chars > q2) & (chars <= q3)])
+                large = len(chars[chars > q3])
+                
+                print(f"      🔹 Pequeño (≤{q1:.0f}): {small} ({small/len(units)*100:.1f}%)")
+                print(f"      🔸 Mediano-pequeño ({q1:.0f}-{q2:.0f}): {medium_small} ({medium_small/len(units)*100:.1f}%)")
+                print(f"      🔶 Mediano-grande ({q2:.0f}-{q3:.0f}): {medium_large} ({medium_large/len(units)*100:.1f}%)")
+                print(f"      🔷 Grande (>{q3:.0f}): {large} ({large/len(units)*100:.1f}%)")
+                
+                # Recomendaciones específicas por tipo
+                print(f"   💡 RECOMENDACIONES PARA CHUNKING:")
+                if unit_type == 'sentence':
+                    optimal_sentences = [3, 5, 8, 12, 20]
+                    for n in optimal_sentences:
+                        chunk_size = int(chars.mean() * n)
+                        print(f"      🎯 {n} oraciones ≈ {chunk_size} caracteres")
+                elif unit_type == 'paragraph':
+                    fractions = [(0.5, "1/2"), (0.75, "3/4"), (1.0, "1"), (1.5, "1.5"), (2.0, "2")]
+                    for frac, desc in fractions:
+                        chunk_size = int(chars.median() * frac)
+                        print(f"      🎯 {desc} párrafo(s) ≈ {chunk_size} caracteres")
+                else:  # sections
+                    fractions = [(0.25, "1/4"), (0.5, "1/2"), (0.75, "3/4")]
+                    for frac, desc in fractions:
+                        chunk_size = int(chars.median() * frac)
+                        print(f"      🎯 {desc} sección ≈ {chunk_size} caracteres")
+
     def suggest_chunk_sizes(self) -> Dict[str, List[int]]:
         """Sugiere tamaños de chunk basados en la estructura jerárquica"""
         suggestions = {}
@@ -426,15 +757,16 @@ class ChunkOptimizer:
         return optimal_pairs
     
     def create_visualization(self):
-        """Crea visualizaciones de la distribución de tamaños"""
+        """Crea visualizaciones individuales para mejor claridad"""
         plt.style.use('seaborn-v0_8')
-        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-        fig.suptitle('Análisis de Distribución de Texto por Unidades', fontsize=16, fontweight='bold')
         
-        # Distribución de caracteres por tipo
-        ax1 = axes[0, 0]
+        # Variables comunes
         unit_types = ['sentence', 'paragraph', 'section']
         colors = ['lightblue', 'lightgreen', 'lightcoral']
+        
+        # FIGURA 1: Distribución de caracteres por tipo (boxplot)
+        fig1 = plt.figure(figsize=(12, 8))
+        ax1 = fig1.add_subplot(1, 1, 1)
         
         data_to_plot = []
         labels = []
@@ -445,103 +777,309 @@ class ChunkOptimizer:
                 labels.append(f'{unit_type.title()}s\n(n={len(units)})')
         
         if data_to_plot:
-            bp1 = ax1.boxplot(data_to_plot, labels=labels, patch_artist=True)
+            bp1 = ax1.boxplot(data_to_plot, tick_labels=labels, patch_artist=True)
             for patch, color in zip(bp1['boxes'], colors[:len(data_to_plot)]):
                 patch.set_facecolor(color)
         
-        ax1.set_title('Distribución de Caracteres por Tipo de Unidad')
-        ax1.set_ylabel('Número de Caracteres')
+        ax1.set_title('📦 Distribución de Caracteres por Tipo de Unidad', fontsize=16, fontweight='bold')
+        ax1.set_ylabel('Número de Caracteres', fontsize=12)
         ax1.tick_params(axis='x', rotation=45)
+        ax1.grid(True, alpha=0.3)
         
-        # Histograma de párrafos (más relevante para chunks)
-        ax2 = axes[0, 1]
+        plt.tight_layout()
+        plt.savefig('chunk_analysis_1_boxplot_distribucion.png', dpi=300, bbox_inches='tight')
+        plt.show()
+        
+        # FIGURA 2: Histograma de párrafos con métricas estadísticas
+        fig2 = plt.figure(figsize=(12, 8))
+        ax2 = fig2.add_subplot(1, 1, 1)
+        
         paragraphs = self.df[self.df['unit_type'] == 'paragraph']
         if len(paragraphs) > 0:
-            ax2.hist(paragraphs['char_count'], bins=20, alpha=0.7, color='lightgreen', edgecolor='black')
-            ax2.axvline(paragraphs['char_count'].median(), color='red', linestyle='--', 
-                       label=f'Mediana: {paragraphs["char_count"].median():.0f}')
-            ax2.axvline(paragraphs['char_count'].mean(), color='blue', linestyle='--', 
-                       label=f'Media: {paragraphs["char_count"].mean():.0f}')
-            ax2.legend()
+            n, bins, patches = ax2.hist(paragraphs['char_count'], bins=30, alpha=0.7, color='lightgreen', edgecolor='black')
+            
+            # Añadir líneas estadísticas
+            median_val = paragraphs['char_count'].median()
+            mean_val = paragraphs['char_count'].mean()
+            p25_val = paragraphs['char_count'].quantile(0.25)
+            p75_val = paragraphs['char_count'].quantile(0.75)
+            
+            ax2.axvline(median_val, color='red', linestyle='--', linewidth=3, label=f'Mediana: {median_val:.0f}')
+            ax2.axvline(mean_val, color='blue', linestyle='--', linewidth=3, label=f'Media: {mean_val:.0f}')
+            ax2.axvline(p25_val, color='orange', linestyle=':', linewidth=2, alpha=0.8, label=f'Q1: {p25_val:.0f}')
+            ax2.axvline(p75_val, color='orange', linestyle=':', linewidth=2, alpha=0.8, label=f'Q3: {p75_val:.0f}')
+            ax2.legend(fontsize=11)
         
-        ax2.set_title('Distribución de Tamaño de Párrafos')
-        ax2.set_xlabel('Número de Caracteres')
-        ax2.set_ylabel('Frecuencia')
+        ax2.set_title('📈 Distribución Detallada de Párrafos con Métricas', fontsize=16, fontweight='bold')
+        ax2.set_xlabel('Número de Caracteres', fontsize=12)
+        ax2.set_ylabel('Frecuencia', fontsize=12)
+        ax2.grid(True, alpha=0.3)
         
-        # Comparación de tamaños actuales vs sugeridos
-        ax3 = axes[1, 0]
+        plt.tight_layout()
+        plt.savefig('chunk_analysis_2_histograma_paragrafos.png', dpi=300, bbox_inches='tight')
+        plt.show()
+        
+        # FIGURA 3: Scatter plot - Relación Caracteres vs Palabras
+        fig3 = plt.figure(figsize=(12, 8))
+        ax3 = fig3.add_subplot(1, 1, 1)
+        
+        for i, unit_type in enumerate(unit_types):
+            units = self.df[self.df['unit_type'] == unit_type]
+            if len(units) > 0:
+                ax3.scatter(units['word_count'], units['char_count'], 
+                           c=colors[i], alpha=0.7, s=40, label=f'{unit_type.title()}s')
+        
+        ax3.set_title('🔗 Relación Caracteres vs Palabras por Tipo de Unidad', fontsize=16, fontweight='bold')
+        ax3.set_xlabel('Número de Palabras', fontsize=12)
+        ax3.set_ylabel('Número de Caracteres', fontsize=12)
+        ax3.legend(fontsize=11)
+        ax3.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig('chunk_analysis_3_scatter_chars_palabras.png', dpi=300, bbox_inches='tight')
+        plt.show()
+        
+        # FIGURA 4: Distribución de longitud de palabras
+        fig4 = plt.figure(figsize=(12, 8))
+        ax4 = fig4.add_subplot(1, 1, 1)
+        
+        all_words = []
+        for _, row in self.df.iterrows():
+            words = word_tokenize(row['content'])
+            word_lengths = [len(word) for word in words if word.isalpha()]
+            all_words.extend(word_lengths)
+        
+        if all_words:
+            word_counts = Counter(all_words)
+            lengths = sorted(word_counts.keys())[:15]  # Top 15 longitudes
+            counts = [word_counts[l] for l in lengths]
+            
+            bars = ax4.bar(lengths, counts, color='skyblue', alpha=0.8, edgecolor='navy', linewidth=1.5)
+            ax4.set_title('📝 Distribución de Longitud de Palabras en el Corpus', fontsize=16, fontweight='bold')
+            ax4.set_xlabel('Longitud de Palabra (caracteres)', fontsize=12)
+            ax4.set_ylabel('Frecuencia', fontsize=12)
+            ax4.grid(True, alpha=0.3)
+            
+            # Añadir valores en las barras más altas
+            max_count = max(counts)
+            for bar, count in zip(bars, counts):
+                if count > max_count * 0.08:
+                    height = bar.get_height()
+                    ax4.text(bar.get_x() + bar.get_width()/2., height + max_count*0.01,
+                             f'{count:,}', ha='center', va='bottom', fontsize=9, fontweight='bold')
+        
+        plt.tight_layout()
+        plt.savefig('chunk_analysis_4_longitud_palabras.png', dpi=300, bbox_inches='tight')
+        plt.show()
+        
+        # FIGURA 5: Comparación de configuraciones (Actuales vs Sugeridas)
+        fig5 = plt.figure(figsize=(12, 8))
+        ax5 = fig5.add_subplot(1, 1, 1)
+        
         current_sizes = [256, 512, 1024]
+        paragraphs = self.df[self.df['unit_type'] == 'paragraph']
         
-        # Calcular sugerencias rápidas
         if len(paragraphs) > 0:
             suggested_sizes = [
                 int(paragraphs['char_count'].quantile(0.25)),
                 int(paragraphs['char_count'].median()),
-                int(paragraphs['char_count'].quantile(0.75)),
-                int(paragraphs['char_count'].median() * 2)
+                int(paragraphs['char_count'].quantile(0.75))
             ]
         else:
-            suggested_sizes = [300, 600, 900, 1200]
+            suggested_sizes = [300, 600, 900]
         
         x_pos = range(len(current_sizes))
-        ax3.bar([x - 0.2 for x in x_pos], current_sizes, 0.4, label='Actuales', color='lightcoral')
-        ax3.bar([x + 0.2 for x in x_pos[:len(suggested_sizes)]], suggested_sizes[:len(current_sizes)], 0.4, 
-               label='Sugeridos', color='lightblue')
+        width = 0.35
         
-        ax3.set_title('Comparación: Tamaños Actuales vs Sugeridos')
-        ax3.set_xlabel('Configuración')
-        ax3.set_ylabel('Tamaño de Chunk (caracteres)')
-        ax3.set_xticks(x_pos)
-        ax3.set_xticklabels([f'Config {i+1}' for i in x_pos])
-        ax3.legend()
+        bars1 = ax5.bar([x - width/2 for x in x_pos], current_sizes, width, 
+                       label='Configuración Actual', color='lightcoral', alpha=0.8, edgecolor='darkred')
+        bars2 = ax5.bar([x + width/2 for x in x_pos], suggested_sizes, width, 
+                       label='Configuración Sugerida', color='lightblue', alpha=0.8, edgecolor='darkblue')
         
-        # Comparación de configuraciones óptimas
-        ax4 = axes[1, 1]
+        # Añadir valores en las barras
+        for bar, value in zip(bars1, current_sizes):
+            height = bar.get_height()
+            ax5.text(bar.get_x() + bar.get_width()/2., height + 20,
+                    f'{int(value)}', ha='center', va='bottom', fontsize=10, fontweight='bold')
         
-        # Obtener pares óptimos para mostrar
+        for bar, value in zip(bars2, suggested_sizes):
+            height = bar.get_height()
+            ax5.text(bar.get_x() + bar.get_width()/2., height + 20,
+                    f'{int(value)}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+        
+        ax5.set_title('⚖️ Comparación: Configuraciones Actuales vs Sugeridas', fontsize=16, fontweight='bold')
+        ax5.set_xlabel('Tipo de Configuración', fontsize=12)
+        ax5.set_ylabel('Tamaño de Chunk (caracteres)', fontsize=12)
+        ax5.set_xticks(x_pos)
+        ax5.set_xticklabels(['Pequeño', 'Mediano', 'Grande'])
+        ax5.legend(fontsize=11)
+        ax5.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig('chunk_analysis_5_comparacion_configs.png', dpi=300, bbox_inches='tight')
+        plt.show()
+        
+        # FIGURA 6: Configuraciones óptimas de chunk-overlap
+        fig6 = plt.figure(figsize=(14, 8))
+        ax6 = fig6.add_subplot(1, 1, 1)
+        
         optimal_pairs = self.get_optimal_chunk_overlap_pairs()
         
         if optimal_pairs:
-            # Tomar las top 5 configuraciones
-            top_configs = optimal_pairs[:5]
+            top_configs = optimal_pairs[:7]  # Top 7 configuraciones
             chunk_sizes = [pair[0] for pair in top_configs]
             overlaps = [pair[1] for pair in top_configs]
             overlap_percentages = [(overlap/chunk)*100 for chunk, overlap in zip(chunk_sizes, overlaps)]
             
-            # Crear gráfico de barras doble
             x_pos = np.arange(len(top_configs))
             width = 0.35
             
-            bars1 = ax4.bar(x_pos - width/2, chunk_sizes, width, label='Tamaño de Chunk', color='lightblue', alpha=0.8)
-            bars2 = ax4.bar(x_pos + width/2, overlaps, width, label='Tamaño de Overlap', color='lightcoral', alpha=0.8)
+            bars1 = ax6.bar(x_pos - width/2, chunk_sizes, width, 
+                           label='Tamaño de Chunk', color='steelblue', alpha=0.8, edgecolor='navy')
+            bars2 = ax6.bar(x_pos + width/2, overlaps, width, 
+                           label='Tamaño de Overlap', color='darkorange', alpha=0.8, edgecolor='darkorange')
             
             # Añadir valores en las barras
             for bar, value in zip(bars1, chunk_sizes):
                 height = bar.get_height()
-                ax4.text(bar.get_x() + bar.get_width()/2., height + 20,
-                        f'{int(value)}', ha='center', va='bottom', fontsize=8)
+                ax6.text(bar.get_x() + bar.get_width()/2., height + 10,
+                        f'{int(value)}', ha='center', va='bottom', fontsize=9, fontweight='bold')
             
             for bar, value in zip(bars2, overlaps):
                 height = bar.get_height()
-                ax4.text(bar.get_x() + bar.get_width()/2., height + 5,
-                        f'{int(value)}', ha='center', va='bottom', fontsize=8)
+                ax6.text(bar.get_x() + bar.get_width()/2., height + 3,
+                        f'{int(value)}', ha='center', va='bottom', fontsize=9, fontweight='bold')
             
-            # Configurar labels
-            config_labels = [f'Config {i+1}\n({pct:.1f}%)' for i, pct in enumerate(overlap_percentages)]
-            ax4.set_xticks(x_pos)
-            ax4.set_xticklabels(config_labels)
+            config_labels = [f'Config {i+1}\n{pct:.1f}% overlap' for i, pct in enumerate(overlap_percentages)]
+            ax6.set_xticks(x_pos)
+            ax6.set_xticklabels(config_labels, fontsize=10)
             
-        ax4.set_title('Top 5 Configuraciones Óptimas Chunk-Overlap')
-        ax4.set_xlabel('Configuración (% overlap)')
-        ax4.set_ylabel('Tamaño (caracteres)')
-        ax4.legend()
-        ax4.tick_params(axis='x', rotation=0)
+        ax6.set_title('🎯 Top Configuraciones Óptimas de Chunk-Overlap', fontsize=16, fontweight='bold')
+        ax6.set_xlabel('Configuraciones Recomendadas', fontsize=12)
+        ax6.set_ylabel('Tamaño (caracteres)', fontsize=12)
+        ax6.legend(fontsize=11)
+        ax6.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.savefig('chunk_analysis.png', dpi=300, bbox_inches='tight')
+        plt.savefig('chunk_analysis_6_configuraciones_optimas.png', dpi=300, bbox_inches='tight')
         plt.show()
         
-        print(f"\n📊 Gráfico guardado como 'chunk_analysis.png'")
+        # FIGURA 7: Resumen completo con métricas utilizadas
+        fig7 = plt.figure(figsize=(16, 10))
+        ax7 = fig7.add_subplot(1, 1, 1)
+        ax7.axis('off')
+        
+        # Crear texto de resumen completo y detallado
+        total_units = len(self.df)
+        total_chars = self.df['char_count'].sum()
+        total_words = self.df['word_count'].sum()
+        
+        # Calcular métricas estadísticas clave
+        sentences = self.df[self.df['unit_type'] == 'sentence']
+        paragraphs = self.df[self.df['unit_type'] == 'paragraph']
+        sections = self.df[self.df['unit_type'] == 'section']
+        
+        summary_text = f"""
+📊 RESUMEN COMPLETO DEL ANÁLISIS DE CHUNKS
+{'='*60}
+
+📈 DATOS GENERALES DEL CORPUS:
+   📁 Documentos analizados: {self.df['filename'].nunique()}
+   📝 Total de unidades textuales: {total_units:,}
+   📏 Total de caracteres: {total_chars:,}
+   📖 Total de palabras: {total_words:,}
+   🎯 Densidad textual promedio: {total_chars/total_units:.1f} chars/unidad
+   📊 Eficiencia léxica: {total_words/total_chars*100:.2f}% (palabras por carácter)
+
+📈 MÉTRICAS ESTADÍSTICAS UTILIZADAS EN EL ANÁLISIS:
+   🔹 Medidas de tendencia central: Media aritmética, Mediana, Moda
+   🔸 Medidas de dispersión: Desviación estándar, Varianza, Coeficiente de variación
+   🔷 Medidas de posición: Cuartiles (Q1, Q2, Q3), Percentiles (P5, P10, P90, P95)
+   🔺 Medidas de forma: Asimetría (skewness), Curtosis (kurtosis)
+   🔻 Análisis de outliers: Método del rango intercuartílico (IQR)
+   ⚡ Análisis de distribuciones: Histogramas, boxplots, distribuciones acumulativas
+
+📊 DISTRIBUCIONES ESTADÍSTICAS POR TIPO DE UNIDAD:
+"""
+        
+        if len(sentences) > 0:
+            sent_mean = sentences['char_count'].mean()
+            sent_std = sentences['char_count'].std()
+            sent_median = sentences['char_count'].median()
+            sent_skew = sentences['char_count'].skew()
+            summary_text += f"""
+   🔹 ORACIONES ({len(sentences):,} unidades):
+      • Media: {sent_mean:.1f} ± {sent_std:.1f} caracteres
+      • Mediana: {sent_median:.1f} caracteres
+      • Asimetría: {sent_skew:.2f} ({'sesgada derecha' if sent_skew > 0.5 else 'aproximadamente simétrica' if abs(sent_skew) < 0.5 else 'sesgada izquierda'})
+      • Rango intercuartílico: {sentences['char_count'].quantile(0.75) - sentences['char_count'].quantile(0.25):.1f}"""
+        
+        if len(paragraphs) > 0:
+            para_mean = paragraphs['char_count'].mean()
+            para_std = paragraphs['char_count'].std()
+            para_median = paragraphs['char_count'].median()
+            para_skew = paragraphs['char_count'].skew()
+            summary_text += f"""
+   🔸 PÁRRAFOS ({len(paragraphs):,} unidades):
+      • Media: {para_mean:.1f} ± {para_std:.1f} caracteres
+      • Mediana: {para_median:.1f} caracteres
+      • Asimetría: {para_skew:.2f} ({'sesgada derecha' if para_skew > 0.5 else 'aproximadamente simétrica' if abs(para_skew) < 0.5 else 'sesgada izquierda'})
+      • Rango intercuartílico: {paragraphs['char_count'].quantile(0.75) - paragraphs['char_count'].quantile(0.25):.1f}"""
+        
+        if len(sections) > 0:
+            sect_mean = sections['char_count'].mean()
+            sect_std = sections['char_count'].std()
+            sect_median = sections['char_count'].median()
+            sect_skew = sections['char_count'].skew()
+            summary_text += f"""
+   🔷 SECCIONES ({len(sections):,} unidades):
+      • Media: {sect_mean:.1f} ± {sect_std:.1f} caracteres
+      • Mediana: {sect_median:.1f} caracteres
+      • Asimetría: {sect_skew:.2f} ({'sesgada derecha' if sect_skew > 0.5 else 'aproximadamente simétrica' if abs(sect_skew) < 0.5 else 'sesgada izquierda'})
+      • Rango intercuartílico: {sections['char_count'].quantile(0.75) - sections['char_count'].quantile(0.25):.1f}"""
+        
+        summary_text += f"""
+
+🎯 CONFIGURACIONES RECOMENDADAS BASADAS EN ANÁLISIS ESTADÍSTICO:
+   📈 Basadas en cuartiles de párrafos:
+      • Chunk pequeño (Q1): ~{int(paragraphs['char_count'].quantile(0.25)) if len(paragraphs) > 0 else 400} caracteres
+      • Chunk mediano (Q2): ~{int(paragraphs['char_count'].median()) if len(paragraphs) > 0 else 600} caracteres  
+      • Chunk grande (Q3): ~{int(paragraphs['char_count'].quantile(0.75)) if len(paragraphs) > 0 else 900} caracteres
+   
+   📊 Basadas en oraciones promedio:
+      • 3-5 oraciones: ~{int(sentences['char_count'].mean() * 4) if len(sentences) > 0 else 600} caracteres
+      • 8-12 oraciones: ~{int(sentences['char_count'].mean() * 10) if len(sentences) > 0 else 1500} caracteres
+
+⚡ MÉTRICAS DE EFICIENCIA Y CALIDAD TEXTUAL:
+   🔹 Densidad léxica promedio: {total_words/total_chars*100:.2f}%
+   🔸 Caracteres por palabra: {total_chars/total_words:.2f}
+   🔷 Palabras por unidad textual: {total_words/total_units:.1f}
+   🎯 Coeficiente de eficiencia: {(total_words/total_chars) / (total_units/total_chars):.3f}
+
+🚀 RECOMENDACIONES FINALES PARA IMPLEMENTACIÓN:
+   1. Utilizar configuraciones basadas en percentiles de párrafos para mejor coherencia semántica
+   2. Considerar overlap de 15-25% del tamaño del chunk para mantener contexto
+   3. Priorizar chunks de ~{int(paragraphs['char_count'].median()) if len(paragraphs) > 0 else 600} caracteres (mediana de párrafos)
+   4. Implementar análisis A/B testing con las configuraciones sugeridas vs actuales
+"""
+        
+        ax7.text(0.02, 0.98, summary_text, transform=ax7.transAxes, fontsize=10,
+                 verticalalignment='top', bbox=dict(boxstyle='round,pad=1', facecolor='lightblue', alpha=0.2),
+                 family='monospace')
+        
+        plt.tight_layout()
+        plt.savefig('chunk_analysis_7_resumen_completo.png', dpi=300, bbox_inches='tight')
+        plt.show()
+        
+        print(f"\n📊 Análisis completado - 7 figuras individuales generadas:")
+        print(f"   📈 1. chunk_analysis_1_boxplot_distribucion.png - Distribución por tipos")
+        print(f"   📈 2. chunk_analysis_2_histograma_paragrafos.png - Histograma con métricas")
+        print(f"   📈 3. chunk_analysis_3_scatter_chars_palabras.png - Relación chars-palabras")
+        print(f"   📈 4. chunk_analysis_4_longitud_palabras.png - Distribución longitud palabras")
+        print(f"   📈 5. chunk_analysis_5_comparacion_configs.png - Configuraciones actuales vs sugeridas")
+        print(f"   📈 6. chunk_analysis_6_configuraciones_optimas.png - Top configuraciones chunk-overlap")
+        print(f"   📈 7. chunk_analysis_7_resumen_completo.png - Resumen completo con métricas utilizadas")
+        print(f"📊 Total: 7 gráficos individuales enfocados y claros")
 
 def main():
     """Función principal del analizador"""
