@@ -99,7 +99,7 @@ PATHS_CONFIG = {
 
 # Configuración de Logging
 LOGGING_CONFIG = {
-    "level": "DEBUG",                         # Nivel de logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    "level": "INFO",                         # Nivel de logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     "log_to_file": True,                      # Guardar logs en archivo
     "log_to_console": True,                   # Mostrar logs en consola
     "file_max_bytes": 10 * 1024 * 1024,      # Tamaño máximo del archivo de log (10MB)

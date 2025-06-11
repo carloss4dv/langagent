@@ -3,7 +3,7 @@ Recolector de métricas para el workflow de LangGraph.
 
 Este módulo implementa la recopilación de métricas detalladas por nodo y workflow,
 organizadas por estrategia de chunking para análisis de rendimiento.
-Incluye captura de métricas LLM detalladas.
+Incluye captura de métricas LLM simplificadas enfocadas en tiempo y modelo.
 """
 
 import os
@@ -11,6 +11,7 @@ import csv
 import json
 import time
 import uuid
+import psutil  # Para obtener información de memoria
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 from threading import Lock
@@ -25,8 +26,18 @@ class MetricsCollector:
     
     Recopila métricas por nodo y por workflow completo, organizándolas
     por estrategia de chunking para análisis comparativo de rendimiento.
-    Incluye recolección detallada de métricas de llamadas a LLM.
+    Incluye recolección simplificada de métricas de llamadas a LLM enfocada en tiempo y modelo.
     """
+    
+    # Mapeo de nodos a modelos basado en la configuración de LangAgent
+    NODE_TO_MODEL_MAPPING = {
+        'rewrite_query': 'default_model3',           # Modelo terciario para reescritura
+        'grade_relevance': 'default_model2',         # Modelo secundario para evaluación de relevancia
+        'generate': 'default_model',                 # Modelo principal para generación RAG/SQL
+        'evaluate_response_granular': 'default_model3',  # Modelo terciario para evaluación granular
+        'generate_sql_interpretation': 'default_model',  # Modelo principal para interpretación SQL
+        # Agrega más mapeos según sea necesario
+    }
     
     def __init__(self, base_metrics_dir: str = "metrics"):
         """
@@ -45,7 +56,7 @@ class MetricsCollector:
         # Lock para operaciones thread-safe
         self._lock = Lock()
         
-        # Headers para los archivos CSV
+        # Headers simplificados para los archivos CSV enfocados en tiempo y modelo
         self.node_metrics_headers = [
             'timestamp', 'question_id', 'node_name', 'execution_time_ms',
             'context_size_chars', 'context_size_tokens', 'documents_count',
@@ -57,22 +68,21 @@ class MetricsCollector:
             'total_execution_time_ms', 'total_retries', 'initial_chunk_strategy',
             'final_chunk_strategy', 'is_adaptive_strategy', 'adaptive_chunks_used',
             'total_documents_retrieved', 'final_context_size_chars',
-            'total_llm_calls', 'total_llm_time_ms', 'total_input_tokens', 
-            'total_output_tokens', 'total_tokens', 'evaluation_metrics', 'success'
+            'total_llm_calls', 'total_llm_time_ms', 'evaluation_metrics', 'success'
         ]
         
-        # Headers para métricas de LLM
+        # Headers simplificados para métricas de LLM enfocados en tiempo y modelo
         self.llm_metrics_headers = [
-            'timestamp', 'question_id', 'node_name', 'call_order', 'model',
-            'prompt_length', 'response_length', 'input_tokens', 'output_tokens', 
-            'total_tokens', 'duration_ms', 'load_duration_ms', 'prompt_eval_duration_ms',
-            'eval_duration_ms', 'eval_count', 'run_id', 'success'
+            'timestamp', 'question_id', 'node_name', 'call_order', 'model_name',
+            'model_config_key', 'prompt_length', 'response_length', 'duration_ms', 
+            'memory_mb', 'success'
         ]
         
         # Crear directorios base
         self._ensure_directories()
         
         logger.info(f"MetricsCollector inicializado con directorio base: {self.base_metrics_dir}")
+        logger.info(f"Mapeo de modelos disponible: {self.get_model_mapping()}")
     
     def _ensure_directories(self):
         """Crea los directorios necesarios para las métricas."""
@@ -142,9 +152,6 @@ class MetricsCollector:
                 'final_context_size_chars': 0,
                 'total_llm_calls': 0,
                 'total_llm_time_ms': 0,
-                'total_input_tokens': 0,
-                'total_output_tokens': 0,
-                'total_tokens': 0,
                 'evaluation_metrics': {},
                 'success': False
             }
@@ -153,7 +160,7 @@ class MetricsCollector:
     
     def log_llm_call(self, node_name: str, response_data: Any, prompt_text: str = "", success: bool = True):
         """
-        Registra una llamada a LLM con sus métricas detalladas.
+        Registra una llamada a LLM con métricas simplificadas enfocadas en tiempo y modelo.
         
         Args:
             node_name: Nombre del nodo que realizó la llamada
@@ -165,134 +172,72 @@ class MetricsCollector:
             call_timestamp = time.time()
             call_order = len(self.llm_calls) + 1
             
-            # LOGS DE DEBUG DETALLADOS
-            logger.debug(f"=== DEBUGGING LLM CALL - Nodo: {node_name} ===")
+            # Obtener el modelo correcto para este nodo desde la configuración
+            model_name, config_key = self.get_model_for_node(node_name)
+            
+            logger.debug(f"=== LLM CALL - Nodo: {node_name} ===")
+            logger.debug(f"Modelo asignado: {model_name} (config: {config_key})")
             logger.debug(f"Tipo de response_data: {type(response_data)}")
-            logger.debug(f"Atributos de response_data: {dir(response_data) if hasattr(response_data, '__dict__') else 'No tiene __dict__'}")
             
-            if hasattr(response_data, '__dict__'):
-                logger.debug(f"Dict de response_data: {response_data.__dict__}")
-            
-            # Intentar obtener el modelo desde la configuración como fallback
-            default_model = LLM_CONFIG.get('default_model', 'unknown')
-            
-            # Inicializar métricas por defecto
+            # Inicializar métricas simplificadas
             llm_metrics = {
                 'timestamp': call_timestamp,
                 'question_id': self.question_id or 'unknown',
                 'node_name': node_name,
                 'call_order': call_order,
-                'model': default_model,  # Usar modelo de configuración como fallback
+                'model_name': model_name,
+                'model_config_key': config_key,
                 'prompt_length': len(prompt_text) if prompt_text else 0,
                 'response_length': 0,
-                'input_tokens': 0,
-                'output_tokens': 0,
-                'total_tokens': 0,
                 'duration_ms': 0,
-                'load_duration_ms': 0,
-                'prompt_eval_duration_ms': 0,
-                'eval_duration_ms': 0,
-                'eval_count': 0,
-                'run_id': '',
+                'memory_mb': self.get_memory_usage(),
                 'success': success
             }
             
-            # Extraer métricas del response_data
+            # Extraer métricas básicas enfocadas en tiempo y contenido
+            start_extraction = time.time()
+            
+            # Extraer contenido de respuesta
+            if hasattr(response_data, 'content'):
+                llm_metrics['response_length'] = len(str(response_data.content))
+            elif isinstance(response_data, str):
+                llm_metrics['response_length'] = len(response_data)
+            elif isinstance(response_data, dict) and 'content' in response_data:
+                llm_metrics['response_length'] = len(str(response_data['content']))
+            
+            # Extraer tiempo de duración si está disponible
             if hasattr(response_data, 'response_metadata'):
                 metadata = response_data.response_metadata
-                logger.debug(f"response_metadata encontrado: {metadata}")
-                logger.debug(f"Tipo de metadata: {type(metadata)}")
-                logger.debug(f"Claves en metadata: {list(metadata.keys()) if isinstance(metadata, dict) else 'No es dict'}")
+                if isinstance(metadata, dict) and 'total_duration' in metadata:
+                    llm_metrics['duration_ms'] = round(metadata['total_duration'] / 1_000_000, 2)
+                    logger.debug(f"Duration extraído: {llm_metrics['duration_ms']}ms")
+            elif isinstance(response_data, dict) and 'response_metadata' in response_data:
+                metadata = response_data['response_metadata']
+                if isinstance(metadata, dict) and 'total_duration' in metadata:
+                    llm_metrics['duration_ms'] = round(metadata['total_duration'] / 1_000_000, 2)
+            
+            # Si no se pudo extraer duración, calcular tiempo de procesamiento de respuesta
+            if llm_metrics['duration_ms'] == 0:
+                processing_time = (time.time() - start_extraction) * 1000
+                llm_metrics['duration_ms'] = round(processing_time, 2)
+                logger.debug(f"Duration calculado por procesamiento: {llm_metrics['duration_ms']}ms")
                 
-                # Extraer información básica
-                if isinstance(metadata, dict):
-                    llm_metrics['model'] = metadata.get('model', default_model)
-                    logger.debug(f"Modelo extraído: {llm_metrics['model']}")
-                    
-                    llm_metrics['run_id'] = getattr(response_data, 'id', '').replace('run-', '') if hasattr(response_data, 'id') else ''
-                    
-                    # Extraer contenido de respuesta
-                    if hasattr(response_data, 'content'):
-                        llm_metrics['response_length'] = len(str(response_data.content))
-                        logger.debug(f"Longitud de respuesta: {llm_metrics['response_length']}")
-                    
-                    # Extraer métricas de tiempo (en nanosegundos, convertir a ms)
-                    if 'total_duration' in metadata:
-                        llm_metrics['duration_ms'] = round(metadata['total_duration'] / 1_000_000, 2)
-                        logger.debug(f"Duration extraído: {llm_metrics['duration_ms']}ms")
-                    if 'load_duration' in metadata:
-                        llm_metrics['load_duration_ms'] = round(metadata['load_duration'] / 1_000_000, 2)
-                    if 'prompt_eval_duration' in metadata:
-                        llm_metrics['prompt_eval_duration_ms'] = round(metadata['prompt_eval_duration'] / 1_000_000, 2)
-                    if 'eval_duration' in metadata:
-                        llm_metrics['eval_duration_ms'] = round(metadata['eval_duration'] / 1_000_000, 2)
-                    
-                    # Extraer información de tokens
-                    llm_metrics['eval_count'] = metadata.get('eval_count', 0)
-                    logger.debug(f"eval_count: {llm_metrics['eval_count']}")
-                    
-                    # Para algunos modelos, eval_count puede ser usado como output_tokens
-                    if 'eval_count' in metadata and llm_metrics['eval_count'] > 0:
-                        llm_metrics['output_tokens'] = llm_metrics['eval_count']
-                    
-                    # Buscar usage_metadata si está disponible
-                    if 'usage_metadata' in metadata:
-                        usage = metadata['usage_metadata']
-                        logger.debug(f"usage_metadata encontrado: {usage}")
-                        llm_metrics['input_tokens'] = usage.get('input_tokens', 0)
-                        llm_metrics['output_tokens'] = usage.get('output_tokens', llm_metrics['output_tokens'])
-                        llm_metrics['total_tokens'] = usage.get('total_tokens', 0)
-                        logger.debug(f"Tokens extraídos - input: {llm_metrics['input_tokens']}, output: {llm_metrics['output_tokens']}, total: {llm_metrics['total_tokens']}")
-                    
-                    # Calcular total_tokens si no está disponible
-                    if llm_metrics['total_tokens'] == 0:
-                        llm_metrics['total_tokens'] = llm_metrics['input_tokens'] + llm_metrics['output_tokens']
-                        logger.debug(f"Total tokens calculado: {llm_metrics['total_tokens']}")
-                
-            elif isinstance(response_data, dict):
-                logger.debug(f"response_data es dict: {response_data}")
-                if 'response_metadata' in response_data:
-                    # Manejar caso donde response_data es un diccionario
-                    metadata = response_data['response_metadata']
-                    logger.debug(f"metadata desde dict: {metadata}")
-                    extracted_metrics = self._extract_metadata_from_dict(metadata)
-                    llm_metrics.update(extracted_metrics)
-                    logger.debug(f"Métricas extraídas de dict: {extracted_metrics}")
-                else:
-                    logger.debug("response_data es dict pero no tiene 'response_metadata'")
-                    # Revisar si hay contenido directo
-                    if 'content' in response_data:
-                        llm_metrics['response_length'] = len(str(response_data['content']))
-                    # Intentar buscar directamente en el diccionario
-                    if 'model' in response_data:
-                        llm_metrics['model'] = response_data['model']
-            else:
-                logger.debug(f"response_data no tiene response_metadata ni es dict")
-                # Intentar extraer contenido si es string o tiene contenido
-                if isinstance(response_data, str):
-                    llm_metrics['response_length'] = len(response_data)
-                elif hasattr(response_data, 'content'):
-                    llm_metrics['response_length'] = len(str(response_data.content))
-                
-            logger.debug(f"Métricas finales extraídas: modelo={llm_metrics['model']}, tokens={llm_metrics['total_tokens']}, duration={llm_metrics['duration_ms']}ms")
+            logger.debug(f"Métricas finales: modelo={llm_metrics['model_name']}, duration={llm_metrics['duration_ms']}ms, memory={llm_metrics['memory_mb']}MB")
                 
             # Almacenar llamada LLM
             with self._lock:
                 self.llm_calls.append(llm_metrics)
                 
-                # Actualizar métricas del workflow
+                # Actualizar métricas simplificadas del workflow
                 if self.workflow_data:
                     self.workflow_data['total_llm_calls'] += 1
                     self.workflow_data['total_llm_time_ms'] += llm_metrics['duration_ms']
-                    self.workflow_data['total_input_tokens'] += llm_metrics['input_tokens']
-                    self.workflow_data['total_output_tokens'] += llm_metrics['output_tokens']
-                    self.workflow_data['total_tokens'] += llm_metrics['total_tokens']
             
             # Escribir métricas LLM inmediatamente
             current_strategy = self._get_current_strategy_dir()
             self._write_llm_metrics(llm_metrics, current_strategy)
             
-            logger.debug(f"Llamada LLM registrada para nodo {node_name}: {llm_metrics['duration_ms']:.2f}ms, tokens: {llm_metrics['total_tokens']}")
+            logger.debug(f"Llamada LLM registrada para nodo {node_name}: {llm_metrics['duration_ms']:.2f}ms")
             
         except Exception as e:
             logger.error(f"Error al registrar llamada LLM en nodo {node_name}: {str(e)}")
@@ -300,38 +245,15 @@ class MetricsCollector:
             logger.error(f"Traceback completo: {traceback.format_exc()}")
     
     def _extract_metadata_from_dict(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
-        """Extrae métricas de un diccionario de metadatos."""
+        """Extrae métricas simplificadas de un diccionario de metadatos."""
         metrics = {}
         
-        # Usar modelo de configuración como fallback
-        default_model = LLM_CONFIG.get('default_model', 'unknown')
-        metrics['model'] = metadata.get('model', default_model)
-        
         logger.debug(f"Extrayendo metadata de dict: {metadata}")
-        logger.debug(f"Modelo extraído: {metrics['model']}")
         
-        # Tiempos en nanosegundos -> milisegundos
+        # Tiempo de duración solamente (nanosegundos -> milisegundos)
         if 'total_duration' in metadata:
             metrics['duration_ms'] = round(metadata['total_duration'] / 1_000_000, 2)
             logger.debug(f"Duration desde dict: {metrics['duration_ms']}ms")
-        if 'load_duration' in metadata:
-            metrics['load_duration_ms'] = round(metadata['load_duration'] / 1_000_000, 2)
-        if 'prompt_eval_duration' in metadata:
-            metrics['prompt_eval_duration_ms'] = round(metadata['prompt_eval_duration'] / 1_000_000, 2)
-        if 'eval_duration' in metadata:
-            metrics['eval_duration_ms'] = round(metadata['eval_duration'] / 1_000_000, 2)
-            
-        metrics['eval_count'] = metadata.get('eval_count', 0)
-        logger.debug(f"eval_count desde dict: {metrics['eval_count']}")
-        
-        # Buscar información de tokens
-        if 'usage_metadata' in metadata:
-            usage = metadata['usage_metadata']
-            logger.debug(f"usage_metadata desde dict: {usage}")
-            metrics['input_tokens'] = usage.get('input_tokens', 0)
-            metrics['output_tokens'] = usage.get('output_tokens', 0)
-            metrics['total_tokens'] = usage.get('total_tokens', 0)
-            logger.debug(f"Tokens desde dict - input: {metrics['input_tokens']}, output: {metrics['output_tokens']}, total: {metrics['total_tokens']}")
         
         return metrics
     
@@ -578,9 +500,6 @@ class MetricsCollector:
                 'final_context_size_chars': self.workflow_data['final_context_size_chars'],
                 'total_llm_calls': self.workflow_data['total_llm_calls'],
                 'total_llm_time_ms': self.workflow_data['total_llm_time_ms'],
-                'total_input_tokens': self.workflow_data['total_input_tokens'],
-                'total_output_tokens': self.workflow_data['total_output_tokens'],
-                'total_tokens': self.workflow_data['total_tokens'],
                 'evaluation_metrics': json.dumps(self.workflow_data['evaluation_metrics'], ensure_ascii=False) if self.workflow_data['evaluation_metrics'] else '{}',
                 'success': self.workflow_data['success']
             }
@@ -610,18 +529,56 @@ class MetricsCollector:
         """
         return len(self.llm_calls)
     
-    def get_total_llm_tokens(self) -> Dict[str, int]:
+    def get_total_llm_time(self) -> float:
         """
-        Retorna el total de tokens utilizados en llamadas LLM.
+        Retorna el tiempo total utilizado en llamadas LLM.
         
         Returns:
-            Diccionario con totales de tokens (input, output, total)
+            Tiempo total en milisegundos
         """
         if not self.workflow_data:
-            return {'input_tokens': 0, 'output_tokens': 0, 'total_tokens': 0}
+            return 0.0
             
-        return {
-            'input_tokens': self.workflow_data.get('total_input_tokens', 0),
-            'output_tokens': self.workflow_data.get('total_output_tokens', 0),
-            'total_tokens': self.workflow_data.get('total_tokens', 0)
-        } 
+        return self.workflow_data.get('total_llm_time_ms', 0.0)
+
+    def get_model_mapping(self) -> Dict[str, str]:
+        """
+        Obtiene el mapeo de nodos a nombres de modelo reales desde la configuración.
+        
+        Returns:
+            Diccionario con mapeo de nodos a nombres de modelo
+        """
+        mapping = {}
+        for node_name, config_key in self.NODE_TO_MODEL_MAPPING.items():
+            model_name = LLM_CONFIG.get(config_key, 'unknown')
+            mapping[node_name] = model_name
+        return mapping
+    
+    def get_model_for_node(self, node_name: str) -> tuple[str, str]:
+        """
+        Obtiene el nombre del modelo y la clave de configuración para un nodo específico.
+        
+        Args:
+            node_name: Nombre del nodo
+            
+        Returns:
+            Tupla (nombre_modelo, clave_configuracion)
+        """
+        config_key = self.NODE_TO_MODEL_MAPPING.get(node_name, 'default_model')
+        model_name = LLM_CONFIG.get(config_key, 'unknown')
+        return model_name, config_key
+    
+    def get_memory_usage(self) -> float:
+        """
+        Obtiene el uso actual de memoria del proceso en MB.
+        
+        Returns:
+            Uso de memoria en MB
+        """
+        try:
+            process = psutil.Process()
+            memory_info = process.memory_info()
+            return round(memory_info.rss / 1024 / 1024, 2)  # Convertir bytes a MB
+        except Exception as e:
+            logger.debug(f"No se pudo obtener información de memoria: {e}")
+            return 0.0 
