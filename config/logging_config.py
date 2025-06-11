@@ -117,4 +117,28 @@ def configure_default_logging():
         setup_logging(level=logging.INFO)
 
 # Auto-configurar al importar si no hay configuración previa
-configure_default_logging() 
+def auto_configure_from_config():
+    """Configura automáticamente usando la configuración del módulo config."""
+    try:
+        from langagent.config.config import LOGGING_CONFIG
+        
+        # Mapear string level a nivel de logging
+        level_mapping = {
+            'DEBUG': logging.DEBUG,
+            'INFO': logging.INFO,
+            'WARNING': logging.WARNING,
+            'ERROR': logging.ERROR,
+            'CRITICAL': logging.CRITICAL
+        }
+        
+        log_level = level_mapping.get(LOGGING_CONFIG.get('level', 'INFO'), logging.INFO)
+        setup_logging(
+            level=log_level,
+            log_to_file=LOGGING_CONFIG.get('log_to_file', True),
+            log_to_console=LOGGING_CONFIG.get('log_to_console', True)
+        )
+    except ImportError:
+        # Si no se puede importar la configuración, usar configuración por defecto
+        configure_default_logging()
+
+auto_configure_from_config() 

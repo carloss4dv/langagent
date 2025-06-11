@@ -37,8 +37,6 @@ from langagent.models.query_analysis import (
 # Usar el sistema de logging centralizado
 from langagent.config.logging_config import get_logger
 logger = get_logger(__name__)
-# Asegurar que el logger está en DEBUG para ver todos los logs de diagnóstico
-logger.setLevel(10)  # DEBUG level
 
 class GraphState(TypedDict):
     """

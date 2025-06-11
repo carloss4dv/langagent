@@ -18,8 +18,6 @@ from langagent.config.logging_config import get_logger
 from langagent.config.config import LLM_CONFIG  # Añadir importación de configuración
 
 logger = get_logger(__name__)
-# Asegurar que el logger está en DEBUG para ver todos los logs de diagnóstico
-logger.setLevel(10)  # DEBUG level
 
 class MetricsCollector:
     """
