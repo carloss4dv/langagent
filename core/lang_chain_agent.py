@@ -118,7 +118,9 @@ class LangChainAgent:
         # Configurar generador de contexto si está habilitado
         if VECTORSTORE_CONFIG.get("use_context_generation", False):
             logger.info("Configurando generador de contexto...")
-            context_generator = create_context_generator(self.llm)
+            chunk_size = VECTORSTORE_CONFIG.get("chunk_size", 512)
+            logger.info(f"Configurando generador de contexto con chunk_size: {chunk_size}")
+            context_generator = create_context_generator(self.llm, chunk_size=chunk_size)
             self.vectorstore_handler.set_context_generator(context_generator)
         
         # Cargar documentos

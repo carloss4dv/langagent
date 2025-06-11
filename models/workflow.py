@@ -149,6 +149,9 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                 # Ejecutar el rewriter
                 rewrite_result = query_rewriter.invoke({"question": question})
                 
+                # Registrar llamada LLM si el resultado tiene metadatos
+                metrics_collector.log_llm_call("rewrite_query", rewrite_result, question, success=True)
+                
                 # Extraer la pregunta reescrita del resultado
                 if isinstance(rewrite_result, dict) and "rewritten_question" in rewrite_result:
                     rewritten_question = rewrite_result["rewritten_question"]
@@ -359,6 +362,9 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                         "ambito": ambito,
                     })
                     
+                    # Registrar llamada LLM para el grader de relevancia
+                    metrics_collector.log_llm_call("grade_relevance", relevance, f"Documento {idx + 1}", success=True)
+                    
                     logger.debug(f"Relevancia evaluada para documento {idx + 1}: {relevance}")
                     
                     if isinstance(relevance, dict) and relevance.get("score", "").lower() == "yes":
@@ -516,6 +522,9 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                 
                 sql_query = rag_sql_chain["sql_query_chain"].invoke(sql_input)
                 
+                # Registrar llamada LLM para SQL query generation
+                metrics_collector.log_llm_call("generate", sql_query, clean_context[:500] + "...", success=True)
+                
                 # Guardar la consulta SQL generada
                 state["sql_query"] = sql_query
                 logger.info(f"Consulta SQL generada: {sql_query}")
@@ -544,6 +553,9 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                     raise ValueError("Contexto o pregunta aún contienen estructuras anidadas después de la limpieza")
                 
                 response = rag_sql_chain["answer_chain"].invoke(rag_input)
+                
+                # Registrar llamada LLM para RAG answer generation
+                metrics_collector.log_llm_call("generate", response, clean_context[:500] + "...", success=True)
                 
                 # Extraer solo el campo answer si la respuesta es un diccionario
                 if isinstance(response, dict) and "answer" in response:
@@ -641,6 +653,9 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                     "documents": docs_text,
                     "generation": generation
                 })
+                
+                # Registrar llamada LLM para evaluación granular
+                metrics_collector.log_llm_call("evaluate_response_granular", evaluation_result, question, success=True)
                 
                 if isinstance(evaluation_result, dict):
                     logger.info("Métricas de evaluación granular:")
@@ -795,6 +810,9 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                 logger.info(f"Input para interpretación SQL: context length={len(clean_context)}")
                 
                 response = sql_interpretation_chain.invoke(interpretation_input)
+                
+                # Registrar llamada LLM para interpretación SQL
+                metrics_collector.log_llm_call("generate_sql_interpretation", response, clean_question, success=True)
                 
                 # Extraer la respuesta del JSON
                 if isinstance(response, dict) and "answer" in response:
@@ -1362,6 +1380,10 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         # Usar la estrategia inicial extraída del nombre si no se especifica otra
         chunk_strategy = input_data.get("chunk_strategy", initial_chunk_strategy)
         
+        # Detectar si se está usando estrategia adaptativa
+        # Se considera adaptativa si hay adaptive_retrievers disponibles o si hay granularity_history
+        is_adaptive = bool(adaptive_retrievers) or len(input_data.get("granularity_history", [])) > 0
+        
         # Actualizar el input_data con la estrategia inicial si no estaba presente
         if "chunk_strategy" not in input_data:
             input_data["chunk_strategy"] = chunk_strategy
@@ -1374,8 +1396,8 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         if "granularity_history" not in input_data:
             input_data["granularity_history"] = []
         
-        # Iniciar recolección de métricas
-        metrics_collector.start_workflow(question, chunk_strategy)
+        # Iniciar recolección de métricas con detección de estrategia adaptativa
+        metrics_collector.start_workflow(question, chunk_strategy, is_adaptive=is_adaptive)
         
         try:
             # Ejecutar el workflow con configuración explícita de recursión

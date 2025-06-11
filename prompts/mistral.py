@@ -44,25 +44,38 @@ PROMPTS = {
         Question: {question}
         Context: {context} [/INST]""",
 
-    "context_generator": """[INST] You are an AI assistant specializing in SEGEDA document analysis using systematic reasoning.
+    "context_generator": """[INST] You are an AI assistant specializing in SEGEDA document analysis using systematic reasoning with hierarchical text structure awareness.
+        
+        HIERARCHICAL TEXT ANALYSIS FRAMEWORK:
+        Given chunk size: {chunk_size} characters
+        Text hierarchy: Sentence → Paragraph → Section
+        
+        ADAPTIVE CONTEXT STRATEGY BASED ON CHUNK SIZE:
+        - Small chunks (≤400 chars): Focus on sentence-level precision and immediate semantic context
+        - Medium chunks (401-800 chars): Balance paragraph-level understanding with cross-paragraph relationships  
+        - Large chunks (>800 chars): Emphasize section-level comprehension and multi-section connections
         
         CHAIN OF THOUGHT ANALYSIS:
-        Step 1: Identify the cube type (PDI, PTGAS, CARGO, ADMISIÓN, MATRÍCULA, RENDIMIENTO, EGRESADOS, PROYECTOS, etc.)
-        Step 2: Recognize the data category (MEDIDAS or DIMENSIONES)
-        Step 3: Extract key metrics, dimensions, and their attributes systematically
-        Step 4: Identify relationships with other SEGEDA components through logical analysis
-        Step 5: Note important institutional terminology and operational constraints
+        Step 1: Assess chunk size ({chunk_size} chars) and determine hierarchical scope (sentence/paragraph/section level)
+        Step 2: Identify the cube type (PDI, PTGAS, CARGO, ADMISIÓN, MATRÍCULA, RENDIMIENTO, EGRESADOS, PROYECTOS, etc.)
+        Step 3: Recognize the data category (MEDIDAS or DIMENSIONES) and hierarchical context
+        Step 4: Extract key metrics, dimensions, and their attributes systematically at appropriate hierarchical level
+        Step 5: Identify relationships with other SEGEDA components through logical analysis across hierarchy
+        Step 6: Note important institutional terminology and operational constraints within hierarchical context
         
-        CONTEXT GUIDELINES:
-        1. Identify main SEGEDA concepts and metrics through structured analysis
-        2. Connect information to broader SEGEDA context using logical reasoning
-        3. Include relevant institutional terminology with proper classification
-        4. Note key figures and metrics with their scope and limitations
-        5. Maintain technical precision using systematic evaluation
+        HIERARCHICAL CONTEXT GUIDELINES:
+        1. For sentence-level chunks: Focus on precise semantic meaning and immediate conceptual relationships
+        2. For paragraph-level chunks: Establish thematic connections and contextual flow between related concepts
+        3. For section-level chunks: Capture comprehensive scope and institutional framework connections
+        4. Always identify main SEGEDA concepts and metrics through structured hierarchical analysis
+        5. Connect information to broader SEGEDA context using logical reasoning appropriate to chunk scope
+        6. Include relevant institutional terminology with proper classification at the detected hierarchical level
+        7. Note key figures and metrics with their scope and limitations within the hierarchical context
+        8. Maintain technical precision using systematic evaluation adapted to chunk granularity
         
         RESPONSE FORMAT:
         {{
-          "context": "Your concise context here"
+          "context": "Your hierarchically-aware concise context here"
         }}
         
         Document: {document}

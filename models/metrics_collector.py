@@ -3,6 +3,7 @@ Recolector de métricas para el workflow de LangGraph.
 
 Este módulo implementa la recopilación de métricas detalladas por nodo y workflow,
 organizadas por estrategia de chunking para análisis de rendimiento.
+Incluye captura de métricas LLM detalladas.
 """
 
 import os
@@ -23,6 +24,7 @@ class MetricsCollector:
     
     Recopila métricas por nodo y por workflow completo, organizándolas
     por estrategia de chunking para análisis comparativo de rendimiento.
+    Incluye recolección detallada de métricas de llamadas a LLM.
     """
     
     def __init__(self, base_metrics_dir: str = "metrics"):
@@ -37,6 +39,7 @@ class MetricsCollector:
         self.workflow_start_time = None
         self.workflow_data = {}
         self.node_executions = []
+        self.llm_calls = []  # Lista para almacenar llamadas a LLM
         
         # Lock para operaciones thread-safe
         self._lock = Lock()
@@ -50,9 +53,19 @@ class MetricsCollector:
         
         self.workflow_metrics_headers = [
             'timestamp', 'question_id', 'question', 'rewritten_question',
-            'total_execution_time_ms', 'total_retries', 'final_chunk_strategy',
+            'total_execution_time_ms', 'total_retries', 'initial_chunk_strategy',
+            'final_chunk_strategy', 'is_adaptive_strategy', 'adaptive_chunks_used',
             'total_documents_retrieved', 'final_context_size_chars',
-            'evaluation_metrics', 'success'
+            'total_llm_calls', 'total_llm_time_ms', 'total_input_tokens', 
+            'total_output_tokens', 'total_tokens', 'evaluation_metrics', 'success'
+        ]
+        
+        # Headers para métricas de LLM
+        self.llm_metrics_headers = [
+            'timestamp', 'question_id', 'node_name', 'call_order', 'model',
+            'prompt_length', 'response_length', 'input_tokens', 'output_tokens', 
+            'total_tokens', 'duration_ms', 'load_duration_ms', 'prompt_eval_duration_ms',
+            'eval_duration_ms', 'eval_count', 'run_id', 'success'
         ]
         
         # Crear directorios base
@@ -62,15 +75,22 @@ class MetricsCollector:
     
     def _ensure_directories(self):
         """Crea los directorios necesarios para las métricas."""
-        strategies = ['256', '512', '1024']
+        # Estrategias fijas
+        fixed_strategies = ['256', '512', '1024']
         
-        for strategy in strategies:
+        # Estrategias adaptativas (con prefijo E)
+        adaptive_strategies = ['E256', 'E512', 'E1024']
+        
+        all_strategies = fixed_strategies + adaptive_strategies
+        
+        for strategy in all_strategies:
             strategy_dir = self.base_metrics_dir / strategy
             strategy_dir.mkdir(parents=True, exist_ok=True)
             
             # Crear archivos CSV con headers si no existen
             node_metrics_file = strategy_dir / 'node_metrics.csv'
             workflow_metrics_file = strategy_dir / 'workflow_metrics.csv'
+            llm_metrics_file = strategy_dir / 'llm_metrics.csv'
             
             if not node_metrics_file.exists():
                 with open(node_metrics_file, 'w', newline='', encoding='utf-8') as f:
@@ -81,19 +101,32 @@ class MetricsCollector:
                 with open(workflow_metrics_file, 'w', newline='', encoding='utf-8') as f:
                     writer = csv.writer(f)
                     writer.writerow(self.workflow_metrics_headers)
+                    
+            if not llm_metrics_file.exists():
+                with open(llm_metrics_file, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(self.llm_metrics_headers)
     
-    def start_workflow(self, question: str, chunk_strategy: str = "512"):
+    def start_workflow(self, question: str, chunk_strategy: str = "512", is_adaptive: bool = False):
         """
         Inicia la recopilación de métricas para un nuevo workflow.
         
         Args:
             question: Pregunta original del usuario
             chunk_strategy: Estrategia de chunking inicial
+            is_adaptive: Si se está usando estrategia adaptativa
         """
         with self._lock:
             self.question_id = str(uuid.uuid4())
             self.workflow_start_time = time.time()
             self.node_executions = []
+            self.llm_calls = []
+            
+            # Determinar la estrategia correcta con prefijo si es adaptativa
+            if is_adaptive and not chunk_strategy.startswith('E'):
+                display_strategy = f"E{chunk_strategy}"
+            else:
+                display_strategy = chunk_strategy
             
             self.workflow_data = {
                 'question_id': self.question_id,
@@ -101,14 +134,155 @@ class MetricsCollector:
                 'rewritten_question': '',
                 'initial_chunk_strategy': chunk_strategy,
                 'final_chunk_strategy': chunk_strategy,
+                'is_adaptive_strategy': is_adaptive,
+                'adaptive_chunks_used': [],
                 'total_retries': 0,
                 'total_documents_retrieved': 0,
                 'final_context_size_chars': 0,
+                'total_llm_calls': 0,
+                'total_llm_time_ms': 0,
+                'total_input_tokens': 0,
+                'total_output_tokens': 0,
+                'total_tokens': 0,
                 'evaluation_metrics': {},
                 'success': False
             }
             
-        logger.info(f"Iniciado workflow con ID: {self.question_id}")
+        logger.info(f"Iniciado workflow con ID: {self.question_id}, estrategia: {display_strategy}")
+    
+    def log_llm_call(self, node_name: str, response_data: Any, prompt_text: str = "", success: bool = True):
+        """
+        Registra una llamada a LLM con sus métricas detalladas.
+        
+        Args:
+            node_name: Nombre del nodo que realizó la llamada
+            response_data: Respuesta del LLM (AIMessageChunk o similar)
+            prompt_text: Texto del prompt enviado
+            success: Si la llamada fue exitosa
+        """
+        try:
+            call_timestamp = time.time()
+            call_order = len(self.llm_calls) + 1
+            
+            # Inicializar métricas por defecto
+            llm_metrics = {
+                'timestamp': call_timestamp,
+                'question_id': self.question_id or 'unknown',
+                'node_name': node_name,
+                'call_order': call_order,
+                'model': 'unknown',
+                'prompt_length': len(prompt_text) if prompt_text else 0,
+                'response_length': 0,
+                'input_tokens': 0,
+                'output_tokens': 0,
+                'total_tokens': 0,
+                'duration_ms': 0,
+                'load_duration_ms': 0,
+                'prompt_eval_duration_ms': 0,
+                'eval_duration_ms': 0,
+                'eval_count': 0,
+                'run_id': '',
+                'success': success
+            }
+            
+            # Extraer métricas del response_data
+            if hasattr(response_data, 'response_metadata'):
+                metadata = response_data.response_metadata
+                
+                # Extraer información básica
+                llm_metrics['model'] = metadata.get('model', 'unknown')
+                llm_metrics['run_id'] = getattr(response_data, 'id', '').replace('run-', '') if hasattr(response_data, 'id') else ''
+                
+                # Extraer contenido de respuesta
+                if hasattr(response_data, 'content'):
+                    llm_metrics['response_length'] = len(str(response_data.content))
+                
+                # Extraer métricas de tiempo (en nanosegundos, convertir a ms)
+                if 'total_duration' in metadata:
+                    llm_metrics['duration_ms'] = round(metadata['total_duration'] / 1_000_000, 2)
+                if 'load_duration' in metadata:
+                    llm_metrics['load_duration_ms'] = round(metadata['load_duration'] / 1_000_000, 2)
+                if 'prompt_eval_duration' in metadata:
+                    llm_metrics['prompt_eval_duration_ms'] = round(metadata['prompt_eval_duration'] / 1_000_000, 2)
+                if 'eval_duration' in metadata:
+                    llm_metrics['eval_duration_ms'] = round(metadata['eval_duration'] / 1_000_000, 2)
+                
+                # Extraer información de tokens
+                llm_metrics['eval_count'] = metadata.get('eval_count', 0)
+                
+                # Para algunos modelos, eval_count puede ser usado como output_tokens
+                if 'eval_count' in metadata and llm_metrics['eval_count'] > 0:
+                    llm_metrics['output_tokens'] = llm_metrics['eval_count']
+                
+                # Buscar usage_metadata si está disponible
+                if 'usage_metadata' in metadata:
+                    usage = metadata['usage_metadata']
+                    llm_metrics['input_tokens'] = usage.get('input_tokens', 0)
+                    llm_metrics['output_tokens'] = usage.get('output_tokens', llm_metrics['output_tokens'])
+                    llm_metrics['total_tokens'] = usage.get('total_tokens', 0)
+                
+                # Calcular total_tokens si no está disponible
+                if llm_metrics['total_tokens'] == 0:
+                    llm_metrics['total_tokens'] = llm_metrics['input_tokens'] + llm_metrics['output_tokens']
+                
+            elif isinstance(response_data, dict) and 'response_metadata' in response_data:
+                # Manejar caso donde response_data es un diccionario
+                metadata = response_data['response_metadata']
+                llm_metrics.update(self._extract_metadata_from_dict(metadata))
+                
+            # Almacenar llamada LLM
+            with self._lock:
+                self.llm_calls.append(llm_metrics)
+                
+                # Actualizar métricas del workflow
+                if self.workflow_data:
+                    self.workflow_data['total_llm_calls'] += 1
+                    self.workflow_data['total_llm_time_ms'] += llm_metrics['duration_ms']
+                    self.workflow_data['total_input_tokens'] += llm_metrics['input_tokens']
+                    self.workflow_data['total_output_tokens'] += llm_metrics['output_tokens']
+                    self.workflow_data['total_tokens'] += llm_metrics['total_tokens']
+            
+            # Escribir métricas LLM inmediatamente
+            current_strategy = self._get_current_strategy_dir()
+            self._write_llm_metrics(llm_metrics, current_strategy)
+            
+            logger.debug(f"Llamada LLM registrada para nodo {node_name}: {llm_metrics['duration_ms']:.2f}ms, tokens: {llm_metrics['total_tokens']}")
+            
+        except Exception as e:
+            logger.error(f"Error al registrar llamada LLM en nodo {node_name}: {str(e)}")
+    
+    def _extract_metadata_from_dict(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Extrae métricas de un diccionario de metadatos."""
+        metrics = {}
+        
+        metrics['model'] = metadata.get('model', 'unknown')
+        
+        # Tiempos en nanosegundos -> milisegundos
+        if 'total_duration' in metadata:
+            metrics['duration_ms'] = round(metadata['total_duration'] / 1_000_000, 2)
+        if 'load_duration' in metadata:
+            metrics['load_duration_ms'] = round(metadata['load_duration'] / 1_000_000, 2)
+        if 'prompt_eval_duration' in metadata:
+            metrics['prompt_eval_duration_ms'] = round(metadata['prompt_eval_duration'] / 1_000_000, 2)
+        if 'eval_duration' in metadata:
+            metrics['eval_duration_ms'] = round(metadata['eval_duration'] / 1_000_000, 2)
+            
+        metrics['eval_count'] = metadata.get('eval_count', 0)
+        
+        return metrics
+    
+    def _get_current_strategy_dir(self) -> str:
+        """Obtiene el directorio de estrategia actual basado en el estado del workflow."""
+        if not self.workflow_data:
+            return "512"  # Por defecto
+            
+        is_adaptive = self.workflow_data.get('is_adaptive_strategy', False)
+        current_strategy = self.workflow_data.get('final_chunk_strategy', '512')
+        
+        if is_adaptive and not current_strategy.startswith('E'):
+            return f"E{current_strategy}"
+        else:
+            return current_strategy
     
     def start_node(self, node_name: str) -> Dict[str, Any]:
         """
@@ -176,6 +350,13 @@ class MetricsCollector:
                         self.workflow_data['final_context_size_chars'], context_size_chars
                     )
                     
+                    # Rastrear chunks usados en estrategia adaptativa
+                    if self.workflow_data.get('is_adaptive_strategy', False):
+                        adaptive_chunks = self.workflow_data.get('adaptive_chunks_used', [])
+                        if chunk_strategy not in adaptive_chunks:
+                            adaptive_chunks.append(chunk_strategy)
+                            self.workflow_data['adaptive_chunks_used'] = adaptive_chunks
+                    
                     # Actualizar pregunta reescrita si está disponible
                     if state.get('rewritten_question') and not self.workflow_data['rewritten_question']:
                         self.workflow_data['rewritten_question'] = state.get('rewritten_question')
@@ -198,7 +379,8 @@ class MetricsCollector:
             }
             
             # Escribir métricas del nodo inmediatamente
-            self._write_node_metrics(node_metrics, chunk_strategy)
+            strategy_dir = self._get_current_strategy_dir()
+            self._write_node_metrics(node_metrics, strategy_dir)
             
             logger.debug(f"Métricas registradas para nodo {node_context['node_name']}: {execution_time_ms:.2f}ms")
             
@@ -251,8 +433,8 @@ class MetricsCollector:
                         self.workflow_data['total_documents_retrieved'] = len(documents)
             
             # Escribir métricas finales del workflow
-            chunk_strategy = final_state.get('chunk_strategy', self.workflow_data['final_chunk_strategy'])
-            self._write_workflow_metrics(chunk_strategy)
+            strategy_dir = self._get_current_strategy_dir()
+            self._write_workflow_metrics(strategy_dir)
             
             logger.info(f"Workflow {self.question_id} finalizado en {total_execution_time_ms:.2f}ms")
             
@@ -265,6 +447,7 @@ class MetricsCollector:
                 self.workflow_start_time = None
                 self.workflow_data = {}
                 self.node_executions = []
+                self.llm_calls = []
     
     def _write_node_metrics(self, metrics: Dict[str, Any], chunk_strategy: str):
         """
@@ -285,6 +468,25 @@ class MetricsCollector:
         except Exception as e:
             logger.error(f"Error al escribir métricas de nodo: {str(e)}")
     
+    def _write_llm_metrics(self, metrics: Dict[str, Any], chunk_strategy: str):
+        """
+        Escribe las métricas de una llamada LLM al archivo CSV correspondiente.
+        
+        Args:
+            metrics: Métricas de la llamada LLM
+            chunk_strategy: Estrategia de chunking actual
+        """
+        try:
+            strategy_dir = self.base_metrics_dir / chunk_strategy
+            llm_metrics_file = strategy_dir / 'llm_metrics.csv'
+            
+            with open(llm_metrics_file, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=self.llm_metrics_headers)
+                writer.writerow(metrics)
+                
+        except Exception as e:
+            logger.error(f"Error al escribir métricas LLM: {str(e)}")
+    
     def _write_workflow_metrics(self, chunk_strategy: str):
         """
         Escribe las métricas del workflow completo al archivo CSV correspondiente.
@@ -304,9 +506,17 @@ class MetricsCollector:
                 'rewritten_question': self.workflow_data['rewritten_question'],
                 'total_execution_time_ms': self.workflow_data['total_execution_time_ms'],
                 'total_retries': self.workflow_data['total_retries'],
+                'initial_chunk_strategy': self.workflow_data['initial_chunk_strategy'],
                 'final_chunk_strategy': self.workflow_data['final_chunk_strategy'],
+                'is_adaptive_strategy': self.workflow_data['is_adaptive_strategy'],
+                'adaptive_chunks_used': json.dumps(self.workflow_data['adaptive_chunks_used']) if self.workflow_data['adaptive_chunks_used'] else '[]',
                 'total_documents_retrieved': self.workflow_data['total_documents_retrieved'],
                 'final_context_size_chars': self.workflow_data['final_context_size_chars'],
+                'total_llm_calls': self.workflow_data['total_llm_calls'],
+                'total_llm_time_ms': self.workflow_data['total_llm_time_ms'],
+                'total_input_tokens': self.workflow_data['total_input_tokens'],
+                'total_output_tokens': self.workflow_data['total_output_tokens'],
+                'total_tokens': self.workflow_data['total_tokens'],
                 'evaluation_metrics': json.dumps(self.workflow_data['evaluation_metrics'], ensure_ascii=False) if self.workflow_data['evaluation_metrics'] else '{}',
                 'success': self.workflow_data['success']
             }
@@ -325,4 +535,29 @@ class MetricsCollector:
         Returns:
             ID de la pregunta actual o None si no hay workflow activo
         """
-        return self.question_id 
+        return self.question_id
+
+    def get_llm_call_count(self) -> int:
+        """
+        Retorna el número total de llamadas LLM en el workflow actual.
+        
+        Returns:
+            Número de llamadas LLM realizadas
+        """
+        return len(self.llm_calls)
+    
+    def get_total_llm_tokens(self) -> Dict[str, int]:
+        """
+        Retorna el total de tokens utilizados en llamadas LLM.
+        
+        Returns:
+            Diccionario con totales de tokens (input, output, total)
+        """
+        if not self.workflow_data:
+            return {'input_tokens': 0, 'output_tokens': 0, 'total_tokens': 0}
+            
+        return {
+            'input_tokens': self.workflow_data.get('total_input_tokens', 0),
+            'output_tokens': self.workflow_data.get('total_output_tokens', 0),
+            'total_tokens': self.workflow_data.get('total_tokens', 0)
+        } 

@@ -114,28 +114,40 @@ def create_rag_sql_chain(llm, db_uri=SQL_CONFIG["db_uri"], dialect=SQL_CONFIG["d
         "sql_query_chain": sql_query_chain
     }
 
-def create_context_generator(llm):
+def create_context_generator(llm, chunk_size=512):
     """
     Crea un generador de contexto para mejorar la calidad de los chunks.
     
     Este generador utiliza el LLM principal para crear una descripción contextual
     para cada chunk basándose en el documento completo, mejorando así su recuperación.
+    Incorpora conciencia jerárquica basada en el tamaño del chunk.
     
     Args:
         llm: Modelo de lenguaje a utilizar.
+        chunk_size: Tamaño del chunk en caracteres para adaptar la estrategia contextual.
         
     Returns:
-        Chain: Cadena para generar contexto.
+        Chain: Cadena para generar contexto con conciencia jerárquica.
     """
     # Prompt para generación de contexto
     prompt_template = _get_prompt_template(llm, "context_generator")
     prompt = PromptTemplate(
         template=prompt_template,
-        input_variables=["document", "chunk"],
+        input_variables=["document", "chunk", "chunk_size"],
     )
     
     # Definir la cadena de generación de contexto con JsonOutputParser
-    context_generator_chain = prompt | llm | JsonOutputParser()
+    # Incluir chunk_size en el mapeo de variables
+    context_generator_chain = (
+        {
+            "document": lambda x: x["document"] if isinstance(x, dict) and "document" in x else x,
+            "chunk": lambda x: x["chunk"] if isinstance(x, dict) and "chunk" in x else x,
+            "chunk_size": lambda x: chunk_size  # Valor fijo pasado como parámetro
+        }
+        | prompt 
+        | llm 
+        | JsonOutputParser()
+    )
     
     return context_generator_chain
 
