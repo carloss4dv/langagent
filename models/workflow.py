@@ -37,6 +37,8 @@ from langagent.models.query_analysis import (
 # Usar el sistema de logging centralizado
 from langagent.config.logging_config import get_logger
 logger = get_logger(__name__)
+# Asegurar que el logger está en DEBUG para ver todos los logs de diagnóstico
+logger.setLevel(10)  # DEBUG level
 
 class GraphState(TypedDict):
     """
@@ -354,13 +356,27 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                     # Añadir timeout/protección para evitar recursión infinita
                     logger.debug(f"Llamando a retrieval_grader para documento {idx + 1}")
                     
-                    relevance = retrieval_grader.invoke({
+                    grader_input = {
                         "content": document_data["content"],
                         "metadata": str(document_data["metadata"]),
                         "source": document_data["source"],
                         "question": question,
                         "ambito": ambito,
-                    })
+                    }
+                    
+                    logger.debug(f"=== INPUT PARA RETRIEVAL GRADER ===")
+                    logger.debug(f"Tipo de grader_input: {type(grader_input)}")
+                    logger.debug(f"Claves en grader_input: {list(grader_input.keys())}")
+                    
+                    relevance = retrieval_grader.invoke(grader_input)
+                    
+                    logger.debug(f"=== OUTPUT DEL RETRIEVAL GRADER ===")
+                    logger.debug(f"Tipo de relevance: {type(relevance)}")
+                    logger.debug(f"Contenido de relevance: {relevance}")
+                    if hasattr(relevance, '__dict__'):
+                        logger.debug(f"Dict de relevance: {relevance.__dict__}")
+                    if hasattr(relevance, 'response_metadata'):
+                        logger.debug(f"response_metadata de relevance: {relevance.response_metadata}")
                     
                     # Registrar llamada LLM para el grader de relevancia
                     metrics_collector.log_llm_call("grade_relevance", relevance, f"Documento {idx + 1}", success=True)
@@ -552,7 +568,20 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                     logger.error(f"clean_context type: {type(clean_context)}, clean_question type: {type(clean_question)}")
                     raise ValueError("Contexto o pregunta aún contienen estructuras anidadas después de la limpieza")
                 
+                logger.debug(f"=== INPUT PARA RAG ANSWER CHAIN ===")
+                logger.debug(f"Tipo de rag_input: {type(rag_input)}")
+                logger.debug(f"Claves en rag_input: {list(rag_input.keys())}")
+                logger.debug(f"Contenido de rag_input: {rag_input}")
+                
                 response = rag_sql_chain["answer_chain"].invoke(rag_input)
+                
+                logger.debug(f"=== OUTPUT DEL RAG ANSWER CHAIN ===")
+                logger.debug(f"Tipo de response: {type(response)}")
+                logger.debug(f"Contenido de response: {response}")
+                if hasattr(response, '__dict__'):
+                    logger.debug(f"Dict de response: {response.__dict__}")
+                if hasattr(response, 'response_metadata'):
+                    logger.debug(f"response_metadata de response: {response.response_metadata}")
                 
                 # Registrar llamada LLM para RAG answer generation
                 metrics_collector.log_llm_call("generate", response, clean_context[:500] + "...", success=True)
@@ -648,11 +677,25 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                             docs_text += f"[DOCUMENTO {i+1}]: {str(doc)}\n"
                 
                 # Ejecutar evaluación granular
-                evaluation_result = granular_evaluator.invoke({
+                evaluator_input = {
                     "question": question,
                     "documents": docs_text,
                     "generation": generation
-                })
+                }
+                
+                logger.debug(f"=== INPUT PARA GRANULAR EVALUATOR ===")
+                logger.debug(f"Tipo de evaluator_input: {type(evaluator_input)}")
+                logger.debug(f"Claves en evaluator_input: {list(evaluator_input.keys())}")
+                
+                evaluation_result = granular_evaluator.invoke(evaluator_input)
+                
+                logger.debug(f"=== OUTPUT DEL GRANULAR EVALUATOR ===")
+                logger.debug(f"Tipo de evaluation_result: {type(evaluation_result)}")
+                logger.debug(f"Contenido de evaluation_result: {evaluation_result}")
+                if hasattr(evaluation_result, '__dict__'):
+                    logger.debug(f"Dict de evaluation_result: {evaluation_result.__dict__}")
+                if hasattr(evaluation_result, 'response_metadata'):
+                    logger.debug(f"response_metadata de evaluation_result: {evaluation_result.response_metadata}")
                 
                 # Registrar llamada LLM para evaluación granular
                 metrics_collector.log_llm_call("evaluate_response_granular", evaluation_result, question, success=True)
