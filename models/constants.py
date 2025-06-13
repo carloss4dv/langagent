@@ -208,7 +208,7 @@ CUBO_EN_ES = {
 # Añadir al final del archivo las nuevas constantes para recuperación adaptativa
 
 # Configuración de Recuperación Adaptativa
-CHUNK_STRATEGIES = ["256", "512", "1024"]
+CHUNK_STRATEGIES = ["167", "256", "307", "512", "755", "1024"]
 DEFAULT_CHUNK_STRATEGY = "512"
 MAX_RETRIES = 2  # Total 3 intentos (inicial + 2 reintentos)
 
@@ -222,15 +222,30 @@ EVALUATION_THRESHOLDS = {
 
 # Configuración de colecciones por estrategia
 COLLECTION_CONFIG = {
+    "167": {
+        "collection_name": "segeda_collection_167",
+        "chunk_size": 167,
+        "chunk_overlap": 17
+    },
     "256": {
         "collection_name": "segeda_collection_256",
         "chunk_size": 256,
         "chunk_overlap": 25
     },
+    "307": {
+        "collection_name": "segeda_collection_307",
+        "chunk_size": 307,
+        "chunk_overlap": 31
+    },
     "512": {
         "collection_name": "segeda_collection_512", 
         "chunk_size": 512,
         "chunk_overlap": 50
+    },
+    "755": {
+        "collection_name": "segeda_collection_755",
+        "chunk_size": 755,
+        "chunk_overlap": 76
     },
     "1024": {
         "collection_name": "segeda_collection_1024",

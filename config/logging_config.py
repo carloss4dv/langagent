@@ -11,6 +11,9 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+# Variable global para controlar la configuración
+_logging_configured = False
+
 def setup_logging(level=logging.INFO, log_to_file=True, log_to_console=True):
     """
     Configura el sistema de logging de manera centralizada.
@@ -20,6 +23,11 @@ def setup_logging(level=logging.INFO, log_to_file=True, log_to_console=True):
         log_to_file: Si guardar logs en archivo
         log_to_console: Si mostrar logs en consola
     """
+    global _logging_configured
+    
+    # Evitar reconfiguración múltiple
+    if _logging_configured:
+        return
     
     # Configuración básica del formato
     log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -97,6 +105,9 @@ def setup_logging(level=logging.INFO, log_to_file=True, log_to_console=True):
     logger.info(f"Sistema de logging configurado correctamente (Nivel: {logging.getLevelName(level)})")
     if log_to_file:
         logger.info(f"Logs guardándose en: {log_filepath}")
+    
+    # Marcar como configurado
+    _logging_configured = True
 
 def get_logger(name):
     """

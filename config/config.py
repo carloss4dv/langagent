@@ -24,8 +24,8 @@ LLM_CONFIG = {
 
 # Configuración de Vector Store
 VECTORSTORE_CONFIG = {
-    "chunk_size": 512,         # Tamaño de los fragmentos de texto para indexación
-    "chunk_overlap": 50,        # Superposición entre fragmentos
+    "chunk_size": 167,         # Tamaño de los fragmentos de texto para indexación
+    "chunk_overlap": 37,        # Superposición entre fragmentos
     "k_retrieval": 12,          # Número de documentos a recuperar
     "similarity_threshold": 0.7,  # Umbral mínimo de similitud para considerar un documento relevante
     "max_docs_total": 15,       # Aumentar el límite total de documentos
@@ -42,7 +42,7 @@ VECTORSTORE_CONFIG = {
     
     # Configuración para enfoque de colección única
     "use_single_collection": True,  # Usar una sola colección para todos los documentos
-    "collection_name": "default_collection_256",  # Nombre de la colección unificada
+    "collection_name": "default_collection_167",  # Nombre de la colección unificada
     "always_update_collection": False,  # Si se deben actualizar documentos en colección existente
     "filter_by_metadata": True,  # Habilitar filtrado por metadatos en consultas
     
@@ -59,11 +59,11 @@ VECTORSTORE_CONFIG = {
     
     # Configuración de Recuperación Adaptativa - Múltiples Colecciones
     "adaptive_collections": {
-        "256": "default_collection_256",
-        "512": "default_collection_512", 
-        "1024": "default_collection_1024"
+        "167": "default_collection_167",
+        "307": "default_collection_307", 
+        "755": "default_collection_755",
     },
-    "use_adaptive_retrieval": False,  # Activar recuperación adaptativa
+    "use_adaptive_retrieval": True,  # Activar recuperación adaptativa
 }
 
 # Configuración de SQL

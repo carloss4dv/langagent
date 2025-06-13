@@ -12,31 +12,6 @@ import logging
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# Configurar logging antes de cualquier otra importación
-try:
-    from langagent.config.logging_config import setup_logging
-    from langagent.config.config import LOGGING_CONFIG
-    
-    # Configurar logging para el entorno de ejecución
-    level_mapping = {
-        'DEBUG': logging.DEBUG,
-        'INFO': logging.INFO,
-        'WARNING': logging.WARNING,
-        'ERROR': logging.ERROR,
-        'CRITICAL': logging.CRITICAL
-    }
-    
-    log_level = level_mapping.get(LOGGING_CONFIG.get('level', 'INFO'), logging.INFO)
-    setup_logging(level=log_level, log_to_file=True, log_to_console=True)
-    
-except ImportError:
-    # Configuración básica si falla la importación
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
 # Obtener logger para este módulo
 logger = logging.getLogger(__name__)
 

@@ -51,9 +51,9 @@ PROMPTS = {
         Text hierarchy: Sentence → Paragraph → Section
         
         ADAPTIVE CONTEXT STRATEGY BASED ON CHUNK SIZE:
-        - Small chunks (≤400 chars): Focus on sentence-level precision and immediate semantic context
-        - Medium chunks (401-800 chars): Balance paragraph-level understanding with cross-paragraph relationships  
-        - Large chunks (>800 chars): Emphasize section-level comprehension and multi-section connections
+        - Small chunks (≤200 chars): Focus on sentence-level precision and immediate semantic context
+        - Medium chunks (200-700 chars): Balance paragraph-level understanding with cross-paragraph relationships  
+        - Large chunks (>700 chars): Emphasize section-level comprehension and multi-section connections
         
         CHAIN OF THOUGHT ANALYSIS:
         Step 1: Assess chunk size ({chunk_size} chars) and determine hierarchical scope (sentence/paragraph/section level)
@@ -72,6 +72,7 @@ PROMPTS = {
         6. Include relevant institutional terminology with proper classification at the detected hierarchical level
         7. Note key figures and metrics with their scope and limitations within the hierarchical context
         8. Maintain technical precision using systematic evaluation adapted to chunk granularity
+        9. DO NOT OUTPUT ANY FORM OF STRUCTURED DATA, ONLY OUTPUT A PARAGRAPH WITH THE CONTEXT
         
         RESPONSE FORMAT:
         {{

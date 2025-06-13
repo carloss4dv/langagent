@@ -756,6 +756,281 @@ class ChunkOptimizer:
         
         return optimal_pairs
     
+    def generate_markdown_summary(self):
+        """Genera un resumen completo en formato Markdown"""
+        from datetime import datetime
+        
+        # Obtener configuraciones óptimas
+        optimal_pairs = self.get_optimal_chunk_overlap_pairs()
+        
+        # Crear texto de resumen completo y detallado
+        total_units = len(self.df)
+        total_chars = self.df['char_count'].sum()
+        total_words = self.df['word_count'].sum()
+        
+        # Calcular métricas estadísticas clave
+        sentences = self.df[self.df['unit_type'] == 'sentence']
+        paragraphs = self.df[self.df['unit_type'] == 'paragraph']
+        sections = self.df[self.df['unit_type'] == 'section']
+        
+        # Generar contenido Markdown
+        markdown_content = f"""# 📊 Resumen Completo del Análisis de Chunks
+
+**Fecha de análisis:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+---
+
+## 📈 Datos Generales del Corpus
+
+| Métrica | Valor |
+|---------|-------|
+| 📁 Documentos analizados | {self.df['filename'].nunique()} |
+| 📝 Total de unidades textuales | {total_units:,} |
+| 📏 Total de caracteres | {total_chars:,} |
+| 📖 Total de palabras | {total_words:,} |
+| 🎯 Densidad textual promedio | {total_chars/total_units:.1f} chars/unidad |
+| 📊 Eficiencia léxica | {total_words/total_chars*100:.2f}% (palabras por carácter) |
+
+---
+
+## 📈 Métricas Estadísticas Utilizadas en el Análisis
+
+### Métodos de Análisis Estadístico
+
+- **🔹 Medidas de tendencia central:** Media aritmética, Mediana, Moda
+- **🔸 Medidas de dispersión:** Desviación estándar, Varianza, Coeficiente de variación  
+- **🔷 Medidas de posición:** Cuartiles (Q1, Q2, Q3), Percentiles (P5, P10, P90, P95)
+- **🔺 Medidas de forma:** Asimetría (skewness), Curtosis (kurtosis)
+- **🔻 Análisis de outliers:** Método del rango intercuartílico (IQR)
+- **⚡ Análisis de distribuciones:** Histogramas, boxplots, distribuciones acumulativas
+
+---
+
+## 📊 Distribuciones Estadísticas por Tipo de Unidad
+
+"""
+
+        # Agregar estadísticas para cada tipo de unidad
+        if len(sentences) > 0:
+            sent_mean = sentences['char_count'].mean()
+            sent_std = sentences['char_count'].std()
+            sent_median = sentences['char_count'].median()
+            sent_skew = sentences['char_count'].skew()
+            skew_desc = 'sesgada derecha' if sent_skew > 0.5 else 'aproximadamente simétrica' if abs(sent_skew) < 0.5 else 'sesgada izquierda'
+            
+            markdown_content += f"""### 🔹 Oraciones ({len(sentences):,} unidades)
+
+| Métrica | Valor |
+|---------|-------|
+| Media | {sent_mean:.1f} ± {sent_std:.1f} caracteres |
+| Mediana | {sent_median:.1f} caracteres |
+| Asimetría | {sent_skew:.3f} ({skew_desc}) |
+| Rango intercuartílico | {sentences['char_count'].quantile(0.75) - sentences['char_count'].quantile(0.25):.1f} |
+| Mínimo | {sentences['char_count'].min()} caracteres |
+| Máximo | {sentences['char_count'].max()} caracteres |
+| Q1 (Percentil 25) | {sentences['char_count'].quantile(0.25):.1f} |
+| Q3 (Percentil 75) | {sentences['char_count'].quantile(0.75):.1f} |
+
+"""
+        
+        if len(paragraphs) > 0:
+            para_mean = paragraphs['char_count'].mean()
+            para_std = paragraphs['char_count'].std()
+            para_median = paragraphs['char_count'].median()
+            para_skew = paragraphs['char_count'].skew()
+            skew_desc = 'sesgada derecha' if para_skew > 0.5 else 'aproximadamente simétrica' if abs(para_skew) < 0.5 else 'sesgada izquierda'
+            
+            markdown_content += f"""### 🔸 Párrafos ({len(paragraphs):,} unidades)
+
+| Métrica | Valor |
+|---------|-------|
+| Media | {para_mean:.1f} ± {para_std:.1f} caracteres |
+| Mediana | {para_median:.1f} caracteres |
+| Asimetría | {para_skew:.3f} ({skew_desc}) |
+| Rango intercuartílico | {paragraphs['char_count'].quantile(0.75) - paragraphs['char_count'].quantile(0.25):.1f} |
+| Mínimo | {paragraphs['char_count'].min()} caracteres |
+| Máximo | {paragraphs['char_count'].max()} caracteres |
+| Q1 (Percentil 25) | {paragraphs['char_count'].quantile(0.25):.1f} |
+| Q3 (Percentil 75) | {paragraphs['char_count'].quantile(0.75):.1f} |
+
+"""
+        
+        if len(sections) > 0:
+            sect_mean = sections['char_count'].mean()
+            sect_std = sections['char_count'].std()
+            sect_median = sections['char_count'].median()
+            sect_skew = sections['char_count'].skew()
+            skew_desc = 'sesgada derecha' if sect_skew > 0.5 else 'aproximadamente simétrica' if abs(sect_skew) < 0.5 else 'sesgada izquierda'
+            
+            markdown_content += f"""### 🔷 Secciones ({len(sections):,} unidades)
+
+| Métrica | Valor |
+|---------|-------|
+| Media | {sect_mean:.1f} ± {sect_std:.1f} caracteres |
+| Mediana | {sect_median:.1f} caracteres |
+| Asimetría | {sect_skew:.3f} ({skew_desc}) |
+| Rango intercuartílico | {sections['char_count'].quantile(0.75) - sections['char_count'].quantile(0.25):.1f} |
+| Mínimo | {sections['char_count'].min()} caracteres |
+| Máximo | {sections['char_count'].max()} caracteres |
+| Q1 (Percentil 25) | {sections['char_count'].quantile(0.25):.1f} |
+| Q3 (Percentil 75) | {sections['char_count'].quantile(0.75):.1f} |
+
+"""
+
+        # Agregar configuraciones recomendadas
+        markdown_content += f"""---
+
+## 🎯 Configuraciones Recomendadas Basadas en Análisis Estadístico
+
+### 📈 Basadas en Cuartiles de Párrafos
+
+| Tipo de Chunk | Tamaño Recomendado |
+|---------------|-------------------|
+| Chunk pequeño (Q1) | ~{int(paragraphs['char_count'].quantile(0.25)) if len(paragraphs) > 0 else 400} caracteres |
+| Chunk mediano (Q2) | ~{int(paragraphs['char_count'].median()) if len(paragraphs) > 0 else 600} caracteres |
+| Chunk grande (Q3) | ~{int(paragraphs['char_count'].quantile(0.75)) if len(paragraphs) > 0 else 900} caracteres |
+
+### 📊 Basadas en Oraciones Promedio
+
+| Configuración | Tamaño Estimado |
+|--------------|----------------|
+| 3-5 oraciones | ~{int(sentences['char_count'].mean() * 4) if len(sentences) > 0 else 600} caracteres |
+| 8-12 oraciones | ~{int(sentences['char_count'].mean() * 10) if len(sentences) > 0 else 1500} caracteres |
+
+---
+
+## ⚡ Métricas de Eficiencia y Calidad Textual
+
+| Métrica | Valor |
+|---------|-------|
+| 🔹 Densidad léxica promedio | {total_words/total_chars*100:.2f}% |
+| 🔸 Caracteres por palabra | {total_chars/total_words:.2f} |
+| 🔷 Palabras por unidad textual | {total_words/total_units:.1f} |
+| 🎯 Coeficiente de eficiencia | {(total_words/total_chars) / (total_units/total_chars):.3f} |
+
+---
+
+## 🏆 Top Configuraciones Óptimas de Chunk-Overlap
+
+"""
+
+        # Agregar tabla de configuraciones óptimas
+        if optimal_pairs:
+            markdown_content += """| Rank | Chunk Size | Overlap | % Overlap | Justificación | Rendimiento Esperado |
+|------|------------|---------|-----------|---------------|---------------------|
+"""
+            for i, (chunk_size, overlap, justification) in enumerate(optimal_pairs[:5], 1):
+                overlap_pct = (overlap / chunk_size * 100)
+                emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "🔸"
+                
+                # Estimación de rendimiento
+                if chunk_size < 400:
+                    performance = "Rápido pero menos contexto"
+                elif chunk_size < 800:
+                    performance = "Equilibrio ideal velocidad-contexto"
+                else:
+                    performance = "Más contexto, procesamiento lento"
+                
+                markdown_content += f"| {emoji} {i} | {chunk_size} | {overlap} | {overlap_pct:.1f}% | {justification} | {performance} |\n"
+
+        markdown_content += f"""
+---
+
+## 🚀 Recomendaciones Finales para Implementación
+
+### ✅ Estrategias Prioritarias
+
+1. **Utilizar configuraciones basadas en percentiles de párrafos** para mejor coherencia semántica
+2. **Considerar overlap de 15-25% del tamaño del chunk** para mantener contexto
+3. **Priorizar chunks de ~{int(paragraphs['char_count'].median()) if len(paragraphs) > 0 else 600} caracteres** (mediana de párrafos)
+4. **Implementar análisis A/B testing** con las configuraciones sugeridas vs actuales
+
+### 🎯 Configuración Recomendada Principal
+
+"""
+        
+        if optimal_pairs:
+            best_chunk, best_overlap, best_justification = optimal_pairs[0]
+            best_overlap_pct = (best_overlap / best_chunk * 100)
+            
+            markdown_content += f"""**Configuración óptima identificada:**
+
+- **Chunk Size:** {best_chunk} caracteres
+- **Overlap:** {best_overlap} caracteres ({best_overlap_pct:.1f}% del chunk)
+- **Justificación:** {best_justification}
+- **Ventajas:** Equilibrio óptimo entre coherencia semántica y eficiencia de procesamiento
+
+### 📊 Comparación con Configuraciones Actuales
+
+| Configuración | Actual | Recomendada | Mejora |
+|--------------|--------|-------------|--------|
+| Pequeña | 256 chars, 50 overlap | {optimal_pairs[0][0]} chars, {optimal_pairs[0][1]} overlap | {optimal_pairs[0][0]-256:+d} chars, {optimal_pairs[0][1]-50:+d} overlap |
+| Mediana | 512 chars, 50 overlap | {optimal_pairs[1][0] if len(optimal_pairs) > 1 else optimal_pairs[0][0]} chars, {optimal_pairs[1][1] if len(optimal_pairs) > 1 else optimal_pairs[0][1]} overlap | {(optimal_pairs[1][0] if len(optimal_pairs) > 1 else optimal_pairs[0][0])-512:+d} chars, {(optimal_pairs[1][1] if len(optimal_pairs) > 1 else optimal_pairs[0][1])-50:+d} overlap |
+| Grande | 1024 chars, 50 overlap | {optimal_pairs[-1][0]} chars, {optimal_pairs[-1][1]} overlap | {optimal_pairs[-1][0]-1024:+d} chars, {optimal_pairs[-1][1]-50:+d} overlap |
+
+"""
+
+        markdown_content += f"""
+---
+
+## 📋 Análisis Detallado por Documento
+
+"""
+
+        # Agregar análisis por documento
+        for filename in self.df['filename'].unique():
+            doc_data = self.df[self.df['filename'] == filename]
+            doc_chars = doc_data['char_count'].sum()
+            doc_words = doc_data['word_count'].sum()
+            doc_units = len(doc_data)
+            unit_dist = doc_data['unit_type'].value_counts()
+            
+            markdown_content += f"""### 📄 {filename}
+
+| Métrica | Valor |
+|---------|-------|
+| Unidades totales | {doc_units} |
+| Caracteres | {doc_chars:,} ({doc_chars/total_chars*100:.1f}% del total) |
+| Palabras | {doc_words:,} |
+| Densidad | {doc_chars/doc_units:.1f} chars/unidad |
+
+**Distribución por tipo:**
+"""
+            for unit_type, count in unit_dist.items():
+                markdown_content += f"- {unit_type.title()}s: {count}\n"
+            
+            markdown_content += "\n"
+
+        markdown_content += f"""
+---
+
+## 🔗 Archivos Generados
+
+Este análisis ha generado los siguientes archivos:
+
+- `resumen_analisis_chunks.md` - Este resumen completo
+- `chunk_analysis_results.csv` - Datos detallados del análisis
+- `optimal_chunk_overlap_configs.csv` - Configuraciones óptimas
+- `chunk_analysis_1_boxplot_distribucion.png` - Distribución por tipos
+- `chunk_analysis_2_histograma_paragrafos.png` - Histograma con métricas
+- `chunk_analysis_3_scatter_chars_palabras.png` - Relación chars-palabras
+- `chunk_analysis_4_longitud_palabras.png` - Distribución longitud palabras
+- `chunk_analysis_5_comparacion_configs.png` - Configuraciones actuales vs sugeridas
+- `chunk_analysis_6_configuraciones_optimas.png` - Top configuraciones chunk-overlap
+
+---
+
+**Análisis generado por:** chunk_analyzer.py  
+**Versión:** 1.0  
+**Fecha:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+
+        # Guardar el archivo Markdown
+        with open('resumen_analisis_chunks.md', 'w', encoding='utf-8') as f:
+            f.write(markdown_content)
+        
+        print(f"\n📝 Resumen completo guardado en: resumen_analisis_chunks.md")
+    
     def create_visualization(self):
         """Crea visualizaciones individuales para mejor claridad"""
         plt.style.use('seaborn-v0_8')
@@ -964,122 +1239,20 @@ class ChunkOptimizer:
         plt.savefig('chunk_analysis_6_configuraciones_optimas.png', dpi=300, bbox_inches='tight')
         plt.show()
         
-        # FIGURA 7: Resumen completo con métricas utilizadas
-        fig7 = plt.figure(figsize=(16, 10))
-        ax7 = fig7.add_subplot(1, 1, 1)
-        ax7.axis('off')
+        # ARCHIVO 7: Generar resumen completo en formato Markdown
+        self.generate_markdown_summary()
         
-        # Crear texto de resumen completo y detallado
-        total_units = len(self.df)
-        total_chars = self.df['char_count'].sum()
-        total_words = self.df['word_count'].sum()
+        print("📝 Resumen completo generado en archivo Markdown: 'resumen_analisis_chunks.md'")
         
-        # Calcular métricas estadísticas clave
-        sentences = self.df[self.df['unit_type'] == 'sentence']
-        paragraphs = self.df[self.df['unit_type'] == 'paragraph']
-        sections = self.df[self.df['unit_type'] == 'section']
-        
-        summary_text = f"""
-📊 RESUMEN COMPLETO DEL ANÁLISIS DE CHUNKS
-{'='*60}
-
-📈 DATOS GENERALES DEL CORPUS:
-   📁 Documentos analizados: {self.df['filename'].nunique()}
-   📝 Total de unidades textuales: {total_units:,}
-   📏 Total de caracteres: {total_chars:,}
-   📖 Total de palabras: {total_words:,}
-   🎯 Densidad textual promedio: {total_chars/total_units:.1f} chars/unidad
-   📊 Eficiencia léxica: {total_words/total_chars*100:.2f}% (palabras por carácter)
-
-📈 MÉTRICAS ESTADÍSTICAS UTILIZADAS EN EL ANÁLISIS:
-   🔹 Medidas de tendencia central: Media aritmética, Mediana, Moda
-   🔸 Medidas de dispersión: Desviación estándar, Varianza, Coeficiente de variación
-   🔷 Medidas de posición: Cuartiles (Q1, Q2, Q3), Percentiles (P5, P10, P90, P95)
-   🔺 Medidas de forma: Asimetría (skewness), Curtosis (kurtosis)
-   🔻 Análisis de outliers: Método del rango intercuartílico (IQR)
-   ⚡ Análisis de distribuciones: Histogramas, boxplots, distribuciones acumulativas
-
-📊 DISTRIBUCIONES ESTADÍSTICAS POR TIPO DE UNIDAD:
-"""
-        
-        if len(sentences) > 0:
-            sent_mean = sentences['char_count'].mean()
-            sent_std = sentences['char_count'].std()
-            sent_median = sentences['char_count'].median()
-            sent_skew = sentences['char_count'].skew()
-            summary_text += f"""
-   🔹 ORACIONES ({len(sentences):,} unidades):
-      • Media: {sent_mean:.1f} ± {sent_std:.1f} caracteres
-      • Mediana: {sent_median:.1f} caracteres
-      • Asimetría: {sent_skew:.2f} ({'sesgada derecha' if sent_skew > 0.5 else 'aproximadamente simétrica' if abs(sent_skew) < 0.5 else 'sesgada izquierda'})
-      • Rango intercuartílico: {sentences['char_count'].quantile(0.75) - sentences['char_count'].quantile(0.25):.1f}"""
-        
-        if len(paragraphs) > 0:
-            para_mean = paragraphs['char_count'].mean()
-            para_std = paragraphs['char_count'].std()
-            para_median = paragraphs['char_count'].median()
-            para_skew = paragraphs['char_count'].skew()
-            summary_text += f"""
-   🔸 PÁRRAFOS ({len(paragraphs):,} unidades):
-      • Media: {para_mean:.1f} ± {para_std:.1f} caracteres
-      • Mediana: {para_median:.1f} caracteres
-      • Asimetría: {para_skew:.2f} ({'sesgada derecha' if para_skew > 0.5 else 'aproximadamente simétrica' if abs(para_skew) < 0.5 else 'sesgada izquierda'})
-      • Rango intercuartílico: {paragraphs['char_count'].quantile(0.75) - paragraphs['char_count'].quantile(0.25):.1f}"""
-        
-        if len(sections) > 0:
-            sect_mean = sections['char_count'].mean()
-            sect_std = sections['char_count'].std()
-            sect_median = sections['char_count'].median()
-            sect_skew = sections['char_count'].skew()
-            summary_text += f"""
-   🔷 SECCIONES ({len(sections):,} unidades):
-      • Media: {sect_mean:.1f} ± {sect_std:.1f} caracteres
-      • Mediana: {sect_median:.1f} caracteres
-      • Asimetría: {sect_skew:.2f} ({'sesgada derecha' if sect_skew > 0.5 else 'aproximadamente simétrica' if abs(sect_skew) < 0.5 else 'sesgada izquierda'})
-      • Rango intercuartílico: {sections['char_count'].quantile(0.75) - sections['char_count'].quantile(0.25):.1f}"""
-        
-        summary_text += f"""
-
-🎯 CONFIGURACIONES RECOMENDADAS BASADAS EN ANÁLISIS ESTADÍSTICO:
-   📈 Basadas en cuartiles de párrafos:
-      • Chunk pequeño (Q1): ~{int(paragraphs['char_count'].quantile(0.25)) if len(paragraphs) > 0 else 400} caracteres
-      • Chunk mediano (Q2): ~{int(paragraphs['char_count'].median()) if len(paragraphs) > 0 else 600} caracteres  
-      • Chunk grande (Q3): ~{int(paragraphs['char_count'].quantile(0.75)) if len(paragraphs) > 0 else 900} caracteres
-   
-   📊 Basadas en oraciones promedio:
-      • 3-5 oraciones: ~{int(sentences['char_count'].mean() * 4) if len(sentences) > 0 else 600} caracteres
-      • 8-12 oraciones: ~{int(sentences['char_count'].mean() * 10) if len(sentences) > 0 else 1500} caracteres
-
-⚡ MÉTRICAS DE EFICIENCIA Y CALIDAD TEXTUAL:
-   🔹 Densidad léxica promedio: {total_words/total_chars*100:.2f}%
-   🔸 Caracteres por palabra: {total_chars/total_words:.2f}
-   🔷 Palabras por unidad textual: {total_words/total_units:.1f}
-   🎯 Coeficiente de eficiencia: {(total_words/total_chars) / (total_units/total_chars):.3f}
-
-🚀 RECOMENDACIONES FINALES PARA IMPLEMENTACIÓN:
-   1. Utilizar configuraciones basadas en percentiles de párrafos para mejor coherencia semántica
-   2. Considerar overlap de 15-25% del tamaño del chunk para mantener contexto
-   3. Priorizar chunks de ~{int(paragraphs['char_count'].median()) if len(paragraphs) > 0 else 600} caracteres (mediana de párrafos)
-   4. Implementar análisis A/B testing con las configuraciones sugeridas vs actuales
-"""
-        
-        ax7.text(0.02, 0.98, summary_text, transform=ax7.transAxes, fontsize=10,
-                 verticalalignment='top', bbox=dict(boxstyle='round,pad=1', facecolor='lightblue', alpha=0.2),
-                 family='monospace')
-        
-        plt.tight_layout()
-        plt.savefig('chunk_analysis_7_resumen_completo.png', dpi=300, bbox_inches='tight')
-        plt.show()
-        
-        print(f"\n📊 Análisis completado - 7 figuras individuales generadas:")
+        print(f"\n📊 Análisis completado - 6 figuras + 1 resumen en Markdown generados:")
         print(f"   📈 1. chunk_analysis_1_boxplot_distribucion.png - Distribución por tipos")
         print(f"   📈 2. chunk_analysis_2_histograma_paragrafos.png - Histograma con métricas")
         print(f"   📈 3. chunk_analysis_3_scatter_chars_palabras.png - Relación chars-palabras")
         print(f"   📈 4. chunk_analysis_4_longitud_palabras.png - Distribución longitud palabras")
         print(f"   📈 5. chunk_analysis_5_comparacion_configs.png - Configuraciones actuales vs sugeridas")
         print(f"   📈 6. chunk_analysis_6_configuraciones_optimas.png - Top configuraciones chunk-overlap")
-        print(f"   📈 7. chunk_analysis_7_resumen_completo.png - Resumen completo con métricas utilizadas")
-        print(f"📊 Total: 7 gráficos individuales enfocados y claros")
+        print(f"   📝 7. resumen_analisis_chunks.md - Resumen completo con métricas detalladas")
+        print(f"📊 Total: 6 gráficos individuales + 1 resumen completo en Markdown")
 
 def main():
     """Función principal del analizador"""
@@ -1183,6 +1356,7 @@ def main():
         print(f"\n💾 Resultados detallados guardados en:")
         print(f"   📊 'chunk_analysis_results.csv' - Datos completos del análisis")
         print(f"   🎯 'optimal_chunk_overlap_configs.csv' - Configuraciones recomendadas")
+        print(f"   📝 'resumen_analisis_chunks.md' - Resumen completo en formato Markdown")
     else:
         print(f"\n💾 Resultados guardados en 'chunk_analysis_results.csv'")
     
