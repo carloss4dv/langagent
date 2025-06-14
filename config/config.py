@@ -96,6 +96,40 @@ WORKFLOW_CONFIG = {
     "relevance_threshold": 0.8,    # Umbral para considerar una respuesta relevante
 }
 
+# Configuración de Chunk Strategies y Recuperación Adaptativa
+CHUNK_STRATEGY_CONFIG = {
+    "available_strategies": ["167", "307", "755"],  # Estrategias disponibles
+    "default_strategy": "307",     # Estrategia por defecto
+    "max_retries": 2,             # Total 3 intentos (inicial + 2 reintentos)
+    
+    # Umbrales de evaluación granular
+    "evaluation_thresholds": {
+        "faithfulness": 0.7,
+        "context_precision": 0.6,
+        "context_recall": 0.6,
+        "answer_relevance": 0.7
+    },
+    
+    # Configuración de colecciones por estrategia
+    "collection_config": {
+        "167": {
+            "collection_name": "segeda_collection_167",
+            "chunk_size": 167,
+            "chunk_overlap": 17
+        },
+        "307": {
+            "collection_name": "segeda_collection_307",
+            "chunk_size": 307,
+            "chunk_overlap": 31
+        },
+        "755": {
+            "collection_name": "segeda_collection_755",
+            "chunk_size": 755,
+            "chunk_overlap": 76
+        }
+    }
+}
+
 # Rutas y Directorios
 PATHS_CONFIG = {
     "default_data_dir": "./output_md",        # Directorio predeterminado para datos

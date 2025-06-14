@@ -17,7 +17,7 @@ from pathlib import Path
 from threading import Lock
 from langagent.config.logging_config import get_logger
 from langagent.config.config import LLM_CONFIG  # Añadir importación de configuración
-from langagent.models.constants import CHUNK_STRATEGIES
+from langagent.config.config import CHUNK_STRATEGY_CONFIG
 
 logger = get_logger(__name__)
 
@@ -88,11 +88,11 @@ class MetricsCollector:
     def _ensure_directories(self):
         """Crea los directorios necesarios para las métricas."""
         
-        # Estrategias fijas desde constants.py
-        fixed_strategies = CHUNK_STRATEGIES
+        # Estrategias fijas desde config.py
+        fixed_strategies = CHUNK_STRATEGY_CONFIG["available_strategies"]
         
         # Estrategias adaptativas (con prefijo E)
-        adaptive_strategies = [f"E{strategy}" for strategy in CHUNK_STRATEGIES]
+        adaptive_strategies = [f"E{strategy}" for strategy in CHUNK_STRATEGY_CONFIG["available_strategies"]]
         
         all_strategies = fixed_strategies + adaptive_strategies
         

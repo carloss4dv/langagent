@@ -461,16 +461,12 @@ class MilvusVectorStore(VectorStoreBase):
                 # Crear el cross encoder con configuración específica
                 cross_encoder = HuggingFaceCrossEncoder(
                     model_name=model_name,
-                    model_kwargs={
-                        "device": device,
-                        "torch_dtype": torch.float16 if device == "cuda" else torch.float32,
-                    }
                 )
                 
                 # Crear el compresor reranker
                 compressor = CrossEncoderReranker(
                     model=cross_encoder,
-                    top_k=k
+                    top_n=k
                 )
                 
                 # Crear el retriever con compresión

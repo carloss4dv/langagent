@@ -17,9 +17,9 @@ import re
 from langagent.config.config import WORKFLOW_CONFIG, VECTORSTORE_CONFIG, SQL_CONFIG
 from langagent.models.constants import (
     AMBITOS_CUBOS, CUBO_TO_AMBITO, AMBITO_KEYWORDS, 
-    AMBITO_EN_ES, CUBO_EN_ES, CHUNK_STRATEGIES, DEFAULT_CHUNK_STRATEGY,
-    MAX_RETRIES, EVALUATION_THRESHOLDS, COLLECTION_CONFIG
+    AMBITO_EN_ES, CUBO_EN_ES
 )
+from langagent.config.config import CHUNK_STRATEGY_CONFIG
 from langagent.models.metrics_collector import MetricsCollector
 
 # Importar utilidades refactorizadas
@@ -112,7 +112,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         metrics_collector = MetricsCollector()
     
     # Extraer estrategia inicial del nombre de la colección
-    initial_chunk_strategy = DEFAULT_CHUNK_STRATEGY  # Fallback por defecto
+    initial_chunk_strategy = CHUNK_STRATEGY_CONFIG["default_strategy"]  # Fallback por defecto
     if collection_name:
         try:
             initial_chunk_strategy = extract_chunk_strategy_from_name(collection_name)
@@ -230,7 +230,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         retry_count = state.get("retry_count", 0)
         ambito = state.get("ambito")
         is_consulta = state.get("is_consulta", False)
-        chunk_strategy = state.get("chunk_strategy", DEFAULT_CHUNK_STRATEGY)
+        chunk_strategy = state.get("chunk_strategy", CHUNK_STRATEGY_CONFIG["default_strategy"])
         
         logger.info("---RETRIEVE---")
         logger.info(f"Búsqueda con pregunta: {rewritten_question}")
@@ -916,7 +916,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         """
         retry_count = state.get("retry_count", 0)
         evaluation_metrics = state.get("evaluation_metrics", {})
-        current_strategy = state.get("chunk_strategy", DEFAULT_CHUNK_STRATEGY)
+        current_strategy = state.get("chunk_strategy", CHUNK_STRATEGY_CONFIG["default_strategy"])
         granularity_history = state.get("granularity_history", [])
         
         # Usar la función utilitaria para actualizar el histórico
@@ -948,7 +948,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         """
         retry_count = state.get("retry_count", 0)
         evaluation_metrics = state.get("evaluation_metrics", {})
-        current_strategy = state.get("chunk_strategy", DEFAULT_CHUNK_STRATEGY)
+        current_strategy = state.get("chunk_strategy", CHUNK_STRATEGY_CONFIG["default_strategy"])
         question = state.get("question", "").lower()
         rewritten_question = state.get("rewritten_question", "").lower()
         
@@ -959,7 +959,9 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         adaptive_retrieval_enabled = VECTORSTORE_CONFIG.get("use_adaptive_retrieval", False)
         logger.info(f"Recuperación adaptativa habilitada: {adaptive_retrieval_enabled}")
         
-        # Extraer métricas con valores por defecto
+        # Extraer configuraciones y métricas con valores por defecto
+        thresholds = CHUNK_STRATEGY_CONFIG["evaluation_thresholds"]
+        max_retries = CHUNK_STRATEGY_CONFIG["max_retries"]
         faithfulness = evaluation_metrics.get("faithfulness", 0.0)
         context_precision = evaluation_metrics.get("context_precision", 0.0)
         context_recall = evaluation_metrics.get("context_recall", 0.0)
@@ -968,10 +970,10 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         logger.info(f"Métricas actuales - Faithfulness: {faithfulness}, Precision: {context_precision}, Recall: {context_recall}, Relevance: {answer_relevance}")
         
         # Si todas las métricas están por encima de los umbrales, terminar
-        if (faithfulness >= EVALUATION_THRESHOLDS["faithfulness"] and
-            context_precision >= EVALUATION_THRESHOLDS["context_precision"] and
-            context_recall >= EVALUATION_THRESHOLDS["context_recall"] and
-            answer_relevance >= EVALUATION_THRESHOLDS["answer_relevance"]):
+        if (faithfulness >= thresholds["faithfulness"] and
+            context_precision >= thresholds["context_precision"] and
+            context_recall >= thresholds["context_recall"] and
+            answer_relevance >= thresholds["answer_relevance"]):
             logger.info("Todas las métricas superan los umbrales. Finalizando con éxito.")
             return "UPDATE_HISTORY_AND_END"
         
@@ -995,27 +997,27 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             return "UPDATE_HISTORY_AND_END"
         
         # Si ya hicimos el máximo de intentos, terminar siempre
-        if retry_count >= MAX_RETRIES:
-            logger.info(f"Máximo de reintentos alcanzado ({MAX_RETRIES}). Finalizando.")
+        if retry_count >= max_retries:
+            logger.info(f"Máximo de reintentos alcanzado ({max_retries}). Finalizando.")
             return "UPDATE_HISTORY_AND_END"
         
         # Incrementar contador de reintentos para el PRÓXIMO intento
         new_retry_count = retry_count + 1
         
-        logger.info(f"Preparando reintento {new_retry_count + 1} (máximo permitido: {MAX_RETRIES + 1})")
+        logger.info(f"Preparando reintento {new_retry_count + 1} (máximo permitido: {max_retries + 1})")
         
         # Si la recuperación adaptativa está desactivada, usar lógica simple
         if not adaptive_retrieval_enabled:
             metrics_below_threshold = (
-                faithfulness < EVALUATION_THRESHOLDS["faithfulness"] or
-                context_precision < EVALUATION_THRESHOLDS["context_precision"] or
-                context_recall < EVALUATION_THRESHOLDS["context_recall"] or
-                answer_relevance < EVALUATION_THRESHOLDS["answer_relevance"]
+                faithfulness < thresholds["faithfulness"] or
+                context_precision < thresholds["context_precision"] or
+                context_recall < thresholds["context_recall"] or
+                answer_relevance < thresholds["answer_relevance"]
             )
             
             if metrics_below_threshold:
-                if new_retry_count >= MAX_RETRIES:
-                    logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido ({MAX_RETRIES + 1}). Finalizando.")
+                if new_retry_count >= max_retries:
+                    logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido ({max_retries + 1}). Finalizando.")
                     return "UPDATE_HISTORY_AND_END"
                 
                 logger.info(f"Recuperación adaptativa deshabilitada. Reintentando con la misma estrategia: {current_strategy} tokens.")
@@ -1070,8 +1072,8 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             logger.info("Estrategia actual coincide con la alternativa sugerida. Analizando métricas específicas...")
             
             # Context Recall bajo → necesitamos más contexto (estrategia mayor)
-            if context_recall < EVALUATION_THRESHOLDS["context_recall"]:
-                if new_retry_count >= MAX_RETRIES:
+            if context_recall < thresholds["context_recall"]:
+                if new_retry_count >= max_retries:
                     logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido. Finalizando.")
                     return "UPDATE_HISTORY_AND_END"
                 
@@ -1088,9 +1090,9 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                     return "UPDATE_HISTORY_AND_END"
             
             # Context Precision bajo O Faithfulness bajo → necesitamos más precisión (estrategia menor)
-            if (context_precision < EVALUATION_THRESHOLDS["context_precision"] or
-                faithfulness < EVALUATION_THRESHOLDS["faithfulness"]):
-                if new_retry_count >= MAX_RETRIES:
+            if (context_precision < thresholds["context_precision"] or
+                faithfulness < thresholds["faithfulness"]):
+                if new_retry_count >= max_retries:
                     logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido. Finalizando.")
                     return "UPDATE_HISTORY_AND_END"
                 
@@ -1107,8 +1109,8 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                     return "UPDATE_HISTORY_AND_END"
             
             # Answer Relevance bajo con estrategia óptima → probar estrategias adyacentes inteligentemente
-            if answer_relevance < EVALUATION_THRESHOLDS["answer_relevance"]:
-                if new_retry_count >= MAX_RETRIES:
+            if answer_relevance < thresholds["answer_relevance"]:
+                if new_retry_count >= max_retries:
                     logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido. Finalizando.")
                     return "UPDATE_HISTORY_AND_END"
                 
@@ -1136,7 +1138,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         
         # Si la estrategia actual NO es la óptima, cambiar a la óptima
         else:
-            if new_retry_count >= MAX_RETRIES:
+            if new_retry_count >= max_retries:
                 logger.info(f"El próximo intento ({new_retry_count + 1}) excedería el máximo permitido. Finalizando.")
                 return "UPDATE_HISTORY_AND_END"
             
@@ -1160,7 +1162,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         """
         retry_count = state.get("retry_count", 0)
         evaluation_metrics = state.get("evaluation_metrics", {})
-        current_strategy = state.get("chunk_strategy", DEFAULT_CHUNK_STRATEGY)
+        current_strategy = state.get("chunk_strategy", CHUNK_STRATEGY_CONFIG["default_strategy"])
         question = state.get("question", "").lower()
         rewritten_question = state.get("rewritten_question", "").lower()
         
@@ -1185,42 +1187,47 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         faithfulness = evaluation_metrics.get("faithfulness", 0.0)
         answer_relevance = evaluation_metrics.get("answer_relevance", 0.0)
         
+        # Obtener estrategias ordenadas dinámicamente
+        strategies_sorted = sorted(CHUNK_STRATEGY_CONFIG["available_strategies"], key=int)
+        fine_grained = strategies_sorted[0]  # Estrategia más fina
+        medium_grained = strategies_sorted[len(strategies_sorted)//2] if len(strategies_sorted) > 2 else strategies_sorted[1] if len(strategies_sorted) > 1 else strategies_sorted[0]  # Estrategia media
+        coarse_grained = strategies_sorted[-1]  # Estrategia más gruesa
+        
         new_strategy = current_strategy  # Por defecto, mantener estrategia actual
         
         # Determinar nueva estrategia basada en las métricas y análisis
         if current_strategy == alternative_strategy:
             # Misma estrategia recomendada, ajustar según métricas específicas
-            if context_recall < EVALUATION_THRESHOLDS["context_recall"]:
-                # Necesitamos más contexto
-                if current_strategy == "256":
-                    new_strategy = "512"
-                elif current_strategy == "512":
-                    new_strategy = "1024"
-                # Si ya estamos en 1024, mantener
-            elif (context_precision < EVALUATION_THRESHOLDS["context_precision"] or
-                  faithfulness < EVALUATION_THRESHOLDS["faithfulness"]):
-                # Necesitamos más precisión
-                if current_strategy == "1024":
-                    new_strategy = "512"
-                elif current_strategy == "512":
-                    new_strategy = "256"
-                # Si ya estamos en 256, mantener
-            elif answer_relevance < EVALUATION_THRESHOLDS["answer_relevance"]:
+            if context_recall < thresholds["context_recall"]:
+                # Necesitamos más contexto - moverse hacia granularidad más gruesa
+                current_index = strategies_sorted.index(current_strategy)
+                if current_index < len(strategies_sorted) - 1:
+                    new_strategy = strategies_sorted[current_index + 1]
+                # Si ya estamos en la más gruesa, mantener
+            elif (context_precision < thresholds["context_precision"] or
+                  faithfulness < thresholds["faithfulness"]):
+                # Necesitamos más precisión - moverse hacia granularidad más fina
+                current_index = strategies_sorted.index(current_strategy)
+                if current_index > 0:
+                    new_strategy = strategies_sorted[current_index - 1]
+                # Si ya estamos en la más fina, mantener
+            elif answer_relevance < thresholds["answer_relevance"]:
                 # Problema de relevancia, usar análisis de consulta
-                if query_analysis['specific_indicators'] > 0 and current_strategy != "256":
-                    new_strategy = "256"
-                elif query_analysis['broad_indicators'] > 0 and current_strategy != "1024":
-                    new_strategy = "1024"
-                elif query_analysis['analytical_indicators'] > 0 and current_strategy != "512":
-                    new_strategy = "512"
+                if query_analysis['specific_indicators'] > 0 and current_strategy != fine_grained:
+                    new_strategy = fine_grained
+                elif query_analysis['broad_indicators'] > 0 and current_strategy != coarse_grained:
+                    new_strategy = coarse_grained
+                elif query_analysis['analytical_indicators'] > 0 and current_strategy != medium_grained:
+                    new_strategy = medium_grained
                 else:
                     # Fallback: probar estrategia adyacente
-                    if current_strategy == "512":
-                        new_strategy = "256"
-                    elif current_strategy == "256":
-                        new_strategy = "1024"
-                    elif current_strategy == "1024":
-                        new_strategy = "256"
+                    current_index = strategies_sorted.index(current_strategy)
+                    if current_index == len(strategies_sorted) // 2:  # Si estamos en el medio
+                        new_strategy = fine_grained
+                    elif current_index == 0:  # Si estamos en la más fina
+                        new_strategy = coarse_grained
+                    elif current_index == len(strategies_sorted) - 1:  # Si estamos en la más gruesa
+                        new_strategy = fine_grained
         else:
             # Usar la estrategia alternativa recomendada
             new_strategy = alternative_strategy

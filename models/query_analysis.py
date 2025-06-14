@@ -10,9 +10,9 @@ import re
 from typing import List, Dict, Any, Optional
 
 from langagent.models.constants import (
-    AMBITOS_CUBOS, CUBO_TO_AMBITO, AMBITO_KEYWORDS, 
-    EVALUATION_THRESHOLDS, DEFAULT_CHUNK_STRATEGY, CHUNK_STRATEGIES
+    AMBITOS_CUBOS, CUBO_TO_AMBITO, AMBITO_KEYWORDS
 )
+from langagent.config.config import CHUNK_STRATEGY_CONFIG
 
 # Usar el sistema de logging centralizado
 from langagent.config.logging_config import get_logger
@@ -233,7 +233,7 @@ def analyze_segeda_query_complexity(query: str, granularity_history: List[Dict[s
     total_indicators = specific_count + analytical_count + broad_count
     
     # Obtener estrategias disponibles ordenadas de menor a mayor granularidad
-    strategies_sorted = sorted(CHUNK_STRATEGIES, key=int)
+    strategies_sorted = sorted(CHUNK_STRATEGY_CONFIG["available_strategies"], key=int)
     fine_grained = strategies_sorted[0]  # Estrategia más fina
     medium_grained = strategies_sorted[len(strategies_sorted)//2] if len(strategies_sorted) > 2 else strategies_sorted[1] if len(strategies_sorted) > 1 else strategies_sorted[0]  # Estrategia media
     coarse_grained = strategies_sorted[-1]  # Estrategia más gruesa
@@ -272,7 +272,7 @@ def analyze_segeda_query_complexity(query: str, granularity_history: List[Dict[s
     # Evitar estrategias que han fallado múltiples veces
     if granularity_history and strategy_failures.get(recommended_granularity, 0) >= 2:
         # Buscar estrategia alternativa
-        alternative_strategies = [s for s in CHUNK_STRATEGIES if s != recommended_granularity]
+        alternative_strategies = [s for s in CHUNK_STRATEGY_CONFIG["available_strategies"] if s != recommended_granularity]
         
         # Elegir la estrategia con menos fallos
         best_alternative = min(alternative_strategies, 
@@ -320,7 +320,7 @@ def suggest_alternative_strategy_mog(current_strategy: str, metrics: Dict[str, f
     answer_relevance = metrics.get("answer_relevance", 0.0)
     
     # Estrategia recomendada por análisis de consulta
-    optimal_strategy = query_analysis.get("recommended_granularity", DEFAULT_CHUNK_STRATEGY)
+    optimal_strategy = query_analysis.get("recommended_granularity", CHUNK_STRATEGY_CONFIG["default_strategy"])
     confidence = query_analysis.get("confidence", 0.5)
     
     # Analizar histórico para evitar bucles
@@ -333,7 +333,7 @@ def suggest_alternative_strategy_mog(current_strategy: str, metrics: Dict[str, f
         return optimal_strategy
     
     # Lógica específica basada en problemas de métricas con conocimiento del dominio SEGEDA
-    strategies_sorted = sorted(CHUNK_STRATEGIES, key=int)
+    strategies_sorted = sorted(CHUNK_STRATEGY_CONFIG["available_strategies"], key=int)
     fine_grained = strategies_sorted[0]
     medium_grained = strategies_sorted[len(strategies_sorted)//2] if len(strategies_sorted) > 2 else strategies_sorted[1] if len(strategies_sorted) > 1 else strategies_sorted[0]
     coarse_grained = strategies_sorted[-1]
@@ -388,7 +388,7 @@ def suggest_alternative_strategy_mog(current_strategy: str, metrics: Dict[str, f
     
     # Evitar estrategias recién probadas para prevenir bucles
     if len(tried_strategies) >= 2:
-        available_strategies = [s for s in CHUNK_STRATEGIES if s not in tried_strategies]
+        available_strategies = [s for s in CHUNK_STRATEGY_CONFIG["available_strategies"] if s not in tried_strategies]
         
         if available_strategies:
             # Elegir la mejor estrategia disponible basada en el análisis
@@ -402,7 +402,7 @@ def suggest_alternative_strategy_mog(current_strategy: str, metrics: Dict[str, f
         return optimal_strategy
     
     # Como último recurso, probar la estrategia no usada
-    all_strategies = [s for s in CHUNK_STRATEGIES if s != current_strategy]
+    all_strategies = [s for s in CHUNK_STRATEGY_CONFIG["available_strategies"] if s != current_strategy]
     
     # Preferir estrategia según el tipo de consulta detectado
     if query_analysis.get("specific_indicators", 0) > 0 and fine_grained in all_strategies:
@@ -439,10 +439,10 @@ def update_granularity_history_entry(granularity_history: List[Dict[str, Any]],
     
     # Verificar si todas las métricas están por encima de los umbrales
     metrics_successful = (
-        faithfulness >= EVALUATION_THRESHOLDS["faithfulness"] and
-        context_precision >= EVALUATION_THRESHOLDS["context_precision"] and
-        context_recall >= EVALUATION_THRESHOLDS["context_recall"] and
-        answer_relevance >= EVALUATION_THRESHOLDS["answer_relevance"]
+        faithfulness >= CHUNK_STRATEGY_CONFIG["evaluation_thresholds"]["faithfulness"] and
+        context_precision >= CHUNK_STRATEGY_CONFIG["evaluation_thresholds"]["context_precision"] and
+        context_recall >= CHUNK_STRATEGY_CONFIG["evaluation_thresholds"]["context_recall"] and
+        answer_relevance >= CHUNK_STRATEGY_CONFIG["evaluation_thresholds"]["answer_relevance"]
     )
     
     # Solo añadir al histórico si tenemos métricas válidas (retry_count > 0 o métricas exitosas)

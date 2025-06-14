@@ -14,9 +14,9 @@ from langchain_core.documents import Document
 # Importar configuraciones necesarias
 from langagent.models.constants import (
     AMBITOS_CUBOS, CUBO_TO_AMBITO, AMBITO_KEYWORDS, 
-    AMBITO_EN_ES, CUBO_EN_ES, CHUNK_STRATEGIES, DEFAULT_CHUNK_STRATEGY,
-    MAX_RETRIES, EVALUATION_THRESHOLDS, COLLECTION_CONFIG
+    AMBITO_EN_ES, CUBO_EN_ES
 )
+from langagent.config.config import CHUNK_STRATEGY_CONFIG
 
 # Usar el sistema de logging centralizado
 from langagent.config.logging_config import get_logger
@@ -279,11 +279,12 @@ def check_metrics_success(evaluation_metrics: Dict[str, Any]) -> bool:
     context_recall = evaluation_metrics.get("context_recall", 0.0)
     answer_relevance = evaluation_metrics.get("answer_relevance", 0.0)
     
+    thresholds = CHUNK_STRATEGY_CONFIG["evaluation_thresholds"]
     return (
-        faithfulness >= EVALUATION_THRESHOLDS["faithfulness"] and
-        context_precision >= EVALUATION_THRESHOLDS["context_precision"] and
-        context_recall >= EVALUATION_THRESHOLDS["context_recall"] and
-        answer_relevance >= EVALUATION_THRESHOLDS["answer_relevance"]
+        faithfulness >= thresholds["faithfulness"] and
+        context_precision >= thresholds["context_precision"] and
+        context_recall >= thresholds["context_recall"] and
+        answer_relevance >= thresholds["answer_relevance"]
     )
 
 
@@ -300,7 +301,8 @@ def should_terminate_workflow(retry_count: int, generation: str, evaluation_metr
         bool: True si el workflow debe terminar
     """
     # Terminar si se alcanzó el máximo de reintentos
-    if retry_count >= MAX_RETRIES:
+    max_retries = CHUNK_STRATEGY_CONFIG["max_retries"]
+    if retry_count >= max_retries:
         return True
     
     # Terminar si todas las métricas son exitosas
