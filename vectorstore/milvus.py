@@ -464,11 +464,6 @@ class MilvusVectorStore(VectorStoreBase):
                     model_kwargs={
                         "device": device,
                         "torch_dtype": torch.float16 if device == "cuda" else torch.float32,
-                    },
-                    tokenizer_kwargs={
-                        "max_length": max_length,
-                        "truncation": True,
-                        "padding": True
                     }
                 )
                 
