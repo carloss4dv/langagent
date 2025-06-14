@@ -32,7 +32,7 @@ VECTORSTORE_CONFIG = {
     "vector_db_type": "milvus", # Tipo de base de datos vectorial (chroma o milvus)
     
     # Configuración para Milvus/Zilliz Cloud
-    "milvus_uri": os.getenv("ZILLIZ_CLOUD_URI", "http://localhost:19536"),
+    "milvus_uri": os.getenv("ZILLIZ_CLOUD_URI", "http://localhost:19537"),
     "milvus_token": os.getenv("ZILLIZ_CLOUD_TOKEN", ""),
     "milvus_secure": os.getenv("ZILLIZ_CLOUD_SECURE", "True").lower() in ("true", "1", "t"),     # Usar conexión segura (para Zilliz Cloud)
     
@@ -42,7 +42,7 @@ VECTORSTORE_CONFIG = {
     
     # Configuración para enfoque de colección única
     "use_single_collection": True,  # Usar una sola colección para todos los documentos
-    "collection_name": "default_collection_167",  # Nombre de la colección unificada
+    "collection_name": "default_collection_307",  # Nombre de la colección unificada
     "always_update_collection": False,  # Si se deben actualizar documentos en colección existente
     "filter_by_metadata": True,  # Habilitar filtrado por metadatos en consultas
     
