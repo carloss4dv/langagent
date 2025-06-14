@@ -23,8 +23,9 @@ from langagent.models.constants import CUBO_TO_AMBITO, AMBITOS_CUBOS
 from langagent.models.llm import create_context_generator
 from tqdm import tqdm  # Añadir importación de tqdm para barra de progreso
 from langchain.retrievers.contextual_compression import ContextualCompressionRetriever
-from langchain_cohere import CohereRerank
-from langchain_community.llms import Cohere
+from langchain_community.cross_encoders import HuggingFaceCrossEncoder
+from langchain.retrievers.document_compressors import CrossEncoderReranker
+import torch
 # Usar el sistema de logging centralizado
 from langagent.config.logging_config import get_logger
 logger = get_logger(__name__)
@@ -443,10 +444,6 @@ class MilvusVectorStore(VectorStoreBase):
             
             # Si la compresión contextual está habilitada, aplicarla
             if use_compression:
-                from langchain.retrievers.contextual_compression import ContextualCompressionRetriever
-                from langchain_community.cross_encoders import HuggingFaceCrossEncoder
-                from langchain.retrievers.document_compressors import CrossEncoderReranker
-                import torch
                 
                 logger.info("Configurando compresión contextual con BGE reranker")
                 

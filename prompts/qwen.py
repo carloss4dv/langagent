@@ -324,6 +324,7 @@ PROMPTS = {
         4. Keep questions clear and concise while being maximally helpful
         5. Maintain Spanish language and preserve special characters
         6. Focus on resolving scope ambiguity rather than detailed technical questions
+        7. YOU MUST ONLY OUTPUT THE QUESTION, NO OTHER TEXT
         
         RESPONSE GUIDELINES:
         - Generate helpful clarification questions in Spanish using systematic reasoning
