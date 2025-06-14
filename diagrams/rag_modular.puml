@@ -1,17 +1,27 @@
 @startuml
-component "Nodo de Política" as NP
-component "Módulo de Recuperación" as MR
-component "Módulo de Generación" as MG
-component "Módulo de Fusión" as MF
+!define LIGHTYELLOW #FFFACD
 
-NP --> MR: Configuración dinámica
-NP --> MG: Selección de modelo
-MR --> MF: Resultados de recuperación
-MG --> MF: Resultados de generación
-MF --> NP: Retroalimentación para iteración
+skinparam component {
+    BackgroundColor LIGHTYELLOW
+    BorderColor Black
+    FontSize 12
+}
 
-note right of NP: Control del flujo y toma de decisiones
-note right of MR: Soporte para múltiples algoritmos (e.g., DPR, BM25)
-note right of MG: Integración de LLMs configurables
-note right of MF: Combinación y normalización de datos
+skinparam arrow {
+    FontSize 9
+}
+
+skinparam minlen 2
+
+component "Nodo Politica" as NP
+component "Modulo Recuperacion" as MR 
+component "Modulo Generacion" as MG
+component "Modulo Fusion" as MF
+
+NP .down.> MR : Config\ndinamica
+NP .down.> MG : Seleccion\nmodelo
+MR .down.> MF : Resultados\nrecuperacion  
+MG .down.> MF : Resultados\ngeneracion
+MF .up.> NP : Retroalimentacion
+
 @enduml

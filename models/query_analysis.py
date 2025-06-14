@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional
 
 from langagent.models.constants import (
     AMBITOS_CUBOS, CUBO_TO_AMBITO, AMBITO_KEYWORDS, 
-    EVALUATION_THRESHOLDS, DEFAULT_CHUNK_STRATEGY
+    EVALUATION_THRESHOLDS, DEFAULT_CHUNK_STRATEGY, CHUNK_STRATEGIES
 )
 
 # Usar el sistema de logging centralizado
@@ -232,26 +232,32 @@ def analyze_segeda_query_complexity(query: str, granularity_history: List[Dict[s
     # Determinar granularidad recomendada con lógica mejorada
     total_indicators = specific_count + analytical_count + broad_count
     
+    # Obtener estrategias disponibles ordenadas de menor a mayor granularidad
+    strategies_sorted = sorted(CHUNK_STRATEGIES, key=int)
+    fine_grained = strategies_sorted[0]  # Estrategia más fina
+    medium_grained = strategies_sorted[len(strategies_sorted)//2] if len(strategies_sorted) > 2 else strategies_sorted[1] if len(strategies_sorted) > 1 else strategies_sorted[0]  # Estrategia media
+    coarse_grained = strategies_sorted[-1]  # Estrategia más gruesa
+    
     if total_indicators == 0:
         # Sin indicadores claros, usar análisis del dominio
         if segeda_domain_score >= 3:
-            recommended_granularity = "512"  # Dominio específico → granularidad media
+            recommended_granularity = medium_grained  # Dominio específico → granularidad media
             confidence = 0.6
             reason = f"Sin patrones claros pero alto dominio SEGEDA (score: {segeda_domain_score}). Usando granularidad media."
         else:
-            recommended_granularity = "512"  # Por defecto
+            recommended_granularity = medium_grained  # Por defecto
             confidence = 0.5
             reason = "Sin patrones detectados. Granularidad media por defecto."
     elif specific_count > analytical_count and specific_count > broad_count:
-        recommended_granularity = "256"
+        recommended_granularity = fine_grained
         confidence = specific_count / (total_indicators + 1)
         reason = f"Consulta específica detectada ({specific_count} indicadores específicos)"
     elif broad_count > analytical_count and broad_count >= specific_count:
-        recommended_granularity = "1024"
+        recommended_granularity = coarse_grained
         confidence = broad_count / (total_indicators + 1)
         reason = f"Consulta amplia detectada ({broad_count} indicadores amplios)"
     else:
-        recommended_granularity = "512"
+        recommended_granularity = medium_grained
         confidence = max(analytical_count, 1) / (total_indicators + 1)
         reason = f"Consulta analítica detectada ({analytical_count} indicadores analíticos)" if analytical_count > 0 else "Granularidad media por patrones mixtos"
     
@@ -266,8 +272,7 @@ def analyze_segeda_query_complexity(query: str, granularity_history: List[Dict[s
     # Evitar estrategias que han fallado múltiples veces
     if granularity_history and strategy_failures.get(recommended_granularity, 0) >= 2:
         # Buscar estrategia alternativa
-        alternative_strategies = ['256', '512', '1024']
-        alternative_strategies.remove(recommended_granularity)
+        alternative_strategies = [s for s in CHUNK_STRATEGIES if s != recommended_granularity]
         
         # Elegir la estrategia con menos fallos
         best_alternative = min(alternative_strategies, 
@@ -315,7 +320,7 @@ def suggest_alternative_strategy_mog(current_strategy: str, metrics: Dict[str, f
     answer_relevance = metrics.get("answer_relevance", 0.0)
     
     # Estrategia recomendada por análisis de consulta
-    optimal_strategy = query_analysis.get("recommended_granularity", "512")
+    optimal_strategy = query_analysis.get("recommended_granularity", DEFAULT_CHUNK_STRATEGY)
     confidence = query_analysis.get("confidence", 0.5)
     
     # Analizar histórico para evitar bucles
@@ -328,61 +333,62 @@ def suggest_alternative_strategy_mog(current_strategy: str, metrics: Dict[str, f
         return optimal_strategy
     
     # Lógica específica basada en problemas de métricas con conocimiento del dominio SEGEDA
+    strategies_sorted = sorted(CHUNK_STRATEGIES, key=int)
+    fine_grained = strategies_sorted[0]
+    medium_grained = strategies_sorted[len(strategies_sorted)//2] if len(strategies_sorted) > 2 else strategies_sorted[1] if len(strategies_sorted) > 1 else strategies_sorted[0]
+    coarse_grained = strategies_sorted[-1]
     
     # Problema de recall bajo: necesitamos más contexto
     if context_recall < 0.6:
         # Para consultas sobre medidas específicas, el recall bajo puede indicar que necesitamos
         # más contexto sobre las definiciones y observaciones
-        if query_analysis.get("medida_mentions") and current_strategy == "256":
-            return "512"  # Las medidas necesitan contexto sobre observaciones
-        elif current_strategy == "512":
-            return "1024"  # Necesitamos más contexto general
-        elif current_strategy == "256":
-            return "512"  # Incrementar moderadamente
-        else:  # current_strategy == "1024"
-            return "1024"  # Ya en máximo, mantener
+        if query_analysis.get("medida_mentions") and current_strategy == fine_grained:
+            return medium_grained  # Las medidas necesitan contexto sobre observaciones
+        elif current_strategy == medium_grained:
+            return coarse_grained  # Necesitamos más contexto general
+        elif current_strategy == fine_grained:
+            return medium_grained  # Incrementar moderadamente
+        else:  # current_strategy == coarse_grained
+            return coarse_grained  # Ya en máximo, mantener
     
     # Problema de precisión/faithfulness bajo: necesitamos más precisión
     if context_precision < 0.6 or faithfulness < 0.6:
         # Para consultas con términos técnicos específicos, la precisión baja indica chunks demasiado amplios
-        if query_analysis.get("technical_terms") and current_strategy == "1024":
-            return "256"  # Términos técnicos necesitan contexto específico
-        elif current_strategy == "1024":
-            return "512"  # Decrementar moderadamente
-        elif current_strategy == "512":
-            return "256"  # Decrementar más
-        else:  # current_strategy == "256"
-            return "256"  # Ya en mínimo, mantener
+        if query_analysis.get("technical_terms") and current_strategy == coarse_grained:
+            return fine_grained  # Términos técnicos necesitan contexto específico
+        elif current_strategy == coarse_grained:
+            return medium_grained  # Decrementar moderadamente
+        elif current_strategy == medium_grained:
+            return fine_grained  # Decrementar más
+        else:  # current_strategy == fine_grained
+            return fine_grained  # Ya en mínimo, mantener
     
     # Problema de relevancia: estrategias específicas por tipo de consulta
     if answer_relevance < 0.6:
         # Para consultas específicas sobre cubos pero usando granularidad gruesa
-        if query_analysis.get("cubo_mentions") and query_analysis.get("specific_indicators", 0) > 0 and current_strategy != "256":
-            return "256"
+        if query_analysis.get("cubo_mentions") and query_analysis.get("specific_indicators", 0) > 0 and current_strategy != fine_grained:
+            return fine_grained
         
         # Para consultas amplias pero usando granularidad fina
-        if query_analysis.get("broad_indicators", 0) > 0 and current_strategy != "1024":
-            return "1024"
+        if query_analysis.get("broad_indicators", 0) > 0 and current_strategy != coarse_grained:
+            return coarse_grained
         
         # Para consultas sobre procesos/procedimientos, usar granularidad media
-        if query_analysis.get("analytical_indicators", 0) > 0 and current_strategy != "512":
-            return "512"
+        if query_analysis.get("analytical_indicators", 0) > 0 and current_strategy != medium_grained:
+            return medium_grained
         
         # Si tenemos alta puntuación de dominio SEGEDA, ajustar según el tipo de contenido
         segeda_score = query_analysis.get("segeda_domain_score", 0)
         if segeda_score >= 3:
             # Alto conocimiento del dominio → usar estrategia según indicadores dominantes
             if query_analysis.get("specific_indicators", 0) >= query_analysis.get("broad_indicators", 0):
-                return "256" if current_strategy != "256" else "512"
+                return fine_grained if current_strategy != fine_grained else medium_grained
             else:
-                return "1024" if current_strategy != "1024" else "512"
+                return coarse_grained if current_strategy != coarse_grained else medium_grained
     
     # Evitar estrategias recién probadas para prevenir bucles
     if len(tried_strategies) >= 2:
-        available_strategies = ['256', '512', '1024']
-        for strategy in tried_strategies:
-            if strategy in available_strategies:
-                available_strategies.remove(strategy)
+        available_strategies = [s for s in CHUNK_STRATEGIES if s not in tried_strategies]
         
         if available_strategies:
             # Elegir la mejor estrategia disponible basada en el análisis
@@ -396,17 +402,15 @@ def suggest_alternative_strategy_mog(current_strategy: str, metrics: Dict[str, f
         return optimal_strategy
     
     # Como último recurso, probar la estrategia no usada
-    all_strategies = ['256', '512', '1024']
-    if current_strategy in all_strategies:
-        all_strategies.remove(current_strategy)
+    all_strategies = [s for s in CHUNK_STRATEGIES if s != current_strategy]
     
     # Preferir estrategia según el tipo de consulta detectado
-    if query_analysis.get("specific_indicators", 0) > 0 and "256" in all_strategies:
-        return "256"
-    elif query_analysis.get("broad_indicators", 0) > 0 and "1024" in all_strategies:
-        return "1024"
-    elif "512" in all_strategies:
-        return "512"
+    if query_analysis.get("specific_indicators", 0) > 0 and fine_grained in all_strategies:
+        return fine_grained
+    elif query_analysis.get("broad_indicators", 0) > 0 and coarse_grained in all_strategies:
+        return coarse_grained
+    elif medium_grained in all_strategies:
+        return medium_grained
     
     return all_strategies[0] if all_strategies else current_strategy
 

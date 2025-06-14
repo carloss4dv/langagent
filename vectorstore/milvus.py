@@ -22,7 +22,9 @@ from langagent.config.config import VECTORSTORE_CONFIG
 from langagent.models.constants import CUBO_TO_AMBITO, AMBITOS_CUBOS
 from langagent.models.llm import create_context_generator
 from tqdm import tqdm  # Añadir importación de tqdm para barra de progreso
-
+from langchain.retrievers.contextual_compression import ContextualCompressionRetriever
+from langchain_cohere import CohereRerank
+from langchain_community.llms import Cohere
 # Usar el sistema de logging centralizado
 from langagent.config.logging_config import get_logger
 logger = get_logger(__name__)
@@ -408,6 +410,7 @@ class MilvusVectorStore(VectorStoreBase):
                       similarity_threshold: float = 0.7, **kwargs) -> BaseRetriever:
         """
         Crea un retriever para una vectorstore Milvus usando búsqueda híbrida.
+        Opcionalmente aplica compresión contextual con BGE reranker.
         
         Args:
             vectorstore: Instancia de Milvus vectorstore
@@ -425,22 +428,97 @@ class MilvusVectorStore(VectorStoreBase):
         # Obtener parámetros de búsqueda desde la configuración o parámetros
         k = k or VECTORSTORE_CONFIG.get("k_retrieval", 4)
         
+        # Verificar si la compresión contextual está habilitada
+        use_compression = VECTORSTORE_CONFIG.get("use_contextual_compression", False)
+        
         try:
-            # Crear el retriever con búsqueda híbrida
-            retriever = vectorstore.as_retriever(
+            # Crear el retriever base con búsqueda híbrida
+            base_retriever = vectorstore.as_retriever(
                 search_type="similarity",
                 search_kwargs={
-                    "k": k,
+                    "k": k * VECTORSTORE_CONFIG.get("compression_top_k_multiplier", 2) if use_compression else k,
                     "score_threshold": similarity_threshold
                 }
             )
             
-            logger.info("Retriever híbrido creado correctamente")
-            return retriever
+            # Si la compresión contextual está habilitada, aplicarla
+            if use_compression:
+                from langchain.retrievers.contextual_compression import ContextualCompressionRetriever
+                from langchain_community.cross_encoders import HuggingFaceCrossEncoder
+                from langchain.retrievers.document_compressors import CrossEncoderReranker
+                import torch
+                
+                logger.info("Configurando compresión contextual con BGE reranker")
+                
+                # Configuración del modelo
+                model_name = VECTORSTORE_CONFIG.get("bge_reranker_model", "BAAI/bge-reranker-v2-m3")
+                device = VECTORSTORE_CONFIG.get("bge_device", "cpu")
+                max_length = VECTORSTORE_CONFIG.get("bge_max_length", 512)
+                
+                # Detectar automáticamente si CUDA está disponible
+                if device == "auto":
+                    device = "cuda" if torch.cuda.is_available() else "cpu"
+                
+                logger.info(f"Cargando modelo BGE: {model_name} en dispositivo: {device}")
+                
+                # Crear el cross encoder con configuración específica
+                cross_encoder = HuggingFaceCrossEncoder(
+                    model_name=model_name,
+                    model_kwargs={
+                        "device": device,
+                        "torch_dtype": torch.float16 if device == "cuda" else torch.float32,
+                    },
+                    tokenizer_kwargs={
+                        "max_length": max_length,
+                        "truncation": True,
+                        "padding": True
+                    }
+                )
+                
+                # Crear el compresor reranker
+                compressor = CrossEncoderReranker(
+                    model=cross_encoder,
+                    top_k=k
+                )
+                
+                # Crear el retriever con compresión
+                compression_retriever = ContextualCompressionRetriever(
+                    base_compressor=compressor, 
+                    base_retriever=base_retriever
+                )
+                
+                logger.info(f"Retriever con compresión contextual BGE creado correctamente")
+                logger.info(f"  Modelo: {model_name}")
+                logger.info(f"  Dispositivo: {device}")
+                logger.info(f"  Top-k final: {k}")
+                logger.info(f"  Documentos iniciales: {k * VECTORSTORE_CONFIG.get('compression_top_k_multiplier', 3)}")
+                
+                return compression_retriever
+            else:
+                logger.info("Retriever híbrido creado correctamente (sin compresión)")
+                return base_retriever
             
         except Exception as e:
             logger.error(f"Error al crear retriever híbrido: {e}")
-            # Intentar con parámetros mínimos como fallback
+            logger.error(f"Detalles del error: {str(e)}")
+            
+            # Si falla la compresión, intentar sin ella
+            if use_compression:
+                logger.warning("Error con compresión contextual, intentando sin compresión como fallback")
+                try:
+                    fallback_retriever = vectorstore.as_retriever(
+                        search_type="similarity",
+                        search_kwargs={
+                            "k": k,
+                            "score_threshold": similarity_threshold
+                        }
+                    )
+                    logger.info("Retriever fallback (sin compresión) creado correctamente")
+                    return fallback_retriever
+                except Exception as e_fallback:
+                    logger.error(f"Error incluso con retriever fallback: {e_fallback}")
+            
+            # Último intento con parámetros mínimos
             try:
                 logger.info("Intentando crear retriever con parámetros mínimos")
                 return vectorstore.as_retriever()

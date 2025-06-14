@@ -64,6 +64,13 @@ VECTORSTORE_CONFIG = {
         "755": "default_collection_755",
     },
     "use_adaptive_retrieval": True,  # Activar recuperación adaptativa
+    
+    # Configuración de compresión contextual con BGE
+    "use_contextual_compression": True,
+    "bge_reranker_model": "BAAI/bge-reranker-v2-m3",
+    "compression_top_k_multiplier": 3,  # Recuperar 36 docs si k=12, luego rerank a 12
+    "bge_device": "auto",  # Detectar automáticamente CPU/GPU
+    "bge_max_length": 755,
 }
 
 # Configuración de SQL

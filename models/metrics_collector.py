@@ -17,6 +17,7 @@ from pathlib import Path
 from threading import Lock
 from langagent.config.logging_config import get_logger
 from langagent.config.config import LLM_CONFIG  # Añadir importación de configuración
+from langagent.models.constants import CHUNK_STRATEGIES
 
 logger = get_logger(__name__)
 
@@ -86,19 +87,56 @@ class MetricsCollector:
     
     def _ensure_directories(self):
         """Crea los directorios necesarios para las métricas."""
-        # Estrategias fijas
-        fixed_strategies = ['256', '512', '1024']
+        
+        # Estrategias fijas desde constants.py
+        fixed_strategies = CHUNK_STRATEGIES
         
         # Estrategias adaptativas (con prefijo E)
-        adaptive_strategies = ['E256', 'E512', 'E1024']
+        adaptive_strategies = [f"E{strategy}" for strategy in CHUNK_STRATEGIES]
         
         all_strategies = fixed_strategies + adaptive_strategies
+        
+        logger.info(f"Creando directorios para estrategias: {all_strategies}")
         
         for strategy in all_strategies:
             strategy_dir = self.base_metrics_dir / strategy
             strategy_dir.mkdir(parents=True, exist_ok=True)
             
             # Crear archivos CSV con headers si no existen
+            node_metrics_file = strategy_dir / 'node_metrics.csv'
+            workflow_metrics_file = strategy_dir / 'workflow_metrics.csv'
+            llm_metrics_file = strategy_dir / 'llm_metrics.csv'
+            
+            if not node_metrics_file.exists():
+                with open(node_metrics_file, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(self.node_metrics_headers)
+            
+            if not workflow_metrics_file.exists():
+                with open(workflow_metrics_file, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(self.workflow_metrics_headers)
+                    
+            if not llm_metrics_file.exists():
+                with open(llm_metrics_file, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(self.llm_metrics_headers)
+        
+        logger.info(f"Directorios creados exitosamente para {len(all_strategies)} estrategias")
+    
+    def _ensure_strategy_directory(self, chunk_strategy: str):
+        """
+        Asegura que existe el directorio para una estrategia específica.
+        
+        Args:
+            chunk_strategy: Estrategia de chunking
+        """
+        strategy_dir = self.base_metrics_dir / chunk_strategy
+        if not strategy_dir.exists():
+            logger.info(f"Creando directorio para estrategia {chunk_strategy}")
+            strategy_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Crear archivos CSV con headers
             node_metrics_file = strategy_dir / 'node_metrics.csv'
             workflow_metrics_file = strategy_dir / 'workflow_metrics.csv'
             llm_metrics_file = strategy_dir / 'llm_metrics.csv'
@@ -444,6 +482,9 @@ class MetricsCollector:
             chunk_strategy: Estrategia de chunking actual
         """
         try:
+            # Asegurar que existe el directorio
+            self._ensure_strategy_directory(chunk_strategy)
+            
             strategy_dir = self.base_metrics_dir / chunk_strategy
             node_metrics_file = strategy_dir / 'node_metrics.csv'
             
@@ -463,6 +504,9 @@ class MetricsCollector:
             chunk_strategy: Estrategia de chunking actual
         """
         try:
+            # Asegurar que existe el directorio
+            self._ensure_strategy_directory(chunk_strategy)
+            
             strategy_dir = self.base_metrics_dir / chunk_strategy
             llm_metrics_file = strategy_dir / 'llm_metrics.csv'
             
@@ -481,6 +525,9 @@ class MetricsCollector:
             chunk_strategy: Estrategia de chunking final
         """
         try:
+            # Asegurar que existe el directorio
+            self._ensure_strategy_directory(chunk_strategy)
+            
             strategy_dir = self.base_metrics_dir / chunk_strategy
             workflow_metrics_file = strategy_dir / 'workflow_metrics.csv'
             

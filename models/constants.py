@@ -208,8 +208,8 @@ CUBO_EN_ES = {
 # Añadir al final del archivo las nuevas constantes para recuperación adaptativa
 
 # Configuración de Recuperación Adaptativa
-CHUNK_STRATEGIES = ["167", "256", "307", "512", "755", "1024"]
-DEFAULT_CHUNK_STRATEGY = "512"
+CHUNK_STRATEGIES = ["167", "256", "307"]
+DEFAULT_CHUNK_STRATEGY = "307"
 MAX_RETRIES = 2  # Total 3 intentos (inicial + 2 reintentos)
 
 # Umbrales de evaluación granular

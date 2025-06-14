@@ -4,62 +4,39 @@ skinparam style strictuml
 title Adaptive RAG Workflow
 
 participant "Usuario" as User
-participant "Sistema Adaptive RAG" as AdaptiveRAGSystem
-participant "Clasificador de Consulta (LM)" as Classifier
-participant "Recuperador (Retriever)" as Retriever
-participant "Base de Conocimiento (Vector DB)" as VectorDB
-participant "LLM (Generador)" as LLM
+participant "Adaptive RAG" as System
+participant "Clasificador" as Class
+participant "Retriever" as Ret
+participant "Vector DB" as DB
+participant "LLM" as Gen
 
-User -> AdaptiveRAGSystem: Envía Consulta (Query)
-activate AdaptiveRAGSystem
+User -> System: Consulta
+System -> Class: Predecir Complejidad
+Class --> System: Nivel (A/B/C)
 
-AdaptiveRAGSystem -> Classifier: Predice Complejidad (Query)
-activate Classifier
-Classifier --> AdaptiveRAGSystem: Nivel de Complejidad ('A'/'B'/'C')
-deactivate Classifier
-
-alt Nivel 'A' (Directa/Simple)
-    AdaptiveRAGSystem -> LLM: Genera Respuesta (Query)
-    activate LLM
-    LLM --> AdaptiveRAGSystem: Respuesta Final
-    deactivate LLM
-else Nivel 'B' (Moderada)
-    AdaptiveRAGSystem -> Retriever: Recupera Documentos (Query)
-    activate Retriever
-    Retriever -> VectorDB: Búsqueda de Similitud
-    activate VectorDB
-    VectorDB --> Retriever: Documentos Recuperados
-    deactivate VectorDB
-    Retriever --> AdaptiveRAGSystem: Documentos Relevantes
-    deactivate Retriever
-
-    AdaptiveRAGSystem -> LLM: Genera Respuesta (Query, Documentos Relevantes)
-    activate LLM
-    LLM --> AdaptiveRAGSystem: Respuesta Final
-    deactivate LLM
-else Nivel 'C' (Compleja - Iterativa)
-    loop Múltiples Pasos de Recuperación/Generación
-        AdaptiveRAGSystem -> Retriever: Recupera Documentos (Query, Contexto Acumulado)
-        activate Retriever
-        Retriever -> VectorDB: Búsqueda de Similitud
-        activate VectorDB
-        VectorDB --> Retriever: Nuevos Documentos
-        deactivate VectorDB
-        Retriever --> AdaptiveRAGSystem: Nuevos Documentos
-        deactivate Retriever
-
-        AdaptiveRAGSystem -> LLM: Genera Respuesta Intermedia / Actualiza Contexto (Query, Contexto, Nuevos Documentos)
-        activate LLM
-        LLM --> AdaptiveRAGSystem: Contexto Acumulado / Respuesta Parcial
-        deactivate LLM
+alt Nivel A (Simple)
+    System -> Gen: Generar Respuesta
+    Gen --> System: Respuesta Final
+else Nivel B (Moderada)
+    System -> Ret: Recuperar Docs
+    Ret -> DB: Busqueda
+    DB --> Ret: Documentos
+    Ret --> System: Docs Relevantes
+    System -> Gen: Generar (Query + Docs)
+    Gen --> System: Respuesta Final
+else Nivel C (Compleja)
+    loop Pasos Iterativos
+        System -> Ret: Recuperar (Query + Contexto)
+        Ret -> DB: Busqueda
+        DB --> Ret: Nuevos Docs
+        Ret --> System: Nuevos Docs
+        System -> Gen: Actualizar Contexto
+        Gen --> System: Contexto Acumulado
     end
-    AdaptiveRAGSystem -> LLM: Genera Respuesta Final (Contexto Acumulado Completo)
-    activate LLM
-    LLM --> AdaptiveRAGSystem: Respuesta Final
-    deactivate LLM
+    System -> Gen: Generar Final
+    Gen --> System: Respuesta Final
 end
 
-AdaptiveRAGSystem --> User: Envía Respuesta Final
-deactivate AdaptiveRAGSystem
+System --> User: Respuesta Final
 
 @enduml

@@ -40,7 +40,7 @@ def extract_chunk_strategy_from_name(name: str) -> str:
         raise ValueError("El nombre no puede estar vacío")
     
     # Buscar patrón _XXX donde XXX es 256, 512, o 1024
-    pattern = r'_(256|512|1024)'
+    pattern = r'_(167|256|307|512|755|1024)'
     match = re.search(pattern, name)
     
     if match:
