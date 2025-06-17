@@ -483,8 +483,8 @@ async def on_message(message: cl.Message):
         temp_consulta_mode = True
         user_message = user_message[10:]  # Remover "/consulta " del inicio
     
-    # Procesar la consulta con el agente
-    result = agent.run(user_message)
+    # Procesar la consulta con el agente, pasando explícitamente el estado de consulta
+    result = agent.run(user_message, is_consulta=temp_consulta_mode)
     
     # Si necesitamos clarificación sobre el ámbito
     if result.get("type") == "clarification_needed":

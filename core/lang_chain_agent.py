@@ -251,12 +251,14 @@ class LangChainAgent:
             Dict: Resultado de la ejecución del agente.
         """
         print_title(f"Consulta: {query}")
+        print(f"is consulta: {is_consulta}")  # Debug para verificar el estado
         
-        # Primero, identificar el ámbito
-        ambito_result = self.ambito_app.invoke({
+        # Primero, identificar el ámbito pasando explícitamente is_consulta
+        ambito_initial_state = {
             "question": query,
             "is_consulta": is_consulta
-        })
+        }
+        ambito_result = self.ambito_app.invoke(ambito_initial_state)
         
         # Si necesitamos clarificación, devolver la pregunta
         if ambito_result.get("needs_clarification"):
@@ -272,7 +274,7 @@ class LangChainAgent:
                 "question": query,
                 "ambito": ambito_result["ambito"],
                 "cubos": ambito_result["cubos"],
-                "is_consulta": ambito_result.get("is_consulta", is_consulta),
+                "is_consulta": is_consulta,  # Usar el parámetro directamente
                 "retry_count": 0,
                 "evaluation_metrics": {},
                 "granularity_history": self.granularity_history.copy()
@@ -288,17 +290,17 @@ class LangChainAgent:
             # Añadir información del ámbito al resultado
             result["ambito"] = ambito_result["ambito"]
             result["cubos"] = ambito_result["cubos"]
-            result["is_consulta"] = ambito_result.get("is_consulta", is_consulta)
+            result["is_consulta"] = is_consulta  # Usar el parámetro directamente
             
             return result
         
         # Si no se pudo identificar el ámbito, ejecutar el workflow principal con la consulta original
         default_state = {
             "question": query,
-            "is_consulta": is_consulta,
+            "is_consulta": is_consulta,  # Usar el parámetro directamente
             "retry_count": 0,
             "evaluation_metrics": {},
-            "granularity_history": self.granularity_history.copy()  # Pasar historial persistente
+            "granularity_history": self.granularity_history.copy()
         }
         
         # Ejecutar workflow y actualizar historial persistente

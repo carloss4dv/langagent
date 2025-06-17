@@ -54,11 +54,15 @@ def create_ambito_workflow(retriever: any, llm: any):
         question = state["question"]
         question_lower = question.lower()
         
-        # Inicializar campos
+        # Inicializar campos - mantener is_consulta del estado inicial
         state["is_visualization"] = False
         state["needs_clarification"] = False
         state["clarification_question"] = None
-        state["is_consulta"] = state.get("is_consulta", False)
+        # NO cambiar is_consulta aquí, mantener el valor que viene del estado inicial
+        if "is_consulta" not in state:
+            state["is_consulta"] = False
+        
+        logger.info(f"Ambito agent - is_consulta: {state['is_consulta']}")  # Debug
         
         # Palabras clave para identificar visualizaciones
         visualization_keywords = [
