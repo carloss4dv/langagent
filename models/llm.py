@@ -191,7 +191,7 @@ def create_retrieval_grader(llm):
     prompt_template = _get_prompt_template(llm, "retrieval_grader")
     prompt = PromptTemplate(
         template=prompt_template,
-        input_variables=["content", "metadata", "source", "question", "ambito"],
+        input_variables=["content", "ambit_document", "source", "question", "ambito"],
     )
     
     retrieval_grader = prompt | llm | JsonOutputParser()

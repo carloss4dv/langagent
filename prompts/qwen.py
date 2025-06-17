@@ -228,6 +228,7 @@ PROMPTS = {
         ✓ Required cube references present or clearly inferable
         ✓ Measure-dimension compatibility validated
         ✓ Sufficient institutional context for meaningful interpretation
+        ✓ Identified scope matches document ambito or is logically conneted
         
         REJECT ("no") IF ANY CONDITION FAILS:
         ✗ Scope mismatch without logical institutional connection
@@ -235,6 +236,7 @@ PROMPTS = {
         ✗ Missing critical cube references for multi-dimensional questions
         ✗ Measure-dimension incompatibility or mathematical inconsistency
         ✗ Insufficient context for institutional decision-making
+        ✗ Identified scope does not match document ambito or is not logically conneted
         
         CRITICAL OUTPUT REQUIREMENTS:
         - You MUST respond with ONLY the JSON format shown below
@@ -249,7 +251,7 @@ PROMPTS = {
         }}<|im_end|>
         <|im_start|>user
         Document Content: {content}
-        Document Metadata: {metadata}
+        Document ambito: {ambito_document}
         Document Source: {source}
         Question: {question}
         Identified Scope: {ambito}
