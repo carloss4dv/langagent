@@ -56,12 +56,12 @@ VECTORSTORE_CONFIG = {
     "context_max_workers": 2,        # Hilos concurrentes (reducido para evitar problemas)
     "skip_existing_context": True,   # Saltar chunks con contexto existente
     "persist_directory": "./vectordb",  # Directorio para persistir la vectorstore Chroma
-    
-    # Configuración de Recuperación Adaptativa - Múltiples Colecciones
+      # Configuración de Recuperación Adaptativa - Múltiples Colecciones
     "adaptive_collections": {
-        "369": "default_collection_369",
-        "646": "default_collection_646", 
-        "1094": "default_collection_1094",
+        "167": "default_collection_167",   # Chunk size pequeño (actual)
+        "369": "default_collection_369",   # Chunk size mediano
+        "646": "default_collection_646",   # Chunk size grande (actual)
+        "1094": "default_collection_1094", # Chunk size muy grande
     },
     "use_adaptive_retrieval": True,  # Activar recuperación adaptativa
     

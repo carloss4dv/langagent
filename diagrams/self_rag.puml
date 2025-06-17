@@ -8,13 +8,13 @@ participant "Sistema SELF-RAG" as SELFRAGSystem
 participant "Retriever Externo" as ExternalRetriever
 participant "Base de Conocimiento" as KnowledgeBase
 
-User -> SELFRAGSystem: Envía Consulta (Query)
+User -> SELFRAGSystem: Envia Consulta (Query)
 activate SELFRAGSystem
 
 loop Mientras no se genere el token de fin
     SELFRAGSystem -> SELFRAGSystem: Decide si Recuperar
     alt Decidir Recuperar
-        SELFRAGSystem -> ExternalRetriever: Solicita Recuperación (Query + Generación Actual)
+        SELFRAGSystem -> ExternalRetriever: Solicita Recuperacion (Query + Generacion Actual)
         activate ExternalRetriever
         ExternalRetriever -> KnowledgeBase: Recupera Pasajes
         activate KnowledgeBase
@@ -22,18 +22,18 @@ loop Mientras no se genere el token de fin
         deactivate KnowledgeBase
         ExternalRetriever --> SELFRAGSystem: Devuelve Pasajes
         deactivate ExternalRetriever
-        SELFRAGSystem -> SELFRAGSystem: Genera Tokens de Crítica para Pasajes
+        SELFRAGSystem -> SELFRAGSystem: Genera Tokens de Critica para Pasajes
         alt Pasajes Relevantes
-            SELFRAGSystem -> SELFRAGSystem: Genera Continuación con Pasajes
+            SELFRAGSystem -> SELFRAGSystem: Genera Continuacion con Pasajes
         else
-            SELFRAGSystem -> SELFRAGSystem: Genera Continuación sin Pasajes
+            SELFRAGSystem -> SELFRAGSystem: Genera Continuacion sin Pasajes
         end
     else
-        SELFRAGSystem -> SELFRAGSystem: Genera Siguiente Segmento sin Recuperación
+        SELFRAGSystem -> SELFRAGSystem: Genera Siguiente Segmento sin Recuperacion
     end
 end
 
-SELFRAGSystem --> User: Envía Respuesta Final
+SELFRAGSystem --> User: Envia Respuesta Final
 deactivate SELFRAGSystem
 
 @enduml

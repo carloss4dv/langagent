@@ -20,17 +20,17 @@ skinparam arrow {
 
 title RAG TRIAD
 
-' Definir todos los rectángulos primero
+' Definir todos los rectangulos primero
 rectangle "CONSULTA\n(Query)" as Query #lightblue
 rectangle "RESPUESTA\n(Response)" as Response #lightgreen
 rectangle "CONTEXTO\n(Context)" as Context #lightyellow
 
-' Layout para separar la base del triángulo
+' Layout para separar la base del triangulo
 Response -[hidden]right- Context
 
-' Conexiones formando triángulo perfecto
+' Conexiones formando triangulo perfecto
 Query --> Response : <b>Relevancia de Respuesta</b>\n<i>(Answer Relevance)</i>
 Query --> Context : <b>Relevancia de Contexto</b>\n<i>(Context Relevance)</i>
-Response --> Context : <b>Fundamentación</b>\n<i>(Groundedness)</i>
+Response --> Context : <b>Fundamentacion</b>\n<i>(Groundedness)</i>
 
 @enduml

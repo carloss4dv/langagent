@@ -1,6 +1,6 @@
 @startuml RecuperacionRAG
 !theme plain
-title FASE DE RECUPERACIÓN
+title FASE DE RECUPERACION
 
 start
 
@@ -41,8 +41,8 @@ else (SI)
   :CARGAR EXISTENTE;
 endif
 
-partition "ÁMBITO AGENT" {
-  :ANÁLISIS INICIAL
+partition "AMBITO AGENT" {
+  :ANALISIS INICIAL
   @ambito_agent.py;
   note right
     • identify_ambito() 
@@ -51,12 +51,12 @@ partition "ÁMBITO AGENT" {
   end note
   
   if (needs clarification?) then (YES)
-    :CLARIFICACIÓN;
+    :CLARIFICACION;
     :USER RESPONDS;
     :RE-PROCESS;
   endif
   
-  :OUTPUT ÁMBITO;
+  :OUTPUT AMBITO;
   note right
     • ambito: "sostenibilidad"
     • cubos: ["energia", "residuos"] 
@@ -65,7 +65,7 @@ partition "ÁMBITO AGENT" {
   end note
 }
 
-partition "RECUPERACIÓN HÍBRIDA" {
+partition "RECUPERACION HIBRIDA" {
   if (came_from_clarification?) then (YES)
     :QUERY REWRITING
     mistral-small-3.1:24b;

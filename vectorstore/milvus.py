@@ -348,12 +348,17 @@ class MilvusVectorStore(VectorStoreBase):
                 logger.info("Configurando búsqueda híbrida con BM25")
                 vs_kwargs["builtin_function"] = BM25BuiltInFunction()
                 vs_kwargs["vector_field"] = ["dense", "sparse"]  # 'dense' para embeddings, 'sparse' para BM25
-            
-            # Crear la vectorstore
+              # Crear la vectorstore
             vectorstore = Milvus.from_documents(
                 documents=documents,
                 **vs_kwargs
             )
+            
+            # Verificar que auto_id esté configurado correctamente
+            if not self._ensure_auto_id_enabled(vectorstore):
+                logger.error("La vectorstore no tiene auto_id configurado correctamente")
+                logger.error("Esto puede causar problemas al añadir documentos")
+                # Pero no fallar, ya que podría funcionar de todas formas
             
             logger.info(f"Vectorstore creada correctamente con {len(documents)} documentos")
             return vectorstore
@@ -699,8 +704,7 @@ class MilvusVectorStore(VectorStoreBase):
         # Reemplazar los documentos originales con los actualizados
         documents = updated_documents
             
-        try:
-            # Para colecciones grandes, dividir en lotes
+        try:            # Para colecciones grandes, dividir en lotes
             batch_size = 50  # Reducir aún más para evitar problemas
             total_docs = len(documents)
             
@@ -708,18 +712,14 @@ class MilvusVectorStore(VectorStoreBase):
                 # Si son pocos documentos, añadirlos directamente
                 logger.info(f"Añadiendo {total_docs} documentos a la colección Milvus")
                 
-                # Verificar una vez más que auto_id está configurado correctamente
-                try:
-                    if hasattr(vectorstore, 'col') and vectorstore.col is not None:
-                        schema = vectorstore.col.schema
-                        if not schema.auto_id or not schema.primary_field.auto_id:
-                            logger.error("La colección TODAVÍA no tiene auto_id configurado correctamente")
-                            logger.error("Es necesario recrear la colección desde cero")
-                            return False
-                except Exception as final_check_error:
-                    logger.warning(f"Error en verificación final de auto_id: {final_check_error}")
+                # Verificar que auto_id está configurado correctamente antes de proceder
+                if not self._ensure_auto_id_enabled(vectorstore):
+                    logger.error("La colección no tiene auto_id configurado correctamente")
+                    logger.error("Es necesario recrear la colección desde cero")
+                    return False
                 
                 # Intentar añadir directamente sin especificar IDs
+                # Para Milvus con auto_id=True, NO pasamos ids
                 ids = vectorstore.add_documents(documents)
                 logger.info(f"Se han añadido {total_docs} documentos correctamente")
                 logger.info(f"IDs generados: {len(ids) if ids else 0}")
@@ -733,16 +733,14 @@ class MilvusVectorStore(VectorStoreBase):
                     all_ids = []
                     for i in range(0, total_docs, batch_size):
                         end_idx = min(i + batch_size, total_docs)
-                        batch = documents[i:end_idx]
-                        
-                        # Actualizar la descripción con información del lote actual
+                        batch = documents[i:end_idx]                        # Actualizar la descripción con información del lote actual
                         current_batch = i // batch_size + 1
                         progress_bar.set_description(f"Añadiendo lote {current_batch}/{total_batches} ({len(batch)} docs)")
                         
                         try:
-                            # Añadir el lote sin especificar IDs (auto_id=True)
-                            # Pasar ids=None explícitamente para forzar auto-generación
-                            batch_ids = vectorstore.add_documents(batch, ids=None)
+                            # Añadir el lote sin especificar IDs explícitamente
+                            # Para Milvus con auto_id=True, no pasar el parámetro ids
+                            batch_ids = vectorstore.add_documents(batch)
                             if batch_ids:
                                 all_ids.extend(batch_ids)
                             
@@ -1101,3 +1099,46 @@ class MilvusVectorStore(VectorStoreBase):
             logger.warning(f"No se pudieron obtener metadatos existentes: {e}")
             
         return existing_values
+    
+    def _ensure_auto_id_enabled(self, vectorstore: Milvus) -> bool:
+        """
+        Verifica y asegura que auto_id esté habilitado en la colección Milvus.
+        
+        Args:
+            vectorstore: Instancia de Milvus vectorstore
+            
+        Returns:
+            bool: True si auto_id está habilitado correctamente
+        """
+        try:
+            if hasattr(vectorstore, 'col') and vectorstore.col is not None:
+                schema = vectorstore.col.schema
+                logger.info(f"Schema de la colección: {'auto_id': {schema.auto_id}}")
+                
+                # Verificar el campo primario
+                primary_field = None
+                for field in schema.fields:
+                    if field.is_primary:
+                        primary_field = field
+                        break
+                
+                if primary_field:
+                    logger.info(f"Campo primario: {primary_field.name}, auto_id: {primary_field.auto_id}")
+                    
+                    # Verificar que tanto el schema como el campo primario tienen auto_id=True
+                    if schema.auto_id and primary_field.auto_id:
+                        logger.info("✅ auto_id configurado correctamente")
+                        return True
+                    else:
+                        logger.error(f"❌ auto_id mal configurado - schema.auto_id: {schema.auto_id}, primary_field.auto_id: {primary_field.auto_id}")
+                        return False
+                else:
+                    logger.error("❌ No se encontró campo primario en el schema")
+                    return False
+            else:
+                logger.error("❌ No se pudo acceder a la colección")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error verificando auto_id: {e}")
+            return False

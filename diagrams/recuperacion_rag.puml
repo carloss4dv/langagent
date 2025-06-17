@@ -13,7 +13,7 @@ start
 
 |VectorStore|
 :Almacenar embeddings en base de datos vectorial;
-:Crear índices para búsqueda eficiente;
+:Crear indices para busqueda eficiente;
 
 |Sistema|
 :Validar integridad de la base de conocimiento;

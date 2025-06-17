@@ -19,7 +19,7 @@ DB --> Ret: Documentos
 Ret --> System: Docs Iniciales
 
 System -> Eval: Evaluar Relevancia
-Eval --> System: Decisión
+Eval --> System: Decision
 
 alt Docs IRRELEVANTES
     System -> Reform: Reformular Query

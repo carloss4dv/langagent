@@ -1,7 +1,7 @@
 @startuml
 skinparam packageStyle rect
 
-package "Proceso de Creación de Embeddings" {
+package "Proceso de Creacion de Embeddings" {
   [Texto Original\n(p. ej., 'El cielo es azul')] as Texto
   [Modelo de Embedding] as ModeloEmbedding1
   [Vector Embedding] as VectorEmbedding
@@ -11,13 +11,13 @@ package "Proceso de Creación de Embeddings" {
   ModeloEmbedding1 --> VectorEmbedding
 }
 
-package "Búsqueda Semántica" {
-  [Consulta del Usuario\n(p. ej., '¿De qué color es el cielo?')] as Consulta
+package "Busqueda Semantica" {
+  [Consulta del Usuario\n(p. ej., '¿De que color es el cielo?')] as Consulta
   [Modelo de Embedding] as ModeloEmbedding2
   [Vector de Consulta] as VectorConsulta
   note right of VectorConsulta : [0.12, 0.88, ...]
   database "Base de Datos de Vectores" as DBVectores
-  [Cálculo de Similitud] as Similitud
+  [Calculo de Similitud] as Similitud
   [Resultados Relevantes] as Resultados
 
   Consulta --> ModeloEmbedding2

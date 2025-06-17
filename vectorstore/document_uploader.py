@@ -256,8 +256,7 @@ class DocumentUploader:
             chunked_documents = self.text_splitter.split_documents(documents)
             
             # Crear diccionario de documentos originales para generación de contexto
-            source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents)}
-            
+            source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents)}            
             # Cargar documentos usando el método existente (incluye generación de contexto)
             return self.vectorstore_handler.load_documents(
                 chunked_documents, 
@@ -284,16 +283,23 @@ class DocumentUploader:
             return {}
         
         logger.info(f"Colecciones adaptativas configuradas: {adaptive_collections}")
+          # Mapeo de estrategias a tamaños de chunk reales
+        # Basado en la configuración actual en config.py
+        strategy_to_chunk_size = {
+            "167": 167,   # Chunk size pequeño (actual en config)
+            "369": 369,   # Chunk size mediano
+            "646": 646,   # Chunk size grande (actual en config)
+            "1094": 1094  # Chunk size muy grande
+        }
         
         for strategy, collection_name in adaptive_collections.items():
-            # Extraer el tamaño de chunk de la estrategia (asumiendo formato "256", "512", etc.)
-            try:
-                chunk_size = int(strategy)
-            except ValueError:
-                logger.warning(f"Estrategia {strategy} no es un número válido, saltando...")
+            # Obtener el tamaño de chunk correspondiente a la estrategia
+            if strategy not in strategy_to_chunk_size:
+                logger.warning(f"Estrategia {strategy} no tiene un tamaño de chunk definido, saltando...")
                 continue
-            
-            logger.info(f"Procesando colección adaptativa {collection_name} para {chunk_size} tokens...")
+                
+            chunk_size = strategy_to_chunk_size[strategy]
+            logger.info(f"Procesando colección adaptativa {collection_name} para estrategia {strategy} (chunk_size: {chunk_size})")
             
             # Verificar si existe la colección
             existing_vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, collection_name)
