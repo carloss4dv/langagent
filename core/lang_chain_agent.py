@@ -174,10 +174,10 @@ class LangChainAgent:
     def _setup_context_generator(self):
         """
         Configura el generador de contexto.
+        El chunk_size se pasará dinámicamente en tiempo de ejecución.
         """
-        chunk_size = VECTORSTORE_CONFIG.get("chunk_size", 512)
-        logger.info(f"Configurando generador de contexto con chunk_size: {chunk_size}")
-        context_generator = create_context_generator(self.llm, chunk_size=chunk_size)
+        logger.info("Configurando generador de contexto (chunk_size será dinámico)")
+        context_generator = create_context_generator(self.llm)
         self.vectorstore_handler.set_context_generator(context_generator)
     
     def _load_documents_with_uploader(self):

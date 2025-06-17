@@ -889,8 +889,7 @@ class MilvusVectorStore(VectorStoreBase):
         batch_size = VECTORSTORE_CONFIG.get("context_batch_size", 10)  # Procesar en lotes
         max_workers = VECTORSTORE_CONFIG.get("context_max_workers", 3)  # Concurrencia limitada
         skip_existing = VECTORSTORE_CONFIG.get("skip_existing_context", True)
-        
-        # Filtrar documentos que necesitan contexto
+          # Filtrar documentos que necesitan contexto
         docs_to_process = []
         docs_with_existing_context = 0
         
@@ -912,16 +911,21 @@ class MilvusVectorStore(VectorStoreBase):
             return documents
         
         logger.info(f"Procesando contexto para {len(docs_to_process)} chunks en lotes de {batch_size}")
+        logger.info(f"Usando chunk_size de configuración: {VECTORSTORE_CONFIG.get('chunk_size', 512)}")
         
         # Función para procesar un lote de documentos
         def process_batch(batch):
             batch_results = []
             for doc_idx, doc, full_document in batch:
                 try:
+                    # Obtener chunk_size directamente de la configuración actual
+                    chunk_size = VECTORSTORE_CONFIG.get("chunk_size", 512)
+                    
                     # Preparar input para el generador
                     context_input = {
                         "document": full_document.page_content,
-                        "chunk": doc.page_content
+                        "chunk": doc.page_content,
+                        "chunk_size": chunk_size
                     }
                     
                     # Generar contexto
