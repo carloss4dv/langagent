@@ -180,7 +180,7 @@ class DocumentUploader:
             else:
                 logger.warning("Método de eliminación no implementado en el handler")
                 return False
-                  except Exception as e:
+        except Exception as e:
             logger.error(f"Error general eliminando documentos: {e}")
             return False
     
