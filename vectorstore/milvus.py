@@ -461,6 +461,7 @@ class MilvusVectorStore(VectorStoreBase):
                 # Crear el cross encoder con configuración específica
                 cross_encoder = HuggingFaceCrossEncoder(
                     model_name=model_name,
+                    model_kwargs={"device": device}
                 )
                 
                 # Crear el compresor reranker

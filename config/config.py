@@ -59,14 +59,14 @@ VECTORSTORE_CONFIG = {
     
     # Configuración de Recuperación Adaptativa - Múltiples Colecciones
     "adaptive_collections": {
-        "167": "default_collection_167",
-        "307": "default_collection_307", 
-        "755": "default_collection_755",
+        "167": "default_collection_369",
+        "307": "default_collection_646", 
+        "755": "default_collection_1094",
     },
     "use_adaptive_retrieval": True,  # Activar recuperación adaptativa
     
     # Configuración de compresión contextual con BGE
-    "use_contextual_compression": True,
+    "use_contextual_compression": False,
     "bge_reranker_model": "BAAI/bge-reranker-v2-m3",
     "compression_top_k_multiplier": 3,  # Recuperar 36 docs si k=12, luego rerank a 12
     "bge_device": "auto",  # Detectar automáticamente CPU/GPU
@@ -75,8 +75,8 @@ VECTORSTORE_CONFIG = {
 
 # Configuración de SQL
 SQL_CONFIG = {
-    "db_uri": "sqlite:///langagent/sqlite/pdi_database.db",  # URI de conexión a la base de datos
-    "dialect": "sqlite",                           # Dialecto SQL (sqlite, postgres, etc.)
+    "db_uri": "jdbc:oracle:thin:C##DM_ACADEMICO/YourPassword123@//localhost:1521/XEPDB1",  # URI de conexión a la base de datos
+    "dialect": "oracle",                           # Dialecto SQL (sqlite, postgres, etc.)
     "enable_sql_queries": True,                    # Habilitar consultas SQL
     "max_results": 20,                             # Número máximo de resultados por consulta
     "default_table": "pdi_docencia"                # Tabla por defecto para consultas
@@ -98,15 +98,15 @@ WORKFLOW_CONFIG = {
 
 # Configuración de Chunk Strategies y Recuperación Adaptativa
 CHUNK_STRATEGY_CONFIG = {
-    "available_strategies": ["167", "307", "755"],  # Estrategias disponibles
-    "default_strategy": "307",     # Estrategia por defecto
+    "available_strategies": ["369", "646", "1094"],  # Estrategias disponibles
+    "default_strategy": "646",     # Estrategia por defecto
     "max_retries": 2,             # Total 3 intentos (inicial + 2 reintentos)
     
     # Umbrales de evaluación granular
     "evaluation_thresholds": {
-        "faithfulness": 0.7,
-        "context_precision": 0.6,
-        "context_recall": 0.6,
+        "faithfulness": 0.8,
+        "context_precision": 0.8,
+        "context_recall": 0.7,
         "answer_relevance": 0.7
     },
     

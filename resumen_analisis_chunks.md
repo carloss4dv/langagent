@@ -1,6 +1,6 @@
 # 📊 Resumen Completo del Análisis de Chunks
 
-**Fecha de análisis:** 2025-06-14 11:38:16
+**Fecha de análisis:** 2025-06-16 16:29:59
 
 ---
 
@@ -8,12 +8,12 @@
 
 | Métrica | Valor |
 |---------|-------|
-| 📁 Documentos analizados | 24 |
-| 📝 Total de unidades textuales | 2,330 |
-| 📏 Total de caracteres | 456,967 |
-| 📖 Total de palabras | 87,122 |
-| 🎯 Densidad textual promedio | 196.1 chars/unidad |
-| 📊 Eficiencia léxica | 19.07% (palabras por carácter) |
+| 📁 Documentos analizados | 23 |
+| 📝 Total de unidades textuales | 637 |
+| 📏 Total de caracteres | 373,082 |
+| 📖 Total de palabras | 71,785 |
+| 🎯 Densidad textual promedio | 585.7 chars/unidad |
+| 📊 Eficiencia léxica | 19.24% (palabras por carácter) |
 
 ---
 
@@ -32,44 +32,44 @@
 
 ## 📊 Distribuciones Estadísticas por Tipo de Unidad
 
-### 🔹 Oraciones (1,005 unidades)
+### 🔹 Oraciones (243 unidades)
 
 | Métrica | Valor |
 |---------|-------|
-| Media | 151.2 ± 77.5 caracteres |
-| Mediana | 138.0 caracteres |
+| Media | 218.9 ± 131.1 caracteres |
+| Mediana | 172.0 caracteres |
 | Asimetría | 1.839 (sesgada derecha) |
-| Rango intercuartílico | 77.0 |
-| Mínimo | 2 caracteres |
-| Máximo | 838 caracteres |
-| Q1 (Percentil 25) | 101.0 |
-| Q3 (Percentil 75) | 178.0 |
+| Rango intercuartílico | 147.5 |
+| Mínimo | 65 caracteres |
+| Máximo | 893 caracteres |
+| Q1 (Percentil 25) | 130.5 |
+| Q3 (Percentil 75) | 278.0 |
 
-### 🔸 Párrafos (1,092 unidades)
-
-| Métrica | Valor |
-|---------|-------|
-| Media | 138.8 ± 114.4 caracteres |
-| Mediana | 124.5 caracteres |
-| Asimetría | 2.843 (sesgada derecha) |
-| Rango intercuartílico | 110.0 |
-| Mínimo | 11 caracteres |
-| Máximo | 1164 caracteres |
-| Q1 (Percentil 25) | 63.0 |
-| Q3 (Percentil 75) | 173.0 |
-
-### 🔷 Secciones (233 unidades)
+### 🔸 Párrafos (348 unidades)
 
 | Métrica | Valor |
 |---------|-------|
-| Media | 658.8 ± 819.4 caracteres |
-| Mediana | 307.0 caracteres |
-| Asimetría | 2.751 (sesgada derecha) |
-| Rango intercuartílico | 695.0 |
-| Mínimo | 20 caracteres |
-| Máximo | 6019 caracteres |
-| Q1 (Percentil 25) | 167.0 |
-| Q3 (Percentil 75) | 862.0 |
+| Media | 455.5 ± 887.5 caracteres |
+| Mediana | 214.5 caracteres |
+| Asimetría | 6.358 (sesgada derecha) |
+| Rango intercuartílico | 219.2 |
+| Mínimo | 64 caracteres |
+| Máximo | 10115 caracteres |
+| Q1 (Percentil 25) | 150.0 |
+| Q3 (Percentil 75) | 369.2 |
+
+### 🔷 Secciones (46 unidades)
+
+| Métrica | Valor |
+|---------|-------|
+| Media | 3508.3 ± 2746.0 caracteres |
+| Mediana | 2999.0 caracteres |
+| Asimetría | 0.846 (sesgada derecha) |
+| Rango intercuartílico | 3780.2 |
+| Mínimo | 258 caracteres |
+| Máximo | 11259 caracteres |
+| Q1 (Percentil 25) | 1293.2 |
+| Q3 (Percentil 75) | 5073.5 |
 
 ---
 
@@ -79,16 +79,16 @@
 
 | Tipo de Chunk | Tamaño Recomendado |
 |---------------|-------------------|
-| Chunk pequeño (Q1) | ~63 caracteres |
-| Chunk mediano (Q2) | ~124 caracteres |
-| Chunk grande (Q3) | ~173 caracteres |
+| Chunk pequeño (Q1) | ~150 caracteres |
+| Chunk mediano (Q2) | ~214 caracteres |
+| Chunk grande (Q3) | ~369 caracteres |
 
 ### 📊 Basadas en Oraciones Promedio
 
 | Configuración | Tamaño Estimado |
 |--------------|----------------|
-| 3-5 oraciones | ~604 caracteres |
-| 8-12 oraciones | ~1511 caracteres |
+| 3-5 oraciones | ~875 caracteres |
+| 8-12 oraciones | ~2188 caracteres |
 
 ---
 
@@ -96,10 +96,10 @@
 
 | Métrica | Valor |
 |---------|-------|
-| 🔹 Densidad léxica promedio | 19.07% |
-| 🔸 Caracteres por palabra | 5.25 |
-| 🔷 Palabras por unidad textual | 37.4 |
-| 🎯 Coeficiente de eficiencia | 37.391 |
+| 🔹 Densidad léxica promedio | 19.24% |
+| 🔸 Caracteres por palabra | 5.20 |
+| 🔷 Palabras por unidad textual | 112.7 |
+| 🎯 Coeficiente de eficiencia | 112.692 |
 
 ---
 
@@ -107,11 +107,11 @@
 
 | Rank | Chunk Size | Overlap | % Overlap | Justificación | Rendimiento Esperado |
 |------|------------|---------|-----------|---------------|---------------------|
-| 🥇 1 | 63 | 6 | 9.5% | pequeño - 10% | Rápido pero menos contexto |
-| 🥈 2 | 124 | 37 | 29.8% | pequeño - 30% | Rápido pero menos contexto |
-| 🥉 3 | 167 | 41 | 24.6% | pequeño - 25% | Rápido pero menos contexto |
-| 🔸 4 | 249 | 49 | 19.7% | pequeño - 20% | Rápido pero menos contexto |
-| 🔸 5 | 307 | 61 | 19.9% | pequeño - 20% | Rápido pero menos contexto |
+| 🥇 1 | 150 | 37 | 24.7% | pequeño - 25% | Rápido pero menos contexto |
+| 🥈 2 | 369 | 73 | 19.8% | pequeño - 20% | Rápido pero menos contexto |
+| 🥉 3 | 646 | 96 | 14.9% | mediano - 15% | Equilibrio ideal velocidad-contexto |
+| 🔸 4 | 1094 | 107 | 9.8% | grande - 1/2 párrafo mediano | Más contexto, procesamiento lento |
+| 🔸 5 | 1499 | 107 | 7.1% | grande - 1/2 párrafo mediano | Más contexto, procesamiento lento |
 
 ---
 
@@ -121,25 +121,25 @@
 
 1. **Utilizar configuraciones basadas en percentiles de párrafos** para mejor coherencia semántica
 2. **Considerar overlap de 15-25% del tamaño del chunk** para mantener contexto
-3. **Priorizar chunks de ~124 caracteres** (mediana de párrafos)
+3. **Priorizar chunks de ~214 caracteres** (mediana de párrafos)
 4. **Implementar análisis A/B testing** con las configuraciones sugeridas vs actuales
 
 ### 🎯 Configuración Recomendada Principal
 
 **Configuración óptima identificada:**
 
-- **Chunk Size:** 63 caracteres
-- **Overlap:** 6 caracteres (9.5% del chunk)
-- **Justificación:** pequeño - 10%
+- **Chunk Size:** 150 caracteres
+- **Overlap:** 37 caracteres (24.7% del chunk)
+- **Justificación:** pequeño - 25%
 - **Ventajas:** Equilibrio óptimo entre coherencia semántica y eficiencia de procesamiento
 
 ### 📊 Comparación con Configuraciones Actuales
 
 | Configuración | Actual | Recomendada | Mejora |
 |--------------|--------|-------------|--------|
-| Pequeña | 256 chars, 50 overlap | 63 chars, 6 overlap | -193 chars, -44 overlap |
-| Mediana | 512 chars, 50 overlap | 124 chars, 37 overlap | -388 chars, -13 overlap |
-| Grande | 1024 chars, 50 overlap | 3023 chars, 151 overlap | +1999 chars, +101 overlap |
+| Pequeña | 256 chars, 50 overlap | 150 chars, 37 overlap | -106 chars, -13 overlap |
+| Mediana | 512 chars, 50 overlap | 369 chars, 73 overlap | -143 chars, +23 overlap |
+| Grande | 1024 chars, 50 overlap | 4377 chars, 107 overlap | +3353 chars, +57 overlap |
 
 
 ---
@@ -150,337 +150,318 @@
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 85 |
-| Caracteres | 13,851 (3.0% del total) |
-| Palabras | 2,598 |
-| Densidad | 163.0 chars/unidad |
+| Unidades totales | 21 |
+| Caracteres | 9,555 (2.6% del total) |
+| Palabras | 1,784 |
+| Densidad | 455.0 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 42
-- Sentences: 29
-- Sections: 14
+- Paragraphs: 19
+- Sections: 2
 
 ### 📄 info_cubo_admision_v19.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 113 |
-| Caracteres | 24,414 (5.3% del total) |
-| Palabras | 4,740 |
-| Densidad | 216.1 chars/unidad |
+| Unidades totales | 32 |
+| Caracteres | 23,089 (6.2% del total) |
+| Palabras | 4,481 |
+| Densidad | 721.5 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 54
-- Sentences: 52
-- Sections: 7
+- Sentences: 24
+- Paragraphs: 6
+- Sections: 2
 
 ### 📄 info_cubo_cargo_v14.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 61 |
-| Caracteres | 8,842 (1.9% del total) |
-| Palabras | 1,791 |
-| Densidad | 145.0 chars/unidad |
+| Unidades totales | 17 |
+| Caracteres | 6,835 (1.8% del total) |
+| Palabras | 1,377 |
+| Densidad | 402.1 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 28
-- Sentences: 21
-- Sections: 12
+- Paragraphs: 12
+- Sentences: 3
+- Sections: 2
 
 ### 📄 info_cubo_docenciaAsignatura_v10.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 78 |
-| Caracteres | 15,330 (3.4% del total) |
-| Palabras | 2,946 |
-| Densidad | 196.5 chars/unidad |
+| Unidades totales | 25 |
+| Caracteres | 13,488 (3.6% del total) |
+| Palabras | 2,633 |
+| Densidad | 539.5 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 38
-- Sentences: 33
-- Sections: 7
+- Paragraphs: 13
+- Sentences: 10
+- Sections: 2
 
 ### 📄 info_cubo_docenciaPDI_v11.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 139 |
-| Caracteres | 37,400 (8.2% del total) |
-| Palabras | 7,068 |
-| Densidad | 269.1 chars/unidad |
+| Unidades totales | 37 |
+| Caracteres | 34,566 (9.3% del total) |
+| Palabras | 6,629 |
+| Densidad | 934.2 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 67
-- Sentences: 61
-- Sections: 11
+- Sentences: 25
+- Paragraphs: 10
+- Sections: 2
 
 ### 📄 info_cubo_egresados_v23.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 166 |
-| Caracteres | 36,285 (7.9% del total) |
-| Palabras | 7,113 |
-| Densidad | 218.6 chars/unidad |
+| Unidades totales | 42 |
+| Caracteres | 30,993 (8.3% del total) |
+| Palabras | 6,097 |
+| Densidad | 737.9 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 77
-- Sentences: 76
-- Sections: 13
+- Sentences: 25
+- Paragraphs: 15
+- Sections: 2
 
 ### 📄 info_cubo_estudiantesIN_v12.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 90 |
-| Caracteres | 21,613 (4.7% del total) |
-| Palabras | 4,149 |
-| Densidad | 240.1 chars/unidad |
+| Unidades totales | 23 |
+| Caracteres | 15,325 (4.1% del total) |
+| Palabras | 2,906 |
+| Densidad | 666.3 chars/unidad |
 
 **Distribución por tipo:**
-- Sentences: 43
-- Paragraphs: 37
-- Sections: 10
+- Paragraphs: 19
+- Sections: 2
+- Sentences: 2
 
 ### 📄 info_cubo_estudiantesOUT_v11.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 93 |
-| Caracteres | 19,114 (4.2% del total) |
-| Palabras | 3,707 |
-| Densidad | 205.5 chars/unidad |
+| Unidades totales | 26 |
+| Caracteres | 13,540 (3.6% del total) |
+| Palabras | 2,584 |
+| Densidad | 520.8 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 42
-- Sentences: 42
-- Sections: 9
+- Paragraphs: 24
+- Sections: 2
 
 ### 📄 info_cubo_grupos_v13.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 81 |
-| Caracteres | 14,447 (3.2% del total) |
-| Palabras | 2,749 |
-| Densidad | 178.4 chars/unidad |
+| Unidades totales | 27 |
+| Caracteres | 14,025 (3.8% del total) |
+| Palabras | 2,718 |
+| Densidad | 519.4 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 38
-- Sentences: 37
-- Sections: 6
+- Sentences: 19
+- Paragraphs: 6
+- Sections: 2
 
 ### 📄 info_cubo_indicesBibliometricos_v11.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 52 |
-| Caracteres | 7,118 (1.6% del total) |
-| Palabras | 1,314 |
-| Densidad | 136.9 chars/unidad |
+| Unidades totales | 17 |
+| Caracteres | 5,789 (1.6% del total) |
+| Palabras | 1,077 |
+| Densidad | 340.5 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 26
-- Sentences: 20
-- Sections: 6
+- Paragraphs: 14
+- Sections: 2
+- Sentences: 1
 
 ### 📄 info_cubo_matricula_v24.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 142 |
-| Caracteres | 32,795 (7.2% del total) |
-| Palabras | 6,297 |
-| Densidad | 231.0 chars/unidad |
+| Unidades totales | 37 |
+| Caracteres | 29,129 (7.8% del total) |
+| Palabras | 5,659 |
+| Densidad | 787.3 chars/unidad |
 
 **Distribución por tipo:**
-- Sentences: 71
-- Paragraphs: 61
-- Sections: 10
+- Sentences: 25
+- Paragraphs: 10
+- Sections: 2
 
 ### 📄 info_cubo_matriEEPP_v11.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 52 |
-| Caracteres | 7,888 (1.7% del total) |
-| Palabras | 1,536 |
-| Densidad | 151.7 chars/unidad |
+| Unidades totales | 18 |
+| Caracteres | 7,562 (2.0% del total) |
+| Palabras | 1,507 |
+| Densidad | 420.1 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 25
-- Sentences: 21
-- Sections: 6
+- Sentences: 10
+- Paragraphs: 6
+- Sections: 2
 
 ### 📄 info_cubo_movilidad_idi_v11.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 50 |
-| Caracteres | 6,411 (1.4% del total) |
-| Palabras | 1,266 |
-| Densidad | 128.2 chars/unidad |
+| Unidades totales | 18 |
+| Caracteres | 5,142 (1.4% del total) |
+| Palabras | 1,030 |
+| Densidad | 285.7 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 25
-- Sentences: 19
-- Sections: 6
+- Paragraphs: 16
+- Sections: 2
 
 ### 📄 info_cubo_ofertaplazas_v18.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 100 |
-| Caracteres | 23,219 (5.1% del total) |
-| Palabras | 4,395 |
-| Densidad | 232.2 chars/unidad |
+| Unidades totales | 25 |
+| Caracteres | 17,187 (4.6% del total) |
+| Palabras | 3,276 |
+| Densidad | 687.5 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 47
-- Sentences: 43
-- Sections: 10
+- Paragraphs: 16
+- Sentences: 7
+- Sections: 2
 
 ### 📄 info_cubo_PDI_v21.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 113 |
-| Caracteres | 23,452 (5.1% del total) |
-| Palabras | 4,497 |
-| Densidad | 207.5 chars/unidad |
+| Unidades totales | 32 |
+| Caracteres | 21,510 (5.8% del total) |
+| Palabras | 4,209 |
+| Densidad | 672.2 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 55
-- Sentences: 47
-- Sections: 11
+- Sentences: 24
+- Paragraphs: 6
+- Sections: 2
 
 ### 📄 info_cubo_produccionCientifica_v13.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 102 |
-| Caracteres | 15,328 (3.4% del total) |
-| Palabras | 2,961 |
-| Densidad | 150.3 chars/unidad |
+| Unidades totales | 27 |
+| Caracteres | 13,956 (3.7% del total) |
+| Palabras | 2,754 |
+| Densidad | 516.9 chars/unidad |
 
 **Distribución por tipo:**
-- Sentences: 50
-- Paragraphs: 45
-- Sections: 7
+- Sentences: 17
+- Paragraphs: 8
+- Sections: 2
 
 ### 📄 info_cubo_proyectos_v11.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 83 |
-| Caracteres | 13,795 (3.0% del total) |
-| Palabras | 2,403 |
-| Densidad | 166.2 chars/unidad |
+| Unidades totales | 30 |
+| Caracteres | 10,186 (2.7% del total) |
+| Palabras | 1,806 |
+| Densidad | 339.5 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 41
-- Sentences: 35
-- Sections: 7
+- Paragraphs: 28
+- Sections: 2
 
 ### 📄 info_cubo_PTGAS_v21.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 101 |
-| Caracteres | 16,716 (3.7% del total) |
-| Palabras | 3,273 |
-| Densidad | 165.5 chars/unidad |
+| Unidades totales | 28 |
+| Caracteres | 15,151 (4.1% del total) |
+| Palabras | 3,036 |
+| Densidad | 541.1 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 49
-- Sentences: 42
-- Sections: 10
+- Sentences: 20
+- Paragraphs: 6
+- Sections: 2
 
 ### 📄 info_cubo_puesto_v14.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 95 |
-| Caracteres | 14,116 (3.1% del total) |
-| Palabras | 2,847 |
-| Densidad | 148.6 chars/unidad |
+| Unidades totales | 21 |
+| Caracteres | 9,437 (2.5% del total) |
+| Palabras | 1,904 |
+| Densidad | 449.4 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 43
-- Sentences: 34
-- Sections: 18
+- Paragraphs: 19
+- Sections: 2
 
 ### 📄 info_cubo_rendimiento_v21.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 172 |
-| Caracteres | 38,973 (8.5% del total) |
-| Palabras | 7,227 |
-| Densidad | 226.6 chars/unidad |
+| Unidades totales | 42 |
+| Caracteres | 32,055 (8.6% del total) |
+| Palabras | 6,020 |
+| Densidad | 763.2 chars/unidad |
 
 **Distribución por tipo:**
-- Sentences: 81
-- Paragraphs: 80
-- Sections: 11
+- Sentences: 22
+- Paragraphs: 18
+- Sections: 2
 
 ### 📄 info_cubo_RRHHidi_v13.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 142 |
-| Caracteres | 26,867 (5.9% del total) |
-| Palabras | 5,067 |
-| Densidad | 189.2 chars/unidad |
+| Unidades totales | 32 |
+| Caracteres | 19,014 (5.1% del total) |
+| Palabras | 3,569 |
+| Densidad | 594.2 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 66
-- Sentences: 51
-- Sections: 25
+- Paragraphs: 26
+- Sentences: 4
+- Sections: 2
 
 ### 📄 info_cubo_solicitudConvocatoria_v11.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 104 |
-| Caracteres | 16,394 (3.6% del total) |
-| Palabras | 3,006 |
-| Densidad | 157.6 chars/unidad |
+| Unidades totales | 31 |
+| Caracteres | 12,842 (3.4% del total) |
+| Palabras | 2,368 |
+| Densidad | 414.3 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 49
-- Sentences: 48
-- Sections: 7
+- Paragraphs: 26
+- Sentences: 3
+- Sections: 2
 
 ### 📄 info_cubo_solicitudes_movilidad_OUT_v11.md
 
 | Métrica | Valor |
 |---------|-------|
-| Unidades totales | 89 |
-| Caracteres | 17,156 (3.8% del total) |
-| Palabras | 3,245 |
-| Densidad | 192.8 chars/unidad |
+| Unidades totales | 29 |
+| Caracteres | 12,706 (3.4% del total) |
+| Palabras | 2,361 |
+| Densidad | 438.1 chars/unidad |
 
 **Distribución por tipo:**
-- Paragraphs: 42
-- Sentences: 38
-- Sections: 9
-
-### 📄 info_cubo_test_v1.md
-
-| Métrica | Valor |
-|---------|-------|
-| Unidades totales | 27 |
-| Caracteres | 5,443 (1.2% del total) |
-| Palabras | 927 |
-| Densidad | 201.6 chars/unidad |
-
-**Distribución por tipo:**
-- Paragraphs: 15
-- Sentences: 11
-- Sections: 1
+- Paragraphs: 25
+- Sections: 2
+- Sentences: 2
 
 
 ---
@@ -503,4 +484,4 @@ Este análisis ha generado los siguientes archivos:
 
 **Análisis generado por:** chunk_analyzer.py  
 **Versión:** 1.0  
-**Fecha:** 2025-06-14 11:38:16
+**Fecha:** 2025-06-16 16:29:59

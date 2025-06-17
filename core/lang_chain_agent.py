@@ -90,6 +90,9 @@ class LangChainAgent:
         self.adaptive_retrievers = {}  # Diccionario de retrievers por estrategia
         self.adaptive_vectorstores = {}  # Diccionario de vectorstores por estrategia
         
+        # Historial de granularidades persistente entre ejecuciones
+        self.granularity_history = []
+        
         # Obtener la instancia de vectorstore
         self.vectorstore_handler = VectorStoreFactory.get_vectorstore_instance(self.vector_db_type)
         
@@ -268,11 +271,16 @@ class LangChainAgent:
                 "is_consulta": ambito_result.get("is_consulta", False),
                 # chunk_strategy se derivará del nombre de la colección en el workflow
                 "retry_count": 0,
-                "evaluation_metrics": {}
+                "evaluation_metrics": {},
+                "granularity_history": self.granularity_history.copy()  # Pasar historial persistente
             }
             
             # Ejecutar el workflow principal con métricas
             result = self.app.invoke_with_metrics(initial_state)
+            
+            # Actualizar el historial persistente con el resultado
+            if "granularity_history" in result:
+                self.granularity_history = result["granularity_history"]
             
             # Añadir información del ámbito al resultado
             result["ambito"] = ambito_result["ambito"]
@@ -286,9 +294,16 @@ class LangChainAgent:
             "question": query,
             # chunk_strategy se derivará del nombre de la colección en el workflow
             "retry_count": 0,
-            "evaluation_metrics": {}
+            "evaluation_metrics": {},
+            "granularity_history": self.granularity_history.copy()  # Pasar historial persistente
         }
-        return self.app.invoke_with_metrics(default_state)
+        
+        # Ejecutar workflow y actualizar historial persistente
+        result = self.app.invoke_with_metrics(default_state)
+        if "granularity_history" in result:
+            self.granularity_history = result["granularity_history"]
+            
+        return result
 
     def _setup_adaptive_retrievers(self):
         """
@@ -339,4 +354,21 @@ class LangChainAgent:
             return self.adaptive_retrievers[strategy]
         else:
             logger.warning(f"Estrategia {strategy} no encontrada, usando retriever principal")
-            return self.retriever 
+            return self.retriever
+    
+    def clear_granularity_history(self):
+        """
+        Limpia el historial de granularidades. Útil para empezar una nueva sesión
+        o resetear el historial de estrategias probadas.
+        """
+        self.granularity_history = []
+        logger.info("Historial de granularidades limpiado")
+    
+    def get_granularity_history(self):
+        """
+        Obtiene el historial actual de granularidades.
+        
+        Returns:
+            List[Dict]: Historial de granularidades
+        """
+        return self.granularity_history.copy()

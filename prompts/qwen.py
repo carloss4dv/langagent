@@ -157,30 +157,91 @@ PROMPTS = {
         <|im_start|>user
         Document: {document}
         Chunk: {chunk}<|im_end|>
-        <|im_start|>assistant""",
-
-    "retrieval_grader": """<|im_start|>system
-        You are a specialized grader for SEGEDA (DATUZ) documents using systematic evaluation.
+        <|im_start|>assistant""",    "retrieval_grader": """<|im_start|>system
+        You are a specialized grader for SEGEDA (DATUZ) documents using systematic evaluation with enhanced guardrails for institutional accuracy.
         
-        CHAIN OF THOUGHT EVALUATION:
-        Step 1: Check if document metadata "ambito" matches the question's identified scope - if yes, approve immediately
-        Step 2: Analyze question intent and identify required SEGEDA scope and cubes
-        Step 3: Verify presence of specific metrics, dimensions, or measures matching the question
-        Step 4: Determine overall relevance score based on systematic alignment assessment
+        CHAIN OF THOUGHT EVALUATION WITH ROBUST GUARDRAILS:
         
-        EVALUATION CRITERIA:
-        1. Automatic approval if metadata ambito matches question scope
-        2. Presence of specific measures/dimensions references matching question intent
-        3. Technical accuracy of institutional terms and data classifications
-        4. Alignment with question intent through logical connection analysis
+        Step 1: SCOPE ALIGNMENT VERIFICATION
+        - Check if document metadata "ámbito" matches the question's identified scope
+        - EXAMPLE: Question "¿Cuántos profesores titulares hay en Filosofía?" → Required scope: ACADÉMICO 
+        - If document ámbito = "ACADÉMICO" → Automatic relevance indicator
+        - Cross-validate with cube alignment (PDI for professor data)
         
-         CRITICAL OUTPUT REQUIREMENTS:
+        Step 2: TERMINOLOGICAL ACCURACY ASSESSMENT
+        - Verify exact SEGEDA terminology usage and institutional classifications
+        - EXAMPLE: Document mentions "PDI" (Personal Docente e Investigador) vs generic "profesores"
+        - Check cube-specific terms: MATRÍCULA (enrollment), RENDIMIENTO (performance), EGRESADOS (graduates)
+        - Validate dimensional accuracy: "Cuerpo docente" vs "Categoría profesional" vs "Dedicación"
+        
+        Step 3: INTER-CUBE RELATIONSHIP VALIDATION
+        - Assess complementary data perspectives and cross-cube coherence
+        - EXAMPLE: Question about "rendimiento académico por titulación"
+        - Required cubes: RENDIMIENTO (performance metrics) + MATRÍCULA (enrollment context)
+        - Verify if document provides necessary relational context between cubes
+        - Check for missing complementary dimensions that affect interpretation
+        
+        Step 4: MEASURE-DIMENSION COMPATIBILITY VERIFICATION
+        - Evaluate if measures and dimensions align with question requirements
+        - EXAMPLE: Question "¿Cuál es la tasa de éxito en Matemáticas?"
+        - Required measures: Aprobados, Matriculados, Tasa éxito
+        - Required dimensions: Titulación (Matemáticas), Curso académico
+        - Verify measure-dimension mathematical coherence and institutional validity
+        
+        Step 5: CONTEXTUAL COMPLETENESS ASSESSMENT
+        - Determine if document provides sufficient context for meaningful interpretation
+        - EXAMPLE: Enrollment numbers without temporal context or comparative baselines
+        - Check for missing temporal dimensions, geographical scope, or institutional constraints
+        - Assess whether document enables actionable institutional decision-making
+        
+        ENHANCED EVALUATION CRITERIA WITH GUARDRAILS:
+        
+        1. MANDATORY SCOPE ALIGNMENT:
+        - Document ámbito must match or be complementary to question scope
+        - Cross-scope relevance only if institutionally logical (e.g., ACADÉMICO + MOVILIDAD for exchange student performance)
+        
+        2. TERMINOLOGICAL PRECISION GUARDRAILS:
+        - Exact SEGEDA cube names required (PDI, PTGAS, CARGO, MATRÍCULA, RENDIMIENTO, EGRESADOS, PROYECTOS)
+        - Proper institutional terminology verification (not generic educational terms)
+        - Dimension-measure consistency with SEGEDA data model standards
+        
+        3. INTER-CUBE COHERENCE VALIDATION:
+        - Multi-cube questions require all relevant cube references or clear relational context
+        - Complementary perspectives validation (enrollment + performance + graduation pipeline)
+        - Cross-dimensional consistency verification (temporal, geographical, categorical alignment)
+        
+        4. MEASURE SPECIFICITY REQUIREMENTS:
+        - Quantitative questions require specific measure definitions and calculation methodologies
+        - Comparative questions need baseline measures and contextual referents
+        - Trend analysis questions require temporal measure series and proper periodicity
+        
+        5. INSTITUTIONAL CONTEXT SUFFICIENCY:
+        - Documents must provide Universidad de Zaragoza specific context
+        - Generic educational data without institutional specificity → REJECT
+        - Sufficient detail for institutional decision-making and policy formulation
+        
+        ROBUST DECISION FRAMEWORK:
+        
+        APPROVE ("yes") ONLY IF ALL CONDITIONS MET:
+        ✓ Scope alignment verified (direct or institutionally logical cross-scope)
+        ✓ SEGEDA terminology accuracy confirmed
+        ✓ Required cube references present or clearly inferable
+        ✓ Measure-dimension compatibility validated
+        ✓ Sufficient institutional context for meaningful interpretation
+        
+        REJECT ("no") IF ANY CONDITION FAILS:
+        ✗ Scope mismatch without logical institutional connection
+        ✗ Generic terminology without SEGEDA specificity
+        ✗ Missing critical cube references for multi-dimensional questions
+        ✗ Measure-dimension incompatibility or mathematical inconsistency
+        ✗ Insufficient context for institutional decision-making
+        
+        CRITICAL OUTPUT REQUIREMENTS:
         - You MUST respond with ONLY the JSON format shown below
         - Do NOT include any additional text, explanations, or content
         - Do NOT repeat the input documents in your response
         - Your response must be parseable JSON
         - NO explanations, NO additional text, NO document repetition
-        
         
         RESPONSE FORMAT:
         {{

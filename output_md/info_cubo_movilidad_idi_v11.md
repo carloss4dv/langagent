@@ -1,68 +1,122 @@
-=== MEDIDAS ===
+# Información del Cubo: Movilidad
 
-** Movilidad **
-Número de movilidades de entrada realizadas.
+*Fecha de generación: 14/06/2025*
 
->Se recomienda utilizar la dimensión 'año de la movilidad' para filtrar esta medida en una fecha concreta.
+*Archivo fuente: info_cubo_movilidad_idi_v11.csv*
 
-=== DIMENSIONES ===
+---
 
-## DIMENSION: AÑO ##
+# Medidas
 
-Notas generales:
-- Permite clasificar las movilidades en función del año en que se realizaron.
+Las medidas son los valores numéricos que se pueden calcular y analizar en este cubo.
 
-## DIMENSION: Fecha de actualización ##
+## Movilidad
 
-Notas generales:
-- Es la fecha de la última recarga de datos.
+Número de movilidades de entrada realizadas. >Se recomienda utilizar la dimensión 'año de la movilidad' para filtrar esta medida en una fecha concreta.
 
-## DIMENSION: Investigador ##
+---
 
-Atributos:
-• Edad:
-Permite agrupar los rangos de edad de los investigadores en función de su fecha de nacimiento.
+# Dimensiones
 
->Valores posibles: 20 años o menos, 21 a 30, 31 a 40, 41 a 50, 51 a 60, 60 años o más.
+Las dimensiones permiten desglosar y filtrar los datos según diferentes criterios.
 
-• Grupo de investigación:
+## AÑO
+
+Permite clasificar las movilidades en función del año en que se realizaron.
+
+---
+
+## Investigador ‐ Edad
+
+Permite agrupar los rangos de edad de los investigadores en función de su fecha de nacimiento. 
+
+**Valores posibles:** 20 años o menos, 21 a 30, 31 a 40, 41 a 50, 51 a 60, 60 años o más.
+
+---
+
+## Investigador ‐ Grupo de investigación
+
 Permite clasificar los datos en función del grupo de investigación al que pertenecen los investigadores.
 
-• Instituto de investigación:
+---
+
+## Investigador ‐ Instituto de investigación
+
 Permite clasificar los datos en función del instituto universitario de investigación al que pertenecen los investigadores.
 
-• Macroárea:
-Permite clasificar los datos en función de la macroárea a la que pertenecen los investigadores.
+---
 
->Valores posibles: Artes y Humanidades, Ciencias, Ciencias Sociales y Jurídicas, Ciencias de la Salud, Ingeniería y
-Arquitectura.
+## Investigador ‐ Macroárea
 
-• Nacionalidad:
+Permite clasificar los datos en función de la macroárea a la que pertenecen los investigadores. 
+
+**Valores posibles:** Artes y Humanidades, Ciencias, Ciencias Sociales y Jurídicas, Ciencias de la Salud, Ingeniería y Arquitectura.
+
+---
+
+## Investigador ‐ Nacionalidad
+
 Permite clasificar los datos en función de la nacionalidad legal de los investigadores.
 
-• Sexo:
+---
+
+## Investigador ‐ Sexo
+
 Permite agrupar a los investigadores en función de su sexo.
 
-## DIMENSION: Movilidad ##
+---
 
-Atributos:
-• Duración:
+## Movilidad ‐ Duración
+
 Permite clasificar los datos en función de la duración de la movilidad en semanas.
 
-• Fecha de finalización:
+---
+
+## Movilidad ‐ Fecha de finalización
+
 Permite clasificar los datos en función de la fecha de finalización de la movilidad (año, trimestre, mes, día).
 
-• Fecha de inicio:
+---
+
+## Movilidad ‐ Fecha de inicio
+
 Permite clasificar los datos en función de la fecha de inicio de la movilidad (año, trimestre, mes, día).
 
-• Prórroga:
+---
+
+## Movilidad ‐ Prórroga
+
 Permite identificar los investigadores que realizan una prórroga de su movilidad (S) o no (N).
 
-• Tipo de entidad origen:
-Permite identificar el tipo de entidad de origen del investigador que realiza la movilidad.
+---
 
->Valores posibles: empresa, universidad, unidad de investigación.
+## Movilidad ‐ Tipo de entidad origen
 
-• Tipo de movilidad:
+Permite identificar el tipo de entidad de origen del investigador que realiza la movilidad. 
+
+**Valores posibles:** empresa, universidad, unidad de investigación.
+
+---
+
+## Movilidad ‐ Tipo de movilidad
+
 Permite clasificar las movilidades en función de su tipología (estancia o vinculación).
 
+---
+
+## Fecha de actualización
+
+Es la fecha de la última recarga de datos.
+
+---
+
+## Resumen
+
+- **Total de medidas:** 1
+- **Total de dimensiones:** 14
+- **Total de elementos:** 15
+
+
+---
+
+*Documento generado automáticamente mediante script de conversión de cubos CSV a Markdown.*

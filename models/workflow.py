@@ -245,7 +245,11 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                 current_retriever = adaptive_retrievers[chunk_strategy]
                 logger.info(f"Usando retriever adaptativo para chunks de {chunk_strategy} tokens")
             elif adaptive_retrievers:
-                logger.info(f"Usando retriever principal (estrategia {chunk_strategy} no disponible en retrievers adaptativos)")
+                # Si tenemos retrievers adaptativos pero la estrategia actual no está incluida,
+                # añadir el retriever principal con la estrategia actual para futuros usos
+                adaptive_retrievers[chunk_strategy] = retriever
+                current_retriever = retriever
+                logger.info(f"Añadiendo retriever principal como adaptativo para estrategia {chunk_strategy} tokens")
             else:
                 logger.info(f"Usando retriever principal (recuperación adaptativa deshabilitada)")
             
@@ -1177,8 +1181,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         
         # Obtener análisis de complejidad de la consulta con histórico
         query_analysis = analyze_segeda_query_complexity(query_to_analyze, granularity_history)
-        
-        # Sugerir estrategia alternativa basada en análisis MoG con histórico
+          # Sugerir estrategia alternativa basada en análisis MoG con histórico
         alternative_strategy = suggest_alternative_strategy_mog(current_strategy, evaluation_metrics, query_analysis, granularity_history)
         
         # Extraer métricas para determinar el tipo de cambio necesario
@@ -1186,6 +1189,9 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         context_precision = evaluation_metrics.get("context_precision", 0.0)
         faithfulness = evaluation_metrics.get("faithfulness", 0.0)
         answer_relevance = evaluation_metrics.get("answer_relevance", 0.0)
+        
+        # Obtener umbrales de evaluación
+        thresholds = CHUNK_STRATEGY_CONFIG["evaluation_thresholds"]
         
         # Obtener estrategias ordenadas dinámicamente
         strategies_sorted = sorted(CHUNK_STRATEGY_CONFIG["available_strategies"], key=int)
@@ -1272,13 +1278,12 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             
         Returns:
             dict: Estado actualizado con el resultado de la consulta SQL.
-        """
-        # Iniciar medición del nodo
+        """        # Iniciar medición del nodo
         node_context = metrics_collector.start_node("execute_query")
         
         try:
-            # Reutilizar la lógica de la función execute_query original
-            result_state = execute_query(state)
+            # Reutilizar la lógica de la función execute_sql_query original
+            result_state = execute_sql_query(state)
             success = not result_state.get("sql_result", "").startswith("Error")
             
             # Finalizar medición del nodo

@@ -19,6 +19,33 @@ from typing import Dict, List, Any, Optional
 from collections import defaultdict, Counter
 import sys
 
+def get_strategy_directories(metrics_dir: Path) -> List[str]:
+    """
+    Detecta dinámicamente los directorios de estrategias disponibles.
+    
+    Args:
+        metrics_dir: Directorio base de métricas
+        
+    Returns:
+        Lista de nombres de directorios de estrategias encontrados
+    """
+    if not metrics_dir.exists():
+        return []
+    
+    strategy_dirs = []
+    for item in metrics_dir.iterdir():
+        if item.is_dir():
+            # Verificar que el directorio contiene archivos de métricas
+            node_metrics = item / 'node_metrics.csv'
+            workflow_metrics = item / 'workflow_metrics.csv'
+            
+            # Considerar como directorio de estrategia si tiene al menos uno de los archivos
+            if node_metrics.exists() or workflow_metrics.exists():
+                strategy_dirs.append(item.name)
+    
+    # Ordenar para consistencia en el output
+    return sorted(strategy_dirs)
+
 def load_csv_data(file_path: Path) -> List[Dict[str, Any]]:
     """
     Carga datos de un archivo CSV.
@@ -77,7 +104,13 @@ def analyze_node_metrics(metrics_dir: Path) -> Dict[str, Any]:
     Returns:
         Diccionario con análisis por estrategia y nodo
     """
-    strategies = ['256', '512', '1024']
+    strategies = get_strategy_directories(metrics_dir)
+    if not strategies:
+        print(f"⚠️  No se encontraron directorios de estrategias en {metrics_dir}")
+        return {'by_strategy': {}, 'by_node': {}, 'global_stats': {}}
+    
+    print(f"📁 Estrategias detectadas: {', '.join(strategies)}")
+    
     analysis = {
         'by_strategy': {},
         'by_node': {},
@@ -184,7 +217,11 @@ def analyze_workflow_metrics(metrics_dir: Path) -> Dict[str, Any]:
     Returns:
         Diccionario con análisis de workflows
     """
-    strategies = ['256', '512', '1024']
+    strategies = get_strategy_directories(metrics_dir)
+    if not strategies:
+        print(f"⚠️  No se encontraron directorios de estrategias en {metrics_dir}")
+        return {'by_strategy': {}, 'comparison': {}, 'evaluation_metrics': {}}
+    
     analysis = {
         'by_strategy': {},
         'comparison': {},
@@ -285,7 +322,166 @@ def analyze_workflow_metrics(metrics_dir: Path) -> Dict[str, Any]:
     
     return analysis
 
-def print_table_report(node_analysis: Dict[str, Any], workflow_analysis: Dict[str, Any]):
+def analyze_llm_metrics(metrics_dir: Path) -> Dict[str, Any]:
+    """
+    Analiza las métricas de llamadas a LLMs de todas las estrategias.
+    
+    Args:
+        metrics_dir: Directorio base de métricas
+        
+    Returns:
+        Diccionario con análisis de llamadas LLM por estrategia
+    """
+    strategies = get_strategy_directories(metrics_dir)
+    if not strategies:
+        print(f"⚠️  No se encontraron directorios de estrategias en {metrics_dir}")
+        return {'by_strategy': {}, 'by_model': {}, 'global_stats': {}}
+    
+    analysis = {
+        'by_strategy': {},
+        'by_model': {},
+        'global_stats': {}
+    }
+    
+    all_llm_data = []
+    
+    for strategy in strategies:
+        strategy_dir = metrics_dir / strategy
+        llm_file = strategy_dir / 'llm_metrics.csv'
+        
+        if not llm_file.exists():
+            print(f"⚠️  Archivo LLM no encontrado: {llm_file}")
+            continue
+        
+        print(f"🤖 Analizando métricas de LLM para estrategia {strategy}...")
+        
+        # Cargar datos
+        data = load_csv_data(llm_file)
+        if not data:
+            continue
+        
+        # Convertir campos numéricos (basados en los headers reales del metrics_collector)
+        numeric_fields = ['duration_ms', 'prompt_length', 'response_length', 'memory_mb', 'call_order']
+        data = convert_numeric_fields(data, numeric_fields)
+        
+        all_llm_data.extend([(strategy, row) for row in data])
+        
+        # Análisis por estrategia (usando campos reales del metrics_collector)
+        durations = [row['duration_ms'] for row in data if row['duration_ms'] > 0]
+        prompt_lengths = [row['prompt_length'] for row in data if row['prompt_length'] > 0]
+        response_lengths = [row['response_length'] for row in data if row['response_length'] > 0]
+        
+        strategy_stats = {
+            'total_calls': len(data),
+            'success_rate': sum(1 for row in data if row.get('success', '').lower() == 'true') / len(data) if data else 0,
+            'avg_duration_ms': statistics.mean(durations) if durations else 0,
+            'median_duration_ms': statistics.median(durations) if durations else 0,
+            'min_duration_ms': min(durations) if durations else 0,
+            'max_duration_ms': max(durations) if durations else 0,
+            'avg_prompt_length': statistics.mean(prompt_lengths) if prompt_lengths else 0,
+            'avg_response_length': statistics.mean(response_lengths) if response_lengths else 0,
+            'total_prompt_chars': sum(prompt_lengths) if prompt_lengths else 0,
+            'total_response_chars': sum(response_lengths) if response_lengths else 0,
+            'by_model': {},
+            'by_operation': {}
+        }
+        
+        # Análisis por modelo dentro de la estrategia
+        models_in_strategy = defaultdict(list)
+        for row in data:
+            if row.get('model_name'):
+                models_in_strategy[row['model_name']].append(row)
+        
+        for model_name, model_data in models_in_strategy.items():
+            model_durations = [row['duration_ms'] for row in model_data if row['duration_ms'] > 0]
+            model_prompt_lengths = [row['prompt_length'] for row in model_data if row['prompt_length'] > 0]
+            model_response_lengths = [row['response_length'] for row in model_data if row['response_length'] > 0]
+            
+            strategy_stats['by_model'][model_name] = {
+                'calls': len(model_data),
+                'success_rate': sum(1 for row in model_data if row.get('success', '').lower() == 'true') / len(model_data),
+                'avg_duration_ms': statistics.mean(model_durations) if model_durations else 0,
+                'avg_prompt_length': statistics.mean(model_prompt_lengths) if model_prompt_lengths else 0,
+                'avg_response_length': statistics.mean(model_response_lengths) if model_response_lengths else 0
+            }
+        
+        # Análisis por operación (si existe el campo)
+        operations_in_strategy = defaultdict(list)
+        for row in data:
+            if row.get('operation') or row.get('node_name'):
+                operation = row.get('operation', row.get('node_name', 'unknown'))
+                operations_in_strategy[operation].append(row)
+        
+        for operation_name, operation_data in operations_in_strategy.items():
+            op_durations = [row['duration_ms'] for row in operation_data if row['duration_ms'] > 0]
+            op_prompt_lengths = [row['prompt_length'] for row in operation_data if row['prompt_length'] > 0]
+            
+            strategy_stats['by_operation'][operation_name] = {
+                'calls': len(operation_data),
+                'avg_duration_ms': statistics.mean(op_durations) if op_durations else 0,
+                'avg_prompt_length': statistics.mean(op_prompt_lengths) if op_prompt_lengths else 0
+            }
+        
+        analysis['by_strategy'][strategy] = strategy_stats
+    
+    # Análisis global por modelo (across strategies)
+    global_models = defaultdict(list)
+    for strategy, row in all_llm_data:
+        if row.get('model_name'):
+            global_models[row['model_name']].append((strategy, row))
+    
+    for model_name, model_data in global_models.items():
+        durations_by_strategy = defaultdict(list)
+        prompt_lengths_by_strategy = defaultdict(list)
+        response_lengths_by_strategy = defaultdict(list)
+        
+        for strategy, row in model_data:
+            if row['duration_ms'] > 0:
+                durations_by_strategy[strategy].append(row['duration_ms'])
+            if row['prompt_length'] > 0:
+                prompt_lengths_by_strategy[strategy].append(row['prompt_length'])
+            if row['response_length'] > 0:
+                response_lengths_by_strategy[strategy].append(row['response_length'])
+        
+        analysis['by_model'][model_name] = {
+            'total_calls': len(model_data),
+            'by_strategy': {}
+        }
+        
+        for strategy in strategies:
+            if strategy in durations_by_strategy or strategy in prompt_lengths_by_strategy:
+                durations = durations_by_strategy.get(strategy, [])
+                prompt_lengths = prompt_lengths_by_strategy.get(strategy, [])
+                response_lengths = response_lengths_by_strategy.get(strategy, [])
+                
+                analysis['by_model'][model_name]['by_strategy'][strategy] = {
+                    'calls': len([s for s, _ in model_data if s == strategy]),
+                    'avg_duration_ms': statistics.mean(durations) if durations else 0,
+                    'avg_prompt_length': statistics.mean(prompt_lengths) if prompt_lengths else 0,
+                    'avg_response_length': statistics.mean(response_lengths) if response_lengths else 0
+                }
+    
+    # Estadísticas globales
+    if all_llm_data:
+        all_durations = [row['duration_ms'] for _, row in all_llm_data if row['duration_ms'] > 0]
+        all_prompt_lengths = [row['prompt_length'] for _, row in all_llm_data if row['prompt_length'] > 0]
+        all_response_lengths = [row['response_length'] for _, row in all_llm_data if row['response_length'] > 0]
+        
+        analysis['global_stats'] = {
+            'total_llm_calls': len(all_llm_data),
+            'overall_avg_duration_ms': statistics.mean(all_durations) if all_durations else 0,
+            'overall_median_duration_ms': statistics.median(all_durations) if all_durations else 0,
+            'fastest_call_ms': min(all_durations) if all_durations else 0,
+            'slowest_call_ms': max(all_durations) if all_durations else 0,
+            'total_prompt_chars': sum(all_prompt_lengths) if all_prompt_lengths else 0,
+            'total_response_chars': sum(all_response_lengths) if all_response_lengths else 0,
+            'avg_prompt_length': statistics.mean(all_prompt_lengths) if all_prompt_lengths else 0,
+            'avg_response_length': statistics.mean(all_response_lengths) if all_response_lengths else 0
+        }
+    
+    return analysis
+
+def print_table_report(node_analysis: Dict[str, Any], workflow_analysis: Dict[str, Any], llm_analysis: Dict[str, Any]):
     """
     Imprime un reporte en formato tabla legible.
     """
@@ -299,12 +495,14 @@ def print_table_report(node_analysis: Dict[str, Any], workflow_analysis: Dict[st
     
     strategies = sorted(workflow_analysis['by_strategy'].keys())
     if strategies:
-        print(f"{'Estrategia':<12} {'Workflows':<10} {'Éxito %':<10} {'Tiempo Prom (ms)':<18} {'Reintentos Prom':<15}")
-        print("-" * 70)
+        print(f"{'Estrategia':<15} {'Workflows':<10} {'Éxito %':<10} {'Tiempo Prom (ms)':<18} {'Reintentos Prom':<15}")
+        print("-" * 73)
         
         for strategy in strategies:
             data = workflow_analysis['by_strategy'][strategy]
-            print(f"{strategy + ' tokens':<12} {data['total_workflows']:<10} "
+            # Formatear el nombre de la estrategia para que se vea mejor
+            strategy_name = f"{strategy}" if not strategy.isdigit() else f"{strategy} tokens"
+            print(f"{strategy_name:<15} {data['total_workflows']:<10} "
                   f"{data['success_rate']*100:.1f}%{'':<6} {data['avg_execution_time_ms']:<18.2f} "
                   f"{data['avg_retries']:<15.2f}")
     
@@ -313,9 +511,12 @@ def print_table_report(node_analysis: Dict[str, Any], workflow_analysis: Dict[st
         print(f"\n⚡ ANÁLISIS DE VELOCIDAD")
         print("-" * 30)
         comp = workflow_analysis['comparison']
-        print(f"🥇 Estrategia más rápida: {comp['fastest_strategy']['strategy']} tokens "
+        fastest_name = comp['fastest_strategy']['strategy'] if not comp['fastest_strategy']['strategy'].isdigit() else f"{comp['fastest_strategy']['strategy']} tokens"
+        slowest_name = comp['slowest_strategy']['strategy'] if not comp['slowest_strategy']['strategy'].isdigit() else f"{comp['slowest_strategy']['strategy']} tokens"
+        
+        print(f"🥇 Estrategia más rápida: {fastest_name} "
               f"({comp['fastest_strategy']['avg_time_ms']:.2f} ms)")
-        print(f"🐌 Estrategia más lenta: {comp['slowest_strategy']['strategy']} tokens "
+        print(f"🐌 Estrategia más lenta: {slowest_name} "
               f"({comp['slowest_strategy']['avg_time_ms']:.2f} ms)")
         
         speedup = comp['slowest_strategy']['avg_time_ms'] / comp['fastest_strategy']['avg_time_ms']
@@ -325,11 +526,12 @@ def print_table_report(node_analysis: Dict[str, Any], workflow_analysis: Dict[st
     if 'evaluation_metrics' in workflow_analysis and workflow_analysis['evaluation_metrics']:
         print(f"\n🎯 MÉTRICAS DE CALIDAD PROMEDIO")
         print("-" * 40)
-        print(f"{'Estrategia':<12} {'Faithfulness':<13} {'Precision':<11} {'Recall':<9} {'Relevance':<10}")
-        print("-" * 60)
+        print(f"{'Estrategia':<15} {'Faithfulness':<13} {'Precision':<11} {'Recall':<9} {'Relevance':<10}")
+        print("-" * 63)
         
         for strategy, metrics in workflow_analysis['evaluation_metrics'].items():
-            print(f"{strategy + ' tokens':<12} {metrics['avg_faithfulness']:<13.3f} "
+            strategy_name = f"{strategy}" if not strategy.isdigit() else f"{strategy} tokens"
+            print(f"{strategy_name:<15} {metrics['avg_faithfulness']:<13.3f} "
                   f"{metrics['avg_context_precision']:<11.3f} {metrics['avg_context_recall']:<9.3f} "
                   f"{metrics['avg_answer_relevance']:<10.3f}")
     
@@ -344,7 +546,8 @@ def print_table_report(node_analysis: Dict[str, Any], workflow_analysis: Dict[st
         # Header
         header = f"{'Nodo':<25}"
         for strategy in strategies:
-            header += f"{strategy + ' tokens':<15}"
+            strategy_name = f"{strategy}" if not strategy.isdigit() else f"{strategy} tokens"
+            header += f"{strategy_name:<15}"
         print(header)
         print("-" * (25 + 15 * len(strategies)))
         
@@ -360,27 +563,97 @@ def print_table_report(node_analysis: Dict[str, Any], workflow_analysis: Dict[st
                         row += f"{'N/A':<15}"
                 print(row)
     
+    # Métricas de LLM
+    if 'by_strategy' in llm_analysis and llm_analysis['by_strategy']:
+        print(f"\n🤖 MÉTRICAS DE LLAMADAS LLM")
+        print("-" * 55)
+        print(f"{'Estrategia':<15} {'Llamadas':<10} {'Éxito %':<10} {'Tiempo Prom (ms)':<18} {'Chars Prompt':<15}")
+        print("-" * 73)
+        
+        strategies = sorted(llm_analysis['by_strategy'].keys())
+        for strategy in strategies:
+            data = llm_analysis['by_strategy'][strategy]
+            strategy_name = f"{strategy}" if not strategy.isdigit() else f"{strategy} tokens"
+            print(f"{strategy_name:<15} {data['total_calls']:<10} "
+                  f"{data['success_rate']*100:.1f}%{'':<6} {data['avg_duration_ms']:<18.2f} "
+                  f"{data['avg_prompt_length']:<15.0f}")
+    
+    # Análisis de tamaños de texto
+    if 'by_strategy' in llm_analysis and llm_analysis['by_strategy']:
+        print(f"\n📄 ANÁLISIS DE TAMAÑOS DE TEXTO")
+        print("-" * 35)
+        
+        strategies = sorted(llm_analysis['by_strategy'].keys())
+        for strategy in strategies:
+            data = llm_analysis['by_strategy'][strategy]
+            strategy_name = f"{strategy}" if not strategy.isdigit() else f"{strategy} tokens"
+            print(f"📋 {strategy_name}:")
+            print(f"   ├─ Prompt promedio: {data['avg_prompt_length']:,.0f} caracteres")
+            print(f"   └─ Respuesta promedio: {data['avg_response_length']:,.0f} caracteres")
+    
+    # Análisis por modelo
+    if 'by_model' in llm_analysis and llm_analysis['by_model']:
+        print(f"\n🧠 RENDIMIENTO POR MODELO")
+        print("-" * 40)
+        print(f"{'Modelo':<25} {'Llamadas':<10} {'Tiempo Prom (ms)':<18} {'Chars Prompt':<15}")
+        print("-" * 68)
+        
+        for model_name, model_data in llm_analysis['by_model'].items():
+            total_calls = model_data['total_calls']
+            # Calcular promedios across estrategias
+            avg_duration = 0
+            avg_prompt_length = 0
+            strategy_count = 0
+            
+            for strategy, strategy_data in model_data['by_strategy'].items():
+                if strategy_data['avg_duration_ms'] > 0:
+                    avg_duration += strategy_data['avg_duration_ms']
+                    strategy_count += 1
+                if strategy_data['avg_prompt_length'] > 0:
+                    avg_prompt_length += strategy_data['avg_prompt_length']
+            
+            avg_duration = avg_duration / strategy_count if strategy_count > 0 else 0
+            avg_prompt_length = avg_prompt_length / strategy_count if strategy_count > 0 else 0
+            
+            print(f"{model_name:<25} {total_calls:<10} {avg_duration:<18.2f} {avg_prompt_length:<15.0f}")
+    
     # Estadísticas globales
     if 'global_stats' in node_analysis:
         stats = node_analysis['global_stats']
-        print(f"\n📈 ESTADÍSTICAS GLOBALES")
-        print("-" * 25)
+        print(f"\n📈 ESTADÍSTICAS GLOBALES - NODOS")
+        print("-" * 35)
         print(f"Total ejecuciones de nodos: {stats['total_node_executions']}")
         print(f"Tiempo promedio por nodo: {stats['overall_avg_time_ms']:.2f} ms")
         print(f"Tiempo mediano por nodo: {stats['overall_median_time_ms']:.2f} ms")
         print(f"Ejecución más rápida: {stats['fastest_execution_ms']:.2f} ms")
         print(f"Ejecución más lenta: {stats['slowest_execution_ms']:.2f} ms")
     
+    # Estadísticas globales LLM
+    if 'global_stats' in llm_analysis and llm_analysis['global_stats']:
+        stats = llm_analysis['global_stats']
+        print(f"\n🤖 ESTADÍSTICAS GLOBALES - LLM")
+        print("-" * 35)
+        print(f"Total llamadas LLM: {stats['total_llm_calls']}")
+        print(f"Tiempo promedio por llamada: {stats['overall_avg_duration_ms']:.2f} ms")
+        print(f"Tiempo mediano por llamada: {stats['overall_median_duration_ms']:.2f} ms")
+        print(f"Llamada más rápida: {stats['fastest_call_ms']:.2f} ms")
+        print(f"Llamada más lenta: {stats['slowest_call_ms']:.2f} ms")
+        print(f"Caracteres de prompt totales: {stats['total_prompt_chars']:,}")
+        print(f"Caracteres de respuesta totales: {stats['total_response_chars']:,}")
+        print(f"Prompt promedio: {stats['avg_prompt_length']:.0f} caracteres")
+        print(f"Respuesta promedio: {stats['avg_response_length']:.0f} caracteres")
+    
     print("\n" + "="*80)
 
-def save_json_report(node_analysis: Dict[str, Any], workflow_analysis: Dict[str, Any], output_file: str):
+def save_json_report(node_analysis: Dict[str, Any], workflow_analysis: Dict[str, Any], llm_analysis: Dict[str, Any], output_file: str):
     """
     Guarda el reporte completo en formato JSON.
     """
     report = {
         'timestamp': None,  # Se puede añadir
         'node_metrics': node_analysis,
-        'workflow_metrics': workflow_analysis
+        'workflow_metrics': workflow_analysis,
+        'llm_metrics': llm_analysis
     }
     
     with open(output_file, 'w', encoding='utf-8') as f:
@@ -443,15 +716,12 @@ def main():
     
     print(f"🔍 Analizando métricas en: {metrics_dir.absolute()}")
     
-    # Verificar que existen subdirectorios de estrategias
-    strategies_found = []
-    for strategy in ['256', '512', '1024']:
-        strategy_dir = metrics_dir / strategy
-        if strategy_dir.exists():
-            strategies_found.append(strategy)
+    # Detectar estrategias dinámicamente
+    strategies_found = get_strategy_directories(metrics_dir)
     
     if not strategies_found:
-        print(f"❌ Error: No se encontraron directorios de estrategias (256, 512, 1024) en {metrics_dir}")
+        print(f"❌ Error: No se encontraron directorios con archivos de métricas en {metrics_dir}")
+        print(f"💡 Asegúrate de que existen directorios que contengan 'node_metrics.csv' o 'workflow_metrics.csv'")
         sys.exit(1)
     
     print(f"📁 Estrategias encontradas: {', '.join(strategies_found)}")
@@ -460,14 +730,15 @@ def main():
     print("\n🔄 Iniciando análisis...")
     node_analysis = analyze_node_metrics(metrics_dir)
     workflow_analysis = analyze_workflow_metrics(metrics_dir)
+    llm_analysis = analyze_llm_metrics(metrics_dir)
     
     # Generar reporte según el formato solicitado
     if args.output_format == 'table':
-        print_table_report(node_analysis, workflow_analysis)
+        print_table_report(node_analysis, workflow_analysis, llm_analysis)
     
     elif args.output_format == 'json':
         output_file = args.output_file or 'metrics_report.json'
-        save_json_report(node_analysis, workflow_analysis, output_file)
+        save_json_report(node_analysis, workflow_analysis, llm_analysis, output_file)
         
     elif args.output_format == 'csv':
         output_file = args.output_file or 'metrics_summary.csv'

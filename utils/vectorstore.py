@@ -10,7 +10,7 @@ from typing import List, Optional
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 from langchain_core.retrievers import BaseRetriever
-import os
+import o
 
 from langagent.vectorstore import (
     VectorStoreFactory,

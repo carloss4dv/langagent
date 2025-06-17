@@ -39,7 +39,7 @@ class TextUnit:
 class DocumentAnalyzer:
     """Analizador de documentos para extraer estructura jerárquica"""
     
-    def __init__(self, data_dir: str = "data"):
+    def __init__(self, data_dir: str = "output_md"):
         self.data_dir = Path(data_dir)
         self.documents = []
         self.text_units = []
@@ -64,12 +64,11 @@ class DocumentAnalyzer:
         return documents
     
     def extract_sections(self, text: str) -> List[TextUnit]:
-        """Extrae secciones basadas en la estructura de los documentos"""
+        """Extrae secciones principales: # Medidas y # Dimensiones"""
         sections = []
         
-        # Patrones para identificar secciones
-        main_section_pattern = r'^=== (.+?) ===\s*$'
-        sub_section_pattern = r'^## (.+?) ##\s*$'
+        # Patrón para secciones principales H1 (# Medidas, # Dimensiones)
+        section_pattern = r'^# (.+?)$'
         
         lines = text.split('\n')
         current_section = []
@@ -79,13 +78,12 @@ class DocumentAnalyzer:
         for i, line in enumerate(lines):
             line_stripped = line.strip()
             
-            # Detectar inicio de sección principal
-            main_match = re.match(main_section_pattern, line_stripped)
-            sub_match = re.match(sub_section_pattern, line_stripped)
+            # Detectar inicio de sección principal H1
+            main_match = re.match(section_pattern, line_stripped)
             
-            if main_match or sub_match:
+            if main_match and main_match.group(1) in ['Medidas', 'Dimensiones']:
                 # Procesar sección anterior si existe
-                if current_section:
+                if current_section and current_section_name:
                     section_content = '\n'.join(current_section)
                     if section_content.strip():
                         sections.append(TextUnit(
@@ -99,13 +97,14 @@ class DocumentAnalyzer:
                 
                 # Iniciar nueva sección
                 current_section = [line]
-                current_section_name = main_match.group(1) if main_match else sub_match.group(1)
+                current_section_name = main_match.group(1)
                 start_pos = sum(len(lines[j]) + 1 for j in range(i))
             else:
-                current_section.append(line)
+                if current_section_name:  # Solo agregar si estamos dentro de una sección válida
+                    current_section.append(line)
         
         # Procesar última sección
-        if current_section:
+        if current_section and current_section_name:
             section_content = '\n'.join(current_section)
             if section_content.strip():
                 sections.append(TextUnit(
@@ -120,49 +119,138 @@ class DocumentAnalyzer:
         return sections
     
     def extract_paragraphs(self, text: str) -> List[TextUnit]:
-        """Extrae párrafos del texto"""
+        """Extrae párrafos como dimensiones completas con todos sus atributos"""
         paragraphs = []
         
-        # Dividir por líneas vacías (párrafos)
-        raw_paragraphs = re.split(r'\n\s*\n', text)
+        # Patrón para dimensiones/medidas H2 (## Dimensión)
+        dimension_pattern = r'^## (.+?)$'
+        
+        lines = text.split('\n')
+        current_paragraph = []
+        current_dimension_name = ""
         start_pos = 0
         
-        for para in raw_paragraphs:
-            para = para.strip()
-            if para:
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+            
+            # Detectar inicio de dimensión/medida H2
+            dimension_match = re.match(dimension_pattern, line_stripped)
+            
+            if dimension_match:
+                # Procesar párrafo anterior si existe
+                if current_paragraph and current_dimension_name:
+                    paragraph_content = '\n'.join(current_paragraph)
+                    if paragraph_content.strip():
+                        paragraphs.append(TextUnit(
+                            content=paragraph_content.strip(),
+                            unit_type='paragraph',
+                            char_count=len(paragraph_content),
+                            word_count=len(word_tokenize(paragraph_content)),
+                            start_pos=start_pos,
+                            end_pos=start_pos + len(paragraph_content)
+                        ))
+                
+                # Iniciar nuevo párrafo (dimensión completa)
+                current_paragraph = [line]
+                current_dimension_name = dimension_match.group(1)
+                start_pos = sum(len(lines[j]) + 1 for j in range(i))
+            else:
+                # Agregar línea al párrafo actual si estamos dentro de una dimensión
+                if current_dimension_name:
+                    # Incluir tanto atributos (###) como descripción
+                    if line_stripped and not line_stripped.startswith('# '):  # Evitar encabezados H1
+                        current_paragraph.append(line)
+                    elif not line_stripped:  # Incluir líneas vacías para mantener formato
+                        current_paragraph.append(line)
+        
+        # Procesar último párrafo
+        if current_paragraph and current_dimension_name:
+            paragraph_content = '\n'.join(current_paragraph)
+            if paragraph_content.strip():
                 paragraphs.append(TextUnit(
-                    content=para,
+                    content=paragraph_content.strip(),
                     unit_type='paragraph',
-                    char_count=len(para),
-                    word_count=len(word_tokenize(para)),
+                    char_count=len(paragraph_content),
+                    word_count=len(word_tokenize(paragraph_content)),
                     start_pos=start_pos,
-                    end_pos=start_pos + len(para)
+                    end_pos=start_pos + len(paragraph_content)
                 ))
-                start_pos += len(para) + 2  # +2 para el salto de línea
         
         return paragraphs
     
     def extract_sentences(self, text: str) -> List[TextUnit]:
-        """Extrae oraciones del texto"""
+        """Extrae oraciones como atributos individuales de dimensiones"""
         sentences = []
         
-        # Usar NLTK para tokenizar oraciones
-        sent_list = sent_tokenize(text)
+        # Patrón para atributos H3 (### Atributo)
+        attribute_pattern = r'^### (.+?)$'
+        
+        lines = text.split('\n')
+        current_sentence = []
+        current_attribute_name = ""
         start_pos = 0
         
-        for sent in sent_list:
-            sent = sent.strip()
-            if sent:
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+            
+            # Detectar inicio de atributo H3
+            attribute_match = re.match(attribute_pattern, line_stripped)
+            
+            if attribute_match:
+                # Procesar oración anterior si existe
+                if current_sentence and current_attribute_name:
+                    sentence_content = '\n'.join(current_sentence)
+                    if sentence_content.strip():
+                        sentences.append(TextUnit(
+                            content=sentence_content.strip(),
+                            unit_type='sentence',
+                            char_count=len(sentence_content),
+                            word_count=len(word_tokenize(sentence_content)),
+                            start_pos=start_pos,
+                            end_pos=start_pos + len(sentence_content)
+                        ))
+                
+                # Iniciar nueva oración (atributo completo)
+                current_sentence = [line]
+                current_attribute_name = attribute_match.group(1)
+                start_pos = sum(len(lines[j]) + 1 for j in range(i))
+            else:
+                # Agregar línea a la oración actual si estamos dentro de un atributo
+                if current_attribute_name:
+                    # Incluir descripción hasta el siguiente atributo, dimensión o sección
+                    if (line_stripped and 
+                        not line_stripped.startswith('###') and 
+                        not line_stripped.startswith('##') and 
+                        not line_stripped.startswith('#')):
+                        current_sentence.append(line)
+                    elif not line_stripped and len(current_sentence) > 1:  # Línea vacía = fin del atributo
+                        # Procesar oración actual
+                        sentence_content = '\n'.join(current_sentence)
+                        if sentence_content.strip():
+                            sentences.append(TextUnit(
+                                content=sentence_content.strip(),
+                                unit_type='sentence',
+                                char_count=len(sentence_content),
+                                word_count=len(word_tokenize(sentence_content)),
+                                start_pos=start_pos,
+                                end_pos=start_pos + len(sentence_content)
+                            ))
+                        # Resetear
+                        current_sentence = []
+                        current_attribute_name = ""
+        
+        # Procesar última oración
+        if current_sentence and current_attribute_name:
+            sentence_content = '\n'.join(current_sentence)
+            if sentence_content.strip():
                 sentences.append(TextUnit(
-                    content=sent,
+                    content=sentence_content.strip(),
                     unit_type='sentence',
-                    char_count=len(sent),
-                    word_count=len(word_tokenize(sent)),
+                    char_count=len(sentence_content),
+                    word_count=len(word_tokenize(sentence_content)),
                     start_pos=start_pos,
-                    end_pos=start_pos + len(sent)
+                    end_pos=start_pos + len(sentence_content)
                 ))
-                # Buscar la posición real de la siguiente oración
-                start_pos = text.find(sent, start_pos) + len(sent)
         
         return sentences
     
@@ -1052,7 +1140,7 @@ Este análisis ha generado los siguientes archivos:
                 labels.append(f'{unit_type.title()}s\n(n={len(units)})')
         
         if data_to_plot:
-            bp1 = ax1.boxplot(data_to_plot, tick_labels=labels, patch_artist=True)
+            bp1 = ax1.boxplot(data_to_plot, labels=labels, patch_artist=True)
             for patch, color in zip(bp1['boxes'], colors[:len(data_to_plot)]):
                 patch.set_facecolor(color)
         
