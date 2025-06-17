@@ -1,6 +1,6 @@
 # Información del Cubo: Índices Bibliométricos
 
-*Fecha de generación: 14/06/2025*
+*Fecha de generación: 17/06/2025*
 
 *Archivo fuente: info_cubo_indicesBibliometricos_v11.csv*
 

@@ -177,48 +177,17 @@ class DocumentUploader:
         logger.info(f"Eliminando documentos de cubos: {cubos_to_remove}")
         
         try:
-            # Para Milvus, usar delete con filtros
-            if hasattr(vectorstore, 'delete') and vectorstore.__class__.__name__ == "Milvus":
-                for cubo in cubos_to_remove:
-                    try:
-                        # Usar expresión de filtro de Milvus
-                        filter_expr = f'cubo_source == "{cubo}"'
-                        vectorstore.delete(filter=filter_expr)
-                        logger.info(f"Documentos del cubo {cubo} eliminados de Milvus")
-                    except Exception as e:
-                        logger.error(f"Error eliminando cubo {cubo} de Milvus: {e}")
-                        return False
-            
-            # Para Chroma, necesitamos obtener IDs y eliminar
-            elif hasattr(vectorstore, 'delete') and vectorstore.__class__.__name__ == "Chroma":
-                try:
-                    # Obtener todos los documentos con sus IDs
-                    all_data = vectorstore.get()
-                    ids_to_delete = []
-                    
-                    for i, metadata in enumerate(all_data.get('metadatas', [])):
-                        if metadata and 'cubo_source' in metadata:
-                            if metadata['cubo_source'] in cubos_to_remove:
-                                ids_to_delete.append(all_data['ids'][i])
-                    
-                    if ids_to_delete:
-                        vectorstore.delete(ids=ids_to_delete)
-                        logger.info(f"Eliminados {len(ids_to_delete)} documentos de Chroma")
-                    
-                except Exception as e:
-                    logger.error(f"Error eliminando documentos de Chroma: {e}")
-                    return False
-            
+            # Usar el método específico del handler de vectorstore
+            if hasattr(self.vectorstore_handler, 'remove_documents_by_cubo'):
+                return self.vectorstore_handler.remove_documents_by_cubo(vectorstore, cubos_to_remove)
             else:
-                logger.warning("Función de eliminación no soportada para este tipo de vectorstore")
+                logger.warning("Método de eliminación no implementado en el handler")
                 return False
                 
-            return True
-            
         except Exception as e:
             logger.error(f"Error general eliminando documentos: {e}")
             return False
-    
+
     def load_documents_intelligently(self, documents: List[Document], 
                                    collection_name: str = None,
                                    force_recreate: bool = False) -> bool:
@@ -296,15 +265,13 @@ class DocumentUploader:
                 source_documents=source_documents
             )
     
-    def create_adaptive_collections(self, documents: List[Document], 
-                                  chunk_sizes: List[int] = [256, 512, 1024]) -> Dict[str, bool]:
+    def create_adaptive_collections(self, documents: List[Document]) -> Dict[str, bool]:
         """
-        Crea colecciones adaptativas con diferentes tamaños de chunk.
+        Crea colecciones adaptativas con diferentes tamaños de chunk usando la configuración.
         Incluye lógica de versiones para cada colección.
         
         Args:
             documents: Lista de documentos a procesar
-            chunk_sizes: Lista de tamaños de chunk a crear
             
         Returns:
             Dict[str, bool]: Resultado de cada colección creada
@@ -312,15 +279,21 @@ class DocumentUploader:
         results = {}
         adaptive_collections = VECTORSTORE_CONFIG.get("adaptive_collections", {})
         
-        for chunk_size in chunk_sizes:
-            strategy = str(chunk_size)
-            collection_name = adaptive_collections.get(strategy)
-            
-            if not collection_name:
-                logger.warning(f"No se encontró configuración para chunk_size {chunk_size}")
+        if not adaptive_collections:
+            logger.warning("No se encontraron colecciones adaptativas configuradas")
+            return {}
+        
+        logger.info(f"Colecciones adaptativas configuradas: {adaptive_collections}")
+        
+        for strategy, collection_name in adaptive_collections.items():
+            # Extraer el tamaño de chunk de la estrategia (asumiendo formato "256", "512", etc.)
+            try:
+                chunk_size = int(strategy)
+            except ValueError:
+                logger.warning(f"Estrategia {strategy} no es un número válido, saltando...")
                 continue
             
-            logger.info(f"Procesando colección adaptativa para {chunk_size} tokens...")
+            logger.info(f"Procesando colección adaptativa {collection_name} para {chunk_size} tokens...")
             
             # Verificar si existe la colección
             existing_vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, collection_name)
@@ -363,6 +336,33 @@ class DocumentUploader:
                     results[strategy] = True
             else:
                 # Crear nueva colección adaptativa
+                logger.info(f"Creando nueva colección adaptativa {collection_name}...")
+                
+                # Crear text splitter específico para este tamaño
+                adaptive_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=chunk_size,
+                    chunk_overlap=int(chunk_size * 0.1)  # 10% de overlap
+                )
+                
+                # Chunkar documentos con el tamaño específico
+                adaptive_chunks = adaptive_splitter.split_documents(documents)
+                
+                # Crear vectorstore para esta estrategia
+                vectorstore = self.vectorstore_handler.create_vectorstore(
+                    documents=adaptive_chunks,
+                    embeddings=self.embeddings,
+                    collection_name=collection_name,
+                    drop_old=True
+                )
+                
+                results[strategy] = vectorstore is not None
+            
+            if results[strategy]:
+                logger.info(f"Colección {collection_name} procesada correctamente")
+            else:
+                logger.error(f"Error procesando colección {collection_name}")
+        
+        return results
                 logger.info(f"Creando nueva colección adaptativa {collection_name}...")
                 
                 # Crear text splitter específico para este tamaño

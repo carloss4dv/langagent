@@ -1,6 +1,6 @@
 # Información del Cubo: Egresados
 
-*Fecha de generación: 14/06/2025*
+*Fecha de generación: 17/06/2025*
 
 *Archivo fuente: info_cubo_egresados_v23.csv*
 

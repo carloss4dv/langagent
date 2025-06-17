@@ -109,6 +109,20 @@ class VectorStoreBase(ABC):
         """
         pass
     
+    @abstractmethod
+    def remove_documents_by_cubo(self, vectorstore, cubos_to_remove: List[str]) -> bool:
+        """
+        Elimina documentos de cubos específicos de la vectorstore.
+        
+        Args:
+            vectorstore: Instancia de vectorstore
+            cubos_to_remove: Lista de cubos a eliminar
+            
+        Returns:
+            bool: True si se eliminaron correctamente
+        """
+        pass
+    
     @staticmethod
     def add_metadata_to_documents(documents: List[Document], cubo: str, ambito: Optional[str] = None) -> List[Document]:
         """

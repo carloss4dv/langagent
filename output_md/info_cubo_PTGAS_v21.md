@@ -1,6 +1,6 @@
 # Información del Cubo: Personal Técnico, de Gestión y Administración y Servicios (PTGAS)
 
-*Fecha de generación: 14/06/2025*
+*Fecha de generación: 17/06/2025*
 
 *Archivo fuente: info_cubo_PTGAS_v21.csv*
 

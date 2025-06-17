@@ -1,6 +1,6 @@
 # Información del Cubo: Matrieepp V11
 
-*Fecha de generación: 14/06/2025*
+*Fecha de generación: 17/06/2025*
 
 *Archivo fuente: info_cubo_matriEEPP_v11.csv*
 

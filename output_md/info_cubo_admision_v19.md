@@ -1,6 +1,6 @@
 # Información del Cubo: Admisión
 
-*Fecha de generación: 14/06/2025*
+*Fecha de generación: 17/06/2025*
 
 *Archivo fuente: info_cubo_admision_v19.csv*
 

@@ -1,6 +1,6 @@
 # Información del Cubo: Matrícula
 
-*Fecha de generación: 14/06/2025*
+*Fecha de generación: 17/06/2025*
 
 *Archivo fuente: info_cubo_matricula_v24.csv*
 

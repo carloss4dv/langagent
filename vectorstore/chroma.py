@@ -367,3 +367,41 @@ class ChromaVectorStore(VectorStoreBase):
             logger.warning(f"No se pudieron obtener metadatos existentes: {e}")
             
         return existing_values
+    
+    def remove_documents_by_cubo(self, vectorstore, cubos_to_remove: List[str]) -> bool:
+        """
+        Elimina documentos de cubos específicos de la vectorstore Chroma.
+        
+        Args:
+            vectorstore: Instancia de Chroma vectorstore
+            cubos_to_remove: Lista de cubos a eliminar
+            
+        Returns:
+            bool: True si se eliminaron correctamente
+        """
+        if not cubos_to_remove:
+            return True
+            
+        logger.info(f"Eliminando documentos de cubos en Chroma: {cubos_to_remove}")
+        
+        try:
+            # Para Chroma, obtener IDs y eliminar
+            all_data = vectorstore.get()
+            ids_to_delete = []
+            
+            for i, metadata in enumerate(all_data.get('metadatas', [])):
+                if metadata and 'cubo_source' in metadata:
+                    if metadata['cubo_source'] in cubos_to_remove:
+                        ids_to_delete.append(all_data['ids'][i])
+            
+            if ids_to_delete:
+                vectorstore.delete(ids=ids_to_delete)
+                logger.info(f"Eliminados {len(ids_to_delete)} documentos de Chroma")
+            else:
+                logger.info("No se encontraron documentos para eliminar")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error eliminando documentos de Chroma: {e}")
+            return False

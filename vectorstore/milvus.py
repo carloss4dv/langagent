@@ -163,6 +163,47 @@ class MilvusVectorStore(VectorStoreBase):
         
         return connection_args
     
+    def remove_documents_by_cubo(self, vectorstore, cubos_to_remove: List[str]) -> bool:
+        """
+        Elimina documentos de cubos específicos de la vectorstore Milvus.
+        
+        Args:
+            vectorstore: Instancia de Milvus vectorstore
+            cubos_to_remove: Lista de cubos a eliminar
+            
+        Returns:
+            bool: True si se eliminaron correctamente
+        """
+        if not cubos_to_remove:
+            return True
+            
+        logger.info(f"Eliminando documentos de cubos en Milvus: {cubos_to_remove}")
+        
+        try:
+            # Para Milvus, usar delete con filtros
+            for cubo in cubos_to_remove:
+                try:
+                    # Usar expresión de filtro de Milvus
+                    filter_expr = f'cubo_source == "{cubo}"'
+                    
+                    # Verificar si la colección soporta delete
+                    if hasattr(vectorstore, 'col') and vectorstore.col is not None:
+                        # Usar la colección directamente para delete
+                        vectorstore.col.delete(expr=filter_expr)
+                        logger.info(f"Documentos del cubo {cubo} eliminados de Milvus")
+                    else:
+                        logger.warning(f"No se pudo acceder a la colección para eliminar cubo {cubo}")
+                        
+                except Exception as e:
+                    logger.error(f"Error eliminando cubo {cubo} de Milvus: {e}")
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error general eliminando documentos de Milvus: {e}")
+            return False
+
     def create_vectorstore(self, documents: List[Document], embeddings: Embeddings, 
                          collection_name: str, **kwargs) -> Milvus:
         """
@@ -293,7 +334,8 @@ class MilvusVectorStore(VectorStoreBase):
                 "collection_name": collection_name,
                 "embedding": embeddings,
                 "drop_old": drop_old,
-                "consistency_level": consistency_level
+                "consistency_level": consistency_level,
+                "auto_id": True  # Añadir auto_id=True para evitar problemas con IDs
             }
             
             # Si queremos usar particionamiento por ámbito o cubo

@@ -42,7 +42,7 @@ VECTORSTORE_CONFIG = {
     
     # Configuración para enfoque de colección única
     "use_single_collection": True,  # Usar una sola colección para todos los documentos
-    "collection_name": "default_collection_307",  # Nombre de la colección unificada
+    "collection_name": "default_collection_646",  # Nombre de la colección unificada
     "always_update_collection": False,  # Si se deben actualizar documentos en colección existente
     "filter_by_metadata": True,  # Habilitar filtrado por metadatos en consultas
     
@@ -59,9 +59,9 @@ VECTORSTORE_CONFIG = {
     
     # Configuración de Recuperación Adaptativa - Múltiples Colecciones
     "adaptive_collections": {
-        "167": "default_collection_369",
-        "307": "default_collection_646", 
-        "755": "default_collection_1094",
+        "369": "default_collection_369",
+        "646": "default_collection_646", 
+        "1094": "default_collection_1094",
     },
     "use_adaptive_retrieval": True,  # Activar recuperación adaptativa
     
