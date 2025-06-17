@@ -582,36 +582,72 @@ class MilvusVectorStore(VectorStoreBase):
         
         logger.info(f"Añadiendo {len(documents)} documentos a la colección")
         
-        # Verificar si source_documents es None o está vacío
+        # VERIFICACIÓN CRUCIAL: Si la generación de contexto está activa, necesitamos source_documents
+        if self.use_context_generation:
+            if not self.context_generator:
+                logger.error("ERROR: Generación de contexto está activada pero el generador no está configurado")
+                logger.error("Asegúrate de llamar a set_context_generator() antes de cargar documentos")
+                return False
+                
+            if not source_documents or len(source_documents) == 0:
+                logger.error("ERROR: Generación de contexto está activada pero no se proporcionaron documentos originales")
+                logger.error("Los source_documents son necesarios para generar contexto para los chunks")
+                logger.error("Verifica que se estén pasando correctamente desde el DocumentUploader")
+                return False
+            
+            logger.info("✓ Generación de contexto activada y configurada correctamente")
+            logger.info(f"✓ Generador de contexto: {type(self.context_generator)}")
+            logger.info(f"✓ Documentos originales disponibles: {len(source_documents)}")
+        
+        # Verificar si source_documents es None o está vacío y log apropiado
         if source_documents is None or len(source_documents) == 0:
-            logger.warning("No se proporcionaron documentos originales (source_documents es None o está vacío)")
             if self.use_context_generation and self.context_generator:
-                logger.warning("Se activó la generación de contexto pero no se proporcionaron documentos originales")
-                logger.warning("La generación de contexto se omitirá para estos documentos")
+                logger.error("PROBLEMA: Generación de contexto activada pero no hay documentos originales")
+                logger.error("Esto impedirá la generación de contexto. Verifica la configuración del DocumentUploader")
+                return False
+            else:
+                logger.info("No se proporcionaron documentos originales (generación de contexto desactivada)")
         
         # Si tenemos documentos originales y el generador de contexto está configurado,
         # generamos contexto antes de añadir los documentos
         if self.use_context_generation and self.context_generator and source_documents and len(source_documents) > 0:
-            logger.info(f"Generando contexto para chunks antes de añadirlos a la colección...")
+            logger.info(f"🚀 INICIANDO GENERACIÓN DE CONTEXTO para {len(documents)} chunks")
+            logger.info(f"📚 Documentos originales disponibles: {len(source_documents)}")
             
             # Mostrar ejemplo de los primeros documentos originales
-            for i, doc in enumerate(list(source_documents.items())[:1]):
-                source_path, source_doc = doc
-                logger.info(f"Documento original {i}: {source_path}")
-                logger.info(f"  Contenido: {source_doc.page_content[:100]}...")
+            for i, (source_path, source_doc) in enumerate(list(source_documents.items())[:2]):
+                logger.info(f"📄 Documento original {i+1}: {source_path}")
+                logger.info(f"   📝 Contenido: {source_doc.page_content[:100]}...")
             
             # Añadir mensaje claro que indique que comienza la generación de contexto
-            logger.info("=== INICIANDO GENERACIÓN DE CONTEXTO ===")
+            logger.info("=" * 70)
+            logger.info("🤖 INICIANDO GENERACIÓN DE CONTEXTO CON LLM")
+            logger.info("=" * 70)
+            
             documents = self._generate_context_for_chunks(documents, source_documents)
-            logger.info("=== FINALIZADA GENERACIÓN DE CONTEXTO ===")
+            
+            logger.info("=" * 70)
+            logger.info("✅ GENERACIÓN DE CONTEXTO COMPLETADA")
+            logger.info("=" * 70)
             
             # Comprobar si algún documento tiene contexto
             docs_with_context = sum(1 for doc in documents if doc.metadata.get('context_generation', '').strip())
-            logger.info(f"Documentos con contexto generado: {docs_with_context}/{len(documents)}")
+            logger.info(f"📊 Documentos con contexto generado: {docs_with_context}/{len(documents)}")
+            
+            if docs_with_context == 0:
+                logger.warning("⚠️  ATENCIÓN: Ningún documento obtuvo contexto generado")
+                logger.warning("⚠️  Verifica que el generador de contexto esté funcionando correctamente")
+            elif docs_with_context < len(documents):
+                logger.info(f"ℹ️  {len(documents) - docs_with_context} documentos no obtuvieron contexto (posiblemente ya lo tenían)")
+            else:
+                logger.info("🎉 Todos los documentos obtuvieron contexto exitosamente")
+                
         elif self.use_context_generation and not self.context_generator:
-            logger.warning("Generación de contexto activada pero el generador no está configurado")
+            logger.error("❌ ERROR: Generación de contexto activada pero el generador no está configurado")
+            logger.error("❌ Llama a set_context_generator() antes de cargar documentos")
+            return False
         else:
-            logger.info("Generación de contexto desactivada para esta operación")
+            logger.info("ℹ️  Generación de contexto desactivada para esta operación")
             
         # Verificar y asegurar que los documentos tienen los metadatos requeridos
         # Usar tqdm para mostrar el progreso
@@ -665,20 +701,30 @@ class MilvusVectorStore(VectorStoreBase):
             
         try:
             # Para colecciones grandes, dividir en lotes
-            batch_size = 100  # Reducir batch_size para Milvus
+            batch_size = 50  # Reducir aún más para evitar problemas
             total_docs = len(documents)
             
             if total_docs <= batch_size:
                 # Si son pocos documentos, añadirlos directamente
                 logger.info(f"Añadiendo {total_docs} documentos a la colección Milvus")
                 
-                # Para Milvus, usar add_documents sin especificar IDs (auto_id=True)
-                # Pasar ids=None explícitamente para forzar auto-generación
-                ids = vectorstore.add_documents(documents, ids=None)
-                logger.info(f"Se han añadido {total_docs} documentos correctamente con IDs autogenerados")
-                logger.info(f"Primeros IDs generados: {ids[:5] if ids else 'No se devolvieron IDs'}")
+                # Verificar una vez más que auto_id está configurado correctamente
+                try:
+                    if hasattr(vectorstore, 'col') and vectorstore.col is not None:
+                        schema = vectorstore.col.schema
+                        if not schema.auto_id or not schema.primary_field.auto_id:
+                            logger.error("La colección TODAVÍA no tiene auto_id configurado correctamente")
+                            logger.error("Es necesario recrear la colección desde cero")
+                            return False
+                except Exception as final_check_error:
+                    logger.warning(f"Error en verificación final de auto_id: {final_check_error}")
+                
+                # Intentar añadir directamente sin especificar IDs
+                ids = vectorstore.add_documents(documents)
+                logger.info(f"Se han añadido {total_docs} documentos correctamente")
+                logger.info(f"IDs generados: {len(ids) if ids else 0}")
             else:
-                # Para muchos documentos, procesarlos en lotes
+                # Para muchos documentos, procesarlos en lotes más pequeños
                 logger.info(f"Añadiendo {total_docs} documentos en lotes de {batch_size}")
                 
                 # Crear barra de progreso para el proceso de adición por lotes
@@ -961,7 +1007,7 @@ class MilvusVectorStore(VectorStoreBase):
         """
         Carga documentos en la vectorstore.
         Si la colección no existe, la crea.
-        Si la generación de contexto está activa, crea una colección vacía primero.
+        Si la generación de contexto está activa, maneja el contexto apropiadamente.
         
         Args:
             documents: Lista de documentos a cargar
@@ -984,31 +1030,39 @@ class MilvusVectorStore(VectorStoreBase):
         # Obtener el nombre de la colección
         collection_name = VECTORSTORE_CONFIG.get("collection_name", "default_collection")
         
-        # Si la generación de contexto está activa, crear una colección vacía primero
-        if self.use_context_generation:
-            logger.info("Generación de contexto activa: creando colección vacía primero")
-            empty_doc = Document(
-                page_content="Documento de inicialización", 
-                metadata={"source": "init", "ambito": "general", "cubo_source": "general"}
-            )
-            vectorstore = self.create_vectorstore([empty_doc], embeddings, collection_name, drop_old=True)
-            if vectorstore is None:
-                logger.error("No se pudo crear la colección vacía")
-                return False
-        else:
-            # Intentar cargar la vectorstore existente
-            vectorstore = self.load_vectorstore(embeddings, collection_name)
+        # Intentar cargar la vectorstore existente
+        vectorstore = self.load_vectorstore(embeddings, collection_name)
+        
+        if vectorstore is None:
+            # Si no existe, crear una nueva
+            logger.info("Creando nueva vectorstore...")
             
-            if vectorstore is None:
-                # Si no existe, crear una nueva
+            # Si la generación de contexto está activa, crear una colección vacía primero
+            if self.use_context_generation:
+                logger.info("Generación de contexto activa: creando colección vacía primero")
+                empty_doc = Document(
+                    page_content="Documento de inicialización", 
+                    metadata={"source": "init", "ambito": "general", "cubo_source": "general", "context_generation": ""}
+                )
+                vectorstore = self.create_vectorstore([empty_doc], embeddings, collection_name, drop_old=True)
+                if vectorstore is None:
+                    logger.error("No se pudo crear la colección vacía")
+                    return False
+                
+                # Ahora añadir los documentos reales con generación de contexto
+                return self.add_documents_to_collection(vectorstore, documents, source_documents)
+            else:
+                # Sin generación de contexto, crear directamente
                 vectorstore = self.create_vectorstore(documents, embeddings, collection_name)
                 if vectorstore is None:
                     logger.error("No se pudo crear la vectorstore")
                     return False
-                    
-        # Añadir los documentos a la colección
-        return self.add_documents_to_collection(vectorstore, documents, source_documents)
-
+                return True
+        else:
+            # La colección ya existe, añadir los documentos
+            logger.info("Vectorstore existente encontrado - añadiendo documentos...")
+            return self.add_documents_to_collection(vectorstore, documents, source_documents)
+    
     def get_existing_documents_metadata(self, vectorstore, field: str = "source") -> set:
         """
         Obtiene metadatos de documentos existentes para verificar duplicados.

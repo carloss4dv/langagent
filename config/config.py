@@ -50,10 +50,10 @@ VECTORSTORE_CONFIG = {
     "use_hybrid_search": True,  # Activar búsqueda híbrida (vectorial + texto completo)
     
     # Configuración de generación de contexto
-    "use_context_generation": False,  # Activar generación de contexto para chunks
+    "use_context_generation": True,  # Activar generación de contexto para chunks
     "log_context_generation": True,  # Mostrar logs detallados de la generación de contexto
-    "context_batch_size": 20,        # Chunks por lote
-    "context_max_workers": 3,        # Hilos concurrentes (no más de 5 para evitar rate limits)
+    "context_batch_size": 10,        # Chunks por lote (reducido para mejor control)
+    "context_max_workers": 2,        # Hilos concurrentes (reducido para evitar problemas)
     "skip_existing_context": True,   # Saltar chunks con contexto existente
     "persist_directory": "./vectordb",  # Directorio para persistir la vectorstore Chroma
     
