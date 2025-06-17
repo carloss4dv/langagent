@@ -1300,6 +1300,92 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
             
             return error_state
 
+    def sql_db_query(state):
+        """
+        Ejecuta la consulta SQL generada contra la base de datos.
+        """
+        logger.info("---SQL DB QUERY---")
+        
+        # Extraer la consulta SQL del campo generation
+        sql_query = None
+        if "generation" in state:
+            sql_query = extract_sql_query_from_generation(state["generation"])
+        elif "sql_query" in state:
+            sql_query = state["sql_query"]
+        
+        if not sql_query:
+            logger.error("No se pudo extraer la consulta SQL")
+            return {
+                **state,
+                "sql_result": "Error: No se pudo extraer la consulta SQL",
+                "sql_query": None
+            }
+        
+        logger.info(f"Consulta SQL extraída: {sql_query}")
+        
+        try:
+            # Ejecutar la consulta
+            result = db_handler.execute_query(sql_query)
+            
+            logger.info(f"Resultado de la consulta: {result}")
+            
+            return {
+                **state,
+                "sql_result": result,
+                "sql_query": sql_query
+            }
+        except Exception as e:
+            logger.error(f"Error al ejecutar consulta SQL: {str(e)}")
+            return {
+                **state,
+                "sql_result": f"Error al ejecutar consulta: {str(e)}",
+                "sql_query": sql_query
+            }
+
+    def extract_sql_query_from_generation(generation_text):
+        """
+        Extrae la consulta SQL del campo generation que viene en formato JSON.
+        
+        Args:
+            generation_text (str): Texto del campo generation
+            
+        Returns:
+            str: Consulta SQL extraída o None si no se encuentra
+        """
+        try:
+            # Limpiar el texto
+            generation_text = generation_text.strip()
+            
+            # Buscar el patrón JSON que contiene la query
+            json_pattern = r'\{\s*"query":\s*"([^"]+)"\s*\}'
+            match = re.search(json_pattern, generation_text)
+            
+            if match:
+                return match.group(1)
+            
+            # Si no funciona con regex, intentar parsear como JSON línea por línea
+            lines = generation_text.split('\n')
+            for line in lines:
+                line = line.strip()
+                if line.startswith('{') and '"query"' in line:
+                    try:
+                        json_data = json.loads(line)
+                        if "query" in json_data:
+                            return json_data["query"]
+                    except json.JSONDecodeError:
+                        continue
+            
+            # Si todo falla, buscar cualquier SELECT statement
+            sql_pattern = r'(SELECT\s+.*?)(?=\n\s*\n|\n\s*$|$)'
+            match = re.search(sql_pattern, generation_text, re.IGNORECASE | re.DOTALL)
+            if match:
+                return match.group(1).strip()
+                
+        except Exception as e:
+            logger.error(f"Error al extraer SQL del generation: {str(e)}")
+        
+        return None
+
     # Añadir nodos al grafo
     workflow.add_node("entry_point", lambda state: state)  # Nodo dummy para entrada condicional
     workflow.add_node("rewrite_query", rewrite_query)
@@ -1312,6 +1398,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
     workflow.add_node("increment_retry_count", increment_retry_count)
     workflow.add_node("execute_query", execute_query_with_metrics)
     workflow.add_node("generate_sql_interpretation", generate_sql_interpretation)
+    workflow.add_node("sql_db_query", sql_db_query)
     
     # Definir entrada condicional - flujo con query rewriting condicional
     workflow.set_entry_point("entry_point")

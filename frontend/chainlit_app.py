@@ -483,8 +483,26 @@ async def on_message(message: cl.Message):
         temp_consulta_mode = True
         user_message = user_message[10:]  # Remover "/consulta " del inicio
     
-    # Procesar la consulta con el agente, pasando explícitamente el estado de consulta
-    result = agent.run(user_message, is_consulta=temp_consulta_mode)
+    # Mostrar mensaje de procesamiento
+    processing_msg = await cl.Message(
+        content="🔄 Procesando consulta...",
+        author="Sistema"
+    ).send()
+    
+    try:
+        # Procesar la consulta con el agente
+        result = agent.run(user_message, is_consulta=temp_consulta_mode)
+        
+        # Actualizar el mensaje de procesamiento
+        await processing_msg.remove()
+        
+    except Exception as e:
+        await processing_msg.remove()
+        await cl.Message(
+            content=f"❌ Error al procesar la consulta: {str(e)}",
+            author="Sistema"
+        ).send()
+        return
     
     # Si necesitamos clarificación sobre el ámbito
     if result.get("type") == "clarification_needed":
@@ -510,12 +528,21 @@ async def on_message(message: cl.Message):
         
         await cl.Message(content=ambito_info).send()
     
-    # Si hay una consulta SQL, mostrarla
-    if "sql_query" in result:
+    # Mostrar la respuesta
+    if "generation" in result:
+        await cl.Message(content=result["generation"]).send()
+    
+    # Si hay documentos recuperados, mostrarlos
+    if "documents" in result:
+        docs_content = "\n\n".join(result["documents"])
+        await cl.Message(content=f"📚 **Documentos recuperados**:\n{docs_content}").send()
+    
+    # Si hay una consulta SQL, mostrarla (extraída del workflow)
+    if "sql_query" in result and result["sql_query"]:
         await cl.Message(content=f"🔍 **Consulta SQL generada**:\n```sql\n{result['sql_query']}\n```").send()
     
     # Si hay resultados SQL, mostrarlos
-    if "sql_result" in result:
+    if "sql_result" in result and result["sql_result"] is not None:
         # Si es una visualización, intentar crear un gráfico
         if result.get("is_visualization", False):
             try:
@@ -530,6 +557,53 @@ async def on_message(message: cl.Message):
                 await cl.Message(content=f"📊 **Resultados SQL**:\n{result['sql_result']}").send()
         else:
             await cl.Message(content=f"📊 **Resultados SQL**:\n{result['sql_result']}").send()
+    elif result.get("sql_query") and result.get("sql_result") is None:
+        await cl.Message(content="⚠️ **La consulta SQL se generó pero no se ejecutó o no devolvió resultados**").send()
+
+def extract_sql_from_generation(generation_text):
+    """
+    Extrae la consulta SQL del campo generation que viene en formato JSON.
+    
+    Args:
+        generation_text (str): Texto del campo generation
+        
+    Returns:
+        str: Consulta SQL extraída o None si no se encuentra
+    """
+    try:
+        # Limpiar el texto para extraer solo el JSON
+        generation_text = generation_text.strip()
+        
+        # Buscar el patrón JSON que contiene la query
+        json_pattern = r'\{\s*"query":\s*"([^"]+)"\s*\}'
+        match = re.search(json_pattern, generation_text)
+        
+        if match:
+            return match.group(1)
+        
+        # Si no funciona con regex, intentar parsear como JSON
+        # Extraer la primera línea que parece ser JSON
+        lines = generation_text.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line.startswith('{') and '"query"' in line:
+                try:
+                    json_data = json.loads(line)
+                    if "query" in json_data:
+                        return json_data["query"]
+                except json.JSONDecodeError:
+                    continue
+        
+        # Si todo falla, buscar cualquier SELECT statement
+        sql_pattern = r'(SELECT\s+.*?)(?:\n|$)'
+        match = re.search(sql_pattern, generation_text, re.IGNORECASE | re.DOTALL)
+        if match:
+            return match.group(1).strip()
+            
+    except Exception as e:
+        print(f"Error al extraer SQL del generation: {str(e)}")
+    
+    return None
 
 def run_chainlit(port=8000):
     """
