@@ -24,7 +24,7 @@ LLM_CONFIG = {
 
 # Configuración de Vector Store
 VECTORSTORE_CONFIG = {
-    "chunk_size": 167,         # Tamaño de los fragmentos de texto para indexación
+    "chunk_size": 369,         # Tamaño de los fragmentos de texto para indexación
     "chunk_overlap": 50,        # Superposición entre fragmentos
     "k_retrieval": 12,          # Número de documentos a recuperar
     "similarity_threshold": 0.7,  # Umbral mínimo de similitud para considerar un documento relevante
@@ -55,11 +55,9 @@ VECTORSTORE_CONFIG = {
     "context_batch_size": 10,        # Chunks por lote (reducido para mejor control)
     "context_max_workers": 2,        # Hilos concurrentes (reducido para evitar problemas)
     "skip_existing_context": True,   # Saltar chunks con contexto existente
-    "persist_directory": "./vectordb",  # Directorio para persistir la vectorstore Chroma
-      # Configuración de Recuperación Adaptativa - Múltiples Colecciones
+    "persist_directory": "./vectordb",  # Directorio para persistir la vectorstore Chroma    # Configuración de Recuperación Adaptativa - Múltiples Colecciones
     "adaptive_collections": {
-        "167": "default_collection_167",   # Chunk size pequeño (actual)
-        "369": "default_collection_369",   # Chunk size mediano
+        "369": "default_collection_369",   # Chunk size pequeño
         "646": "default_collection_646",   # Chunk size grande (actual)
         "1094": "default_collection_1094", # Chunk size muy grande
     },

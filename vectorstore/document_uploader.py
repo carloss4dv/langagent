@@ -31,10 +31,7 @@ class DocumentUploader:
         """
         self.vectorstore_handler = vectorstore_handler
         self.embeddings = embeddings
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=VECTORSTORE_CONFIG["chunk_size"],
-            chunk_overlap=VECTORSTORE_CONFIG["chunk_overlap"]
-        )
+        # No inicializar text_splitter aquí - se creará dinámicamente según la colección
     
     def extract_cubo_and_version(self, source: str) -> Tuple[str, int]:
         """
@@ -183,8 +180,7 @@ class DocumentUploader:
             else:
                 logger.warning("Método de eliminación no implementado en el handler")
                 return False
-                
-        except Exception as e:
+                  except Exception as e:
             logger.error(f"Error general eliminando documentos: {e}")
             return False
     
@@ -207,6 +203,10 @@ class DocumentUploader:
             return False
         
         collection_name = collection_name or VECTORSTORE_CONFIG.get("collection_name", "default_collection")
+        
+        # Extraer chunk_size del nombre de la colección
+        chunk_size = self.extract_chunk_size_from_collection(collection_name)
+        text_splitter = self.create_text_splitter(chunk_size)
         
         # Intentar cargar vectorstore existente
         existing_vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, collection_name)
@@ -369,4 +369,42 @@ class DocumentUploader:
                 logger.error(f"Error procesando colección {collection_name}")
         
         return results
-                
+    
+    def extract_chunk_size_from_collection(self, collection_name: str) -> int:
+        """
+        Extrae el tamaño de chunk del nombre de la colección.
+        
+        Args:
+            collection_name: Nombre de la colección (ej: default_collection_369)
+            
+        Returns:
+            int: Tamaño de chunk extraído, o el valor por defecto si no se encuentra
+        """
+        # Buscar patrón de números en el nombre de la colección
+        import re
+        match = re.search(r'_(\d+)(?:_|$)', collection_name)
+        if match:
+            chunk_size = int(match.group(1))
+            logger.info(f"Tamaño de chunk extraído de '{collection_name}': {chunk_size}")
+            return chunk_size
+        
+        # Si no se encuentra, usar el chunk_size por defecto de la configuración
+        default_size = VECTORSTORE_CONFIG.get("chunk_size", 646)
+        logger.warning(f"No se pudo extraer chunk_size de '{collection_name}', usando default: {default_size}")
+        return default_size
+    
+    def create_text_splitter(self, chunk_size: int) -> RecursiveCharacterTextSplitter:
+        """
+        Crea un text_splitter con el tamaño de chunk especificado.
+        
+        Args:
+            chunk_size: Tamaño de chunk a usar
+            
+        Returns:
+            RecursiveCharacterTextSplitter: Splitter configurado
+        """
+        chunk_overlap = int(chunk_size * 0.1)  # 10% de overlap
+        return RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap
+        )
