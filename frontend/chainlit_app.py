@@ -504,7 +504,7 @@ async def on_message(message: cl.Message):
         icon = "✅" if consulta_mode else "❌"
         await cl.Message(
             content=f"{icon} **Modo consulta {status}**",
-            author="Sistema"  # Corregido: era "autor"
+            autor="Sistema"
         ).send()
         return
     
@@ -575,26 +575,26 @@ async def on_message(message: cl.Message):
     
     # Si hay resultados SQL, mostrarlos
     if "sql_result" in result and result["sql_result"] is not None:
-        sql_result = result["sql_result"]
-        
-        # Verificar si es un error
-        if isinstance(sql_result, str) and ("Error" in sql_result or "error" in sql_result):
-            await cl.Message(content=f"❌ **Error en consulta SQL**:\n{sql_result}").send()
+        # Si es una visualización, intentar crear un gráfico
+        if result.get("is_visualization", False):
+            try:
+                df = format_sql_result(result["sql_result"], result.get("sql_query"))
+                if not df.empty:
+                    # Crear un gráfico usando los datos del DataFrame
+                    chart = cl.Chart(df)
+                    await chart.send()
+            except Exception as e:
+                print(f"Error al crear visualización: {str(e)}")
+                # Si falla la visualización, mostrar la tabla
+                await cl.Message(content=f"📊 **Resultados SQL**:\n{result['sql_result']}").send()
         else:
-            # Si es una visualización, intentar crear un gráfico
-            if result.get("is_visualization", False):
-                try:
-                    df = format_sql_result(sql_result, result.get("sql_query"))
-                    if not df.empty:
-                        # Crear un gráfico usando los datos del DataFrame
-                        chart = cl.Chart(df)
-                        await chart.send()
-                except Exception as e:
-                    print(f"Error al crear visualización: {str(e)}")
-                    # Si falla la visualización, mostrar la tabla
-                    await cl.Message(content=f"📊 **Resultados SQL**:\n{sql_result}").send()
-            else:
-                await cl.Message(content=f"📊 **Resultados SQL**:\n{sql_result}").send()
+            await cl.Message(content=f"📊 **Resultados SQL**:\n{result['sql_result']}").send()
+    elif result.get("sql_query") and result.get("sql_result") is None:
+        await cl.Message(content="⚠️ **La consulta SQL se generó pero no se ejecutó o no devolvió resultados**").send()
+
+def extract_sql_from_generation(generation_text):
+    """
+    Extrae la consulta SQL del campo generation que viene en formato JSON.
     
     Args:
         generation_text (str): Texto del campo generation

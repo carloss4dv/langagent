@@ -316,19 +316,28 @@ def should_terminate_workflow(retry_count: int, generation: str, evaluation_metr
     return False
 
 
-def execute_sql_query(sql_query: str, sql_config: Dict[str, Any]) -> str:
+def execute_sql_query(state, sql_config: Dict[str, Any]) -> dict:
     """
-    Ejecuta una consulta SQL y devuelve el resultado.
+    Ejecuta una consulta SQL y devuelve el resultado actualizado en el estado.
     
     Args:
-        sql_query (str): Consulta SQL a ejecutar
-        sql_config (Dict[str, Any): Configuración de la base de datos
+        state (dict): Estado actual del grafo
+        sql_config (Dict[str, Any]): Configuración de la base de datos
         
     Returns:
-        str: Resultado de la consulta o mensaje de error
+        dict: Estado actualizado con el resultado de la consulta
     """
     from langchain_community.utilities import SQLDatabase
     from langchain_community.tools.sql_database.tool import QuerySQLDatabaseTool
+    
+    # Extraer la consulta SQL del estado
+    sql_query = state.get("sql_query")
+    if not sql_query:
+        logger.error("No hay consulta SQL en el estado")
+        return {
+            **state,
+            "sql_result": "Error: No se encontró consulta SQL para ejecutar"
+        }
     
     # Extraer la consulta SQL del formato si es necesario
     clean_sql_query = extract_sql_query_from_response(sql_query)
@@ -344,66 +353,26 @@ def execute_sql_query(sql_query: str, sql_config: Dict[str, Any]) -> str:
             # Ejecutar la consulta
             result = execute_query_tool.invoke(clean_sql_query)
             logger.info("Consulta ejecutada con éxito.")
-            return result
+            return {
+                **state,
+                "sql_result": result,
+                "sql_query": clean_sql_query
+            }
             
         else:
             error_msg = "Error: No se ha configurado la URI de la base de datos"
             logger.error(error_msg)
-            return error_msg
+            return {
+                **state,
+                "sql_result": error_msg,
+                "sql_query": clean_sql_query
+            }
             
     except Exception as e:
         error_msg = f"Error al ejecutar la consulta SQL: {str(e)}"
         logger.error(error_msg)
-        return error_msg
-
-def safe_get_attribute(obj, attr, default=None):
-    """
-    Obtiene un atributo de un objeto de forma segura.
-    
-    Args:
-        obj: Objeto del cual obtener el atributo
-        attr: Nombre del atributo
-        default: Valor por defecto si no existe o hay error
-        
-    Returns:
-        Valor del atributo o valor por defecto
-    """
-    try:
-        if isinstance(obj, dict):
-            return obj.get(attr, default)
-        elif hasattr(obj, attr):
-            return getattr(obj, attr, default)
-        else:
-            return default
-    except:
-        return default
-
-def process_sql_result(result):
-    """
-    Procesa el resultado de una consulta SQL de forma segura.
-    
-    Args:
-        result: Resultado de la consulta SQL
-        
-    Returns:
-        Resultado procesado
-    """
-    try:
-        # Si es un string, devolverlo tal como está
-        if isinstance(result, str):
-            return result
-        
-        # Si es una lista de tuplas, procesarla
-        if isinstance(result, list):
-            return result
-        
-        # Si tiene atributos como un objeto, intentar extraer información
-        if hasattr(result, '__dict__'):
-            return str(result)
-        
-        # Por defecto, convertir a string
-        return str(result)
-        
-    except Exception as e:
-        logger.error(f"Error al procesar resultado SQL: {str(e)}")
-        return f"Error al procesar resultado: {str(e)}"
+        return {
+            **state,
+            "sql_result": error_msg,
+            "sql_query": clean_sql_query
+        }
