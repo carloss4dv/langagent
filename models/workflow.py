@@ -1271,23 +1271,23 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
 
     def execute_query_with_metrics(state):
         """
-        Ejecuta la consulta SQL generada con métricas integradas.
-        
-        Args:
-            state (dict): Estado actual del grafo.
-            
-        Returns:
-            dict: Estado actualizado con el resultado de la consulta SQL.
-        """        # Iniciar medición del nodo
-        node_context = metrics_collector.start_node("execute_query")
-        
+        Ejecuta la consulta SQL extraída y maneja las métricas.
+        """
         try:
-            # Reutilizar la lógica de la función execute_sql_query original
-            result_state = execute_sql_query(state, SQL_CONFIG)
-            success = not result_state.get("sql_result", "").startswith("Error")
+            # Extraer la consulta SQL del estado
+            sql_query = None
+            if "generation" in state:
+                sql_query = extract_sql_query_from_generation(state["generation"])
+            elif "sql_query" in state:
+                sql_query = state["sql_query"]
             
-            # Finalizar medición del nodo
-            metrics_collector.end_node(node_context, result_state, success=success)
+            if not sql_query:
+                logger.error("No se pudo extraer la consulta SQL")
+                return {
+                    **state,
+                    "sql_result": "Error: No se pudo extraer la consulta SQL",
+                    "sql_query": None
+                }
             
             return result_state
             
