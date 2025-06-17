@@ -239,12 +239,13 @@ class LangChainAgent:
             llm=self.llm3
         )
     
-    def run(self, query):
+    def run(self, query, is_consulta=False):
         """
         Ejecuta el agente con una consulta del usuario.
         
         Args:
             query (str): Consulta del usuario.
+            is_consulta (bool): Si está en modo consulta.
             
         Returns:
             Dict: Resultado de la ejecución del agente.
@@ -252,7 +253,10 @@ class LangChainAgent:
         print_title(f"Consulta: {query}")
         
         # Primero, identificar el ámbito
-        ambito_result = self.ambito_app.invoke({"question": query})
+        ambito_result = self.ambito_app.invoke({
+            "question": query,
+            "is_consulta": is_consulta
+        })
         
         # Si necesitamos clarificación, devolver la pregunta
         if ambito_result.get("needs_clarification"):
@@ -268,7 +272,7 @@ class LangChainAgent:
                 "question": query,
                 "ambito": ambito_result["ambito"],
                 "cubos": ambito_result["cubos"],
-                "is_consulta": ambito_result.get("is_consulta", False),
+                "is_consulta": ambito_result.get("is_consulta", is_consulta),
                 "retry_count": 0,
                 "evaluation_metrics": {},
                 "granularity_history": self.granularity_history.copy()
@@ -284,14 +288,14 @@ class LangChainAgent:
             # Añadir información del ámbito al resultado
             result["ambito"] = ambito_result["ambito"]
             result["cubos"] = ambito_result["cubos"]
-            result["is_consulta"] = ambito_result.get("is_consulta", False)
+            result["is_consulta"] = ambito_result.get("is_consulta", is_consulta)
             
             return result
         
         # Si no se pudo identificar el ámbito, ejecutar el workflow principal con la consulta original
         default_state = {
             "question": query,
-            "is_consulta": ambito_result.get("is_consulta", False),  # Pasar el estado del modo consulta
+            "is_consulta": is_consulta,
             "retry_count": 0,
             "evaluation_metrics": {},
             "granularity_history": self.granularity_history.copy()  # Pasar historial persistente

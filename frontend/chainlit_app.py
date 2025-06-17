@@ -290,7 +290,7 @@ def format_sql_result(result_str: Union[str, List[Tuple]], sql_query: str = None
             
             # Si no podemos extraer columnas de la consulta o no coinciden, usar inferencia
             if not columns:
-                if len(data) > 0 and len(data[0]) == 8:
+                if len(data) > 0 and len(data[0] == 8):
                     # Para el caso específico del ejemplo de personal docente
                     columns = [
                         "Categoría", "Cantidad", "Porcentaje", 
@@ -452,51 +452,12 @@ async def on_chat_start():
     """
     Inicializa la conversación mostrando la información de los ámbitos disponibles.
     """
-    # Crear la acción de modo consulta
-    consulta_action = cl.Action(
-        name="toggle_consulta",
-        value="toggle",
-        label="🔍 Activar modo consulta",
-        description="Activa el modo consulta para realizar consultas SQL directas"
-    )
+    # Mostrar información de los ámbitos con instrucciones para activar modo consulta
+    welcome_content = get_ambitos_info() + "\n\n---\n\n🔍 **Modo Consulta**: Para activar el modo consulta, escribe `/consulta` al inicio de tu mensaje.\n📝 **Ejemplo**: `/consulta ¿Cuántos estudiantes hay matriculados?`"
     
-    # Mostrar información de los ámbitos con la acción
     await cl.Message(
-        content=get_ambitos_info(),
-        author="Sistema",
-        actions=[consulta_action]
-    ).send()
-
-@cl.action_callback("toggle_consulta")
-async def on_toggle_consulta(action):
-    """
-    Maneja el toggle del modo consulta.
-    """
-    global consulta_mode
-    consulta_mode = not consulta_mode
-    
-    if consulta_mode:
-        action_label = "🔍 Desactivar modo consulta"
-        status_message = "✅ **Modo consulta activado** - Las consultas se procesarán como consultas SQL directas"
-        action_description = "Desactiva el modo consulta"
-    else:
-        action_label = "🔍 Activar modo consulta"
-        status_message = "❌ **Modo consulta desactivado** - Las consultas se procesarán normalmente"
-        action_description = "Activa el modo consulta para realizar consultas SQL directas"
-    
-    # Crear la nueva acción con el estado actualizado
-    new_action = cl.Action(
-        name="toggle_consulta",
-        value="toggle",
-        label=action_label,
-        description=action_description
-    )
-    
-    # Enviar mensaje de estado con la nueva acción
-    await cl.Message(
-        content=status_message,
-        author="Sistema",
-        actions=[new_action]
+        content=welcome_content,
+        author="Sistema"
     ).send()
 
 @cl.on_message
@@ -505,12 +466,25 @@ async def on_message(message: cl.Message):
     global consulta_mode
     user_message = message.content
     
-    # Procesar la consulta con el agente, pasando el estado del modo consulta
-    result = agent.run(user_message)
+    # Verificar si el usuario quiere activar/desactivar modo consulta
+    if user_message.strip().lower() == "/consulta":
+        consulta_mode = not consulta_mode
+        status = "activado" if consulta_mode else "desactivado"
+        icon = "✅" if consulta_mode else "❌"
+        await cl.Message(
+            content=f"{icon} **Modo consulta {status}**",
+            author="Sistema"
+        ).send()
+        return
     
-    # Añadir el estado del modo consulta al resultado
-    if isinstance(result, dict):
-        result["is_consulta"] = consulta_mode
+    # Verificar si el mensaje comienza con /consulta
+    temp_consulta_mode = consulta_mode
+    if user_message.startswith("/consulta "):
+        temp_consulta_mode = True
+        user_message = user_message[10:]  # Remover "/consulta " del inicio
+    
+    # Procesar la consulta con el agente
+    result = agent.run(user_message)
     
     # Si necesitamos clarificación sobre el ámbito
     if result.get("type") == "clarification_needed":
@@ -529,12 +503,33 @@ async def on_message(message: cl.Message):
         if result.get("is_visualization", False):
             ambito_info += "\n🎨 **Tipo de consulta**: Visualización"
         
-        if result.get("is_consulta", False):
-            ambito_info += "\n🔍 **Modo consulta**: Activado"
+        if temp_consulta_mode:
+            ambito_info += "\n🔍 **Modo consulta**: Activado para esta consulta"
+        elif consulta_mode:
+            ambito_info += "\n🔍 **Modo consulta**: Activado globalmente"
         
         await cl.Message(content=ambito_info).send()
     
-    # ...existing code...
+    # Si hay una consulta SQL, mostrarla
+    if "sql_query" in result:
+        await cl.Message(content=f"🔍 **Consulta SQL generada**:\n```sql\n{result['sql_query']}\n```").send()
+    
+    # Si hay resultados SQL, mostrarlos
+    if "sql_result" in result:
+        # Si es una visualización, intentar crear un gráfico
+        if result.get("is_visualization", False):
+            try:
+                df = format_sql_result(result["sql_result"], result.get("sql_query"))
+                if not df.empty:
+                    # Crear un gráfico usando los datos del DataFrame
+                    chart = cl.Chart(df)
+                    await chart.send()
+            except Exception as e:
+                print(f"Error al crear visualización: {str(e)}")
+                # Si falla la visualización, mostrar la tabla
+                await cl.Message(content=f"📊 **Resultados SQL**:\n{result['sql_result']}").send()
+        else:
+            await cl.Message(content=f"📊 **Resultados SQL**:\n{result['sql_result']}").send()
 
 def run_chainlit(port=8000):
     """

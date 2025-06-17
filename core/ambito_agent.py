@@ -58,7 +58,7 @@ def create_ambito_workflow(retriever: any, llm: any):
         state["is_visualization"] = False
         state["needs_clarification"] = False
         state["clarification_question"] = None
-        state["is_consulta"] = state.get("is_consulta", False)  # Mantener el estado del modo consulta
+        state["is_consulta"] = state.get("is_consulta", False)
         
         # Palabras clave para identificar visualizaciones
         visualization_keywords = [
