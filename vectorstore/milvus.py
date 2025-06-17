@@ -335,7 +335,7 @@ class MilvusVectorStore(VectorStoreBase):
                 "embedding": embeddings,
                 "drop_old": drop_old,
                 "consistency_level": consistency_level,
-                "auto_id": True  # Añadir auto_id=True para evitar problemas con IDs
+                "auto_id": True  # Asegurar que auto_id está siempre en True
             }
             
             # Si queremos usar particionamiento por ámbito o cubo
@@ -368,6 +368,8 @@ class MilvusVectorStore(VectorStoreBase):
                 del vs_kwargs["partition_key_field"]
             
             try:
+                # Asegurar que auto_id sigue siendo True
+                vs_kwargs["auto_id"] = True
                 vectorstore = Milvus.from_documents(
                     documents=documents,
                     **vs_kwargs
@@ -391,6 +393,8 @@ class MilvusVectorStore(VectorStoreBase):
                 
                 # Reintentar con los documentos corregidos
                 try:
+                    # Asegurar que auto_id sigue siendo True
+                    vs_kwargs["auto_id"] = True
                     vectorstore = Milvus.from_documents(
                         documents=documents,
                         **vs_kwargs
@@ -661,14 +665,17 @@ class MilvusVectorStore(VectorStoreBase):
             
         try:
             # Para colecciones grandes, dividir en lotes
-            batch_size = 1000
+            batch_size = 100  # Reducir batch_size para Milvus
             total_docs = len(documents)
             
             if total_docs <= batch_size:
                 # Si son pocos documentos, añadirlos directamente
-                logger.info(f"Añadiendo {total_docs} documentos a la colección")
-                vectorstore.add_documents(documents)
-                logger.info(f"Se han añadido {total_docs} documentos correctamente")
+                logger.info(f"Añadiendo {total_docs} documentos a la colección Milvus")
+                
+                # Para Milvus, usar add_documents sin especificar IDs (auto_id=True)
+                ids = vectorstore.add_documents(documents)
+                logger.info(f"Se han añadido {total_docs} documentos correctamente con IDs autogenerados")
+                logger.info(f"Primeros IDs generados: {ids[:5] if ids else 'No se devolvieron IDs'}")
             else:
                 # Para muchos documentos, procesarlos en lotes
                 logger.info(f"Añadiendo {total_docs} documentos en lotes de {batch_size}")
@@ -676,6 +683,7 @@ class MilvusVectorStore(VectorStoreBase):
                 # Crear barra de progreso para el proceso de adición por lotes
                 total_batches = (total_docs + batch_size - 1) // batch_size
                 with tqdm(total=total_batches, desc="Añadiendo documentos", unit="lote") as progress_bar:
+                    all_ids = []
                     for i in range(0, total_docs, batch_size):
                         end_idx = min(i + batch_size, total_docs)
                         batch = documents[i:end_idx]
@@ -684,18 +692,82 @@ class MilvusVectorStore(VectorStoreBase):
                         current_batch = i // batch_size + 1
                         progress_bar.set_description(f"Añadiendo lote {current_batch}/{total_batches} ({len(batch)} docs)")
                         
-                        # Añadir el lote
-                        vectorstore.add_documents(batch)
-                        
-                        # Actualizar la barra de progreso
-                        progress_bar.update(1)
+                        try:
+                            # Añadir el lote sin especificar IDs (auto_id=True)
+                            batch_ids = vectorstore.add_documents(batch)
+                            if batch_ids:
+                                all_ids.extend(batch_ids)
+                            
+                            # Actualizar la barra de progreso
+                            progress_bar.update(1)
+                            
+                        except Exception as batch_error:
+                            logger.error(f"Error añadiendo lote {current_batch}: {str(batch_error)}")
+                            
+                            # Si el error es sobre IDs, intentar una vez más con documentos limpios
+                            if "auto_id" in str(batch_error) or "valid ids" in str(batch_error):
+                                logger.warning("Error relacionado con IDs - verificando configuración auto_id")
+                                
+                                # Verificar si la colección tiene auto_id habilitado
+                                try:
+                                    if hasattr(vectorstore, 'col') and vectorstore.col is not None:
+                                        schema = vectorstore.col.schema
+                                        logger.info(f"Schema de la colección: {schema}")
+                                        
+                                        # Intentar añadir sin metadatos problemáticos como test
+                                        clean_batch = []
+                                        for doc in batch:
+                                            # Crear una copia limpia del documento
+                                            clean_doc = Document(
+                                                page_content=doc.page_content,
+                                                metadata=doc.metadata.copy()
+                                            )
+                                            clean_batch.append(clean_doc)
+                                        
+                                        batch_ids = vectorstore.add_documents(clean_batch)
+                                        if batch_ids:
+                                            all_ids.extend(batch_ids)
+                                        logger.info(f"Lote {current_batch} añadido exitosamente después del reintento")
+                                        progress_bar.update(1)
+                                        
+                                    else:
+                                        logger.error("No se pudo acceder a la colección para verificar schema")
+                                        raise batch_error
+                                        
+                                except Exception as retry_error:
+                                    logger.error(f"Error en reintento del lote {current_batch}: {str(retry_error)}")
+                                    raise batch_error
+                            else:
+                                raise batch_error
                 
                 logger.info(f"Se han añadido {total_docs} documentos correctamente en {total_batches} lotes")
+                logger.info(f"Total de IDs generados: {len(all_ids)}")
             
             return True
             
         except Exception as e:
-            logger.error(f"Error al añadir documentos a la colección: {str(e)}")
+            logger.error(f"Error al añadir documentos a la colección Milvus: {str(e)}")
+            
+            # Log adicional para debugging
+            if "auto_id" in str(e) or "valid ids" in str(e):
+                logger.error("Error relacionado con generación automática de IDs en Milvus")
+                logger.error("Verificando si la colección está configurada correctamente con auto_id=True")
+                
+                # Intentar diagnosticar el problema
+                try:
+                    if hasattr(vectorstore, 'col') and vectorstore.col is not None:
+                        logger.info(f"Colección: {vectorstore.col.name}")
+                        logger.info(f"Descripción: {vectorstore.col.description}")
+                        
+                        # Verificar schema
+                        schema = vectorstore.col.schema
+                        logger.info(f"Schema de la colección: {schema}")
+                        for field in schema.fields:
+                            logger.info(f"Campo: {field.name}, Tipo: {field.dtype}, Auto ID: {field.auto_id}")
+                            
+                except Exception as diag_error:
+                    logger.error(f"Error en diagnóstico: {diag_error}")
+            
             return False
     
 
