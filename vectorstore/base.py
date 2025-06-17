@@ -95,6 +95,20 @@ class VectorStoreBase(ABC):
         """
         pass
     
+    @abstractmethod
+    def get_existing_documents_metadata(self, vectorstore, field: str = "source") -> set:
+        """
+        Obtiene metadatos de documentos existentes para verificar duplicados.
+        
+        Args:
+            vectorstore: Instancia de vectorstore
+            field: Campo de metadata a verificar
+            
+        Returns:
+            set: Conjunto de valores únicos del campo especificado
+        """
+        pass
+    
     @staticmethod
     def add_metadata_to_documents(documents: List[Document], cubo: str, ambito: Optional[str] = None) -> List[Document]:
         """
@@ -141,4 +155,4 @@ class VectorStoreFactory:
         elif vector_db_type.lower() == "milvus":
             return MilvusVectorStore()
         else:
-            raise ValueError(f"Tipo de vectorstore no soportado: {vector_db_type}") 
+            raise ValueError(f"Tipo de vectorstore no soportado: {vector_db_type}")

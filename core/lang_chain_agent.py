@@ -40,6 +40,7 @@ from langagent.config.config import (
     PATHS_CONFIG,
     SQL_CONFIG
 )
+from langagent.vectorstore.document_uploader import DocumentUploader
 
 # Usar el sistema de logging centralizado
 from langagent.config.logging_config import get_logger
@@ -96,6 +97,9 @@ class LangChainAgent:
         # Obtener la instancia de vectorstore
         self.vectorstore_handler = VectorStoreFactory.get_vectorstore_instance(self.vector_db_type)
         
+        # Componente de carga de documentos
+        self.document_uploader = None
+        
         self.setup_agent()
 
     def setup_agent(self):
@@ -118,65 +122,21 @@ class LangChainAgent:
         logger.info("Configurando embeddings...")
         self.embeddings = create_embeddings()
         
+        # Crear DocumentUploader
+        self.document_uploader = DocumentUploader(self.vectorstore_handler, self.embeddings)
+        
         # Configurar generador de contexto si está habilitado
         if VECTORSTORE_CONFIG.get("use_context_generation", False):
             logger.info("Configurando generador de contexto...")
-            chunk_size = VECTORSTORE_CONFIG.get("chunk_size", 512)
-            logger.info(f"Configurando generador de contexto con chunk_size: {chunk_size}")
-            context_generator = create_context_generator(self.llm, chunk_size=chunk_size)
-            self.vectorstore_handler.set_context_generator(context_generator)
+            self._setup_context_generator()
         
-        # Cargar documentos
-        logger.info("Cargando documentos...")
-        documents = load_documents_from_directory(self.data_dir)
-        chunked_documents = RecursiveCharacterTextSplitter(
-            chunk_size=VECTORSTORE_CONFIG["chunk_size"],
-            chunk_overlap=VECTORSTORE_CONFIG["chunk_overlap"]
-        ).split_documents(documents)
+        # Cargar documentos usando DocumentUploader
+        self._load_documents_with_uploader()
         
-        # Cargar consultas guardadas si existe el directorio
-        if self.consultas_dir and os.path.exists(self.consultas_dir):
-            logger.info("Cargando consultas guardadas...")
-            consultas = load_consultas_guardadas(self.consultas_dir)
-            documents.extend(consultas)
+        # Cargar vectorstore principal
+        self.vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, VECTORSTORE_CONFIG["collection_name"])
         
-        # Crear diccionario de documentos originales para generación de contexto
-        source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents)}
-        
-        # Cargar o crear vectorstore
-        if self.vector_db_type == "milvus":
-            self.vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, VECTORSTORE_CONFIG["collection_name"])
-            if self.vectorstore:
-                logger.info("Vectorstore existente cargado correctamente - no se cargarán documentos")
-            else:
-                logger.info("Vectorstore no encontrado, creando nueva vectorstore...")
-                logger.info("Cargando documentos en vectorstore...")
-                if self.vectorstore_handler.load_documents(chunked_documents, source_documents=source_documents, embeddings=self.embeddings):
-                    logger.info("Documentos cargados en vectorstore correctamente")
-                    # Cargar el vectorstore recién creado
-                    self.vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, VECTORSTORE_CONFIG["collection_name"])
-                else:
-                    logger.error("Error al cargar documentos en vectorstore")
-        elif self.vector_db_type == "chroma":
-            # Agregar lógica para Chroma
-            collection_name = VECTORSTORE_CONFIG.get("collection_name", "default_collection")
-            logger.info(f"Intentando cargar vectorstore Chroma: {collection_name}")
-            self.vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, collection_name)
-            if self.vectorstore:
-                logger.info("Vectorstore Chroma existente cargado correctamente - no se cargarán documentos")
-            else:
-                logger.info("Vectorstore Chroma no encontrado, creando nueva vectorstore...")
-                self.vectorstore = self.vectorstore_handler.create_vectorstore(
-                    documents=chunked_documents,
-                    embeddings=self.embeddings,
-                    collection_name=collection_name
-                )
-                if self.vectorstore:
-                    logger.info("Vectorstore Chroma creado correctamente")
-                else:
-                    logger.error("Error al crear vectorstore Chroma")
-        
-        # Crear el retriever principal (mantener compatibilidad)
+        # Crear el retriever principal
         self.retriever = self.vectorstore_handler.create_retriever(self.vectorstore)
         
         # Crear retrievers adaptativos si está habilitado
@@ -207,10 +167,47 @@ class LangChainAgent:
         logger.info("Creando flujos de trabajo...")
         self._create_workflows()
         
-        # Compilar workflows - ya están compilados en create_workflow
+        # Compilar workflows
         self.app = self.workflow
         self.ambito_app = self.ambito_workflow.compile()
     
+    def _setup_context_generator(self):
+        """
+        Configura el generador de contexto.
+        """
+        chunk_size = VECTORSTORE_CONFIG.get("chunk_size", 512)
+        logger.info(f"Configurando generador de contexto con chunk_size: {chunk_size}")
+        context_generator = create_context_generator(self.llm, chunk_size=chunk_size)
+        self.vectorstore_handler.set_context_generator(context_generator)
+    
+    def _load_documents_with_uploader(self):
+        """
+        Carga documentos usando DocumentUploader.
+        """
+        logger.info("Cargando documentos...")
+        documents = load_documents_from_directory(self.data_dir)
+        
+        # Cargar consultas guardadas si existe el directorio
+        if self.consultas_dir and os.path.exists(self.consultas_dir):
+            logger.info("Cargando consultas guardadas...")
+            consultas = load_consultas_guardadas(self.consultas_dir)
+            documents.extend(consultas)
+        
+        # Cargar documentos usando DocumentUploader
+        collection_name = VECTORSTORE_CONFIG.get("collection_name", "default_collection")
+        success = self.document_uploader.load_documents_intelligently(documents, collection_name)
+        
+        if success:
+            logger.info("Documentos cargados correctamente")
+        else:
+            logger.error("Error al cargar documentos")
+        
+        # Crear colecciones adaptativas si está habilitado
+        if VECTORSTORE_CONFIG.get("use_adaptive_retrieval", False):
+            logger.info("Creando colecciones adaptativas...")
+            adaptive_results = self.document_uploader.create_adaptive_collections(documents)
+            logger.info(f"Resultados de colecciones adaptativas: {adaptive_results}")
+
     def _create_workflows(self):
         """
         Crea los flujos de trabajo del agente utilizando LangGraph.

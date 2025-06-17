@@ -336,4 +336,34 @@ class ChromaVectorStore(VectorStoreBase):
         except Exception as e:
             logger.error(f"Error en debug de vectorstore: {e}")
         
-        logger.info("=== FIN DEBUG VECTORSTORE ===") 
+        logger.info("=== FIN DEBUG VECTORSTORE ===")
+    
+    def get_existing_documents_metadata(self, vectorstore, field: str = "source") -> set:
+        """
+        Obtiene metadatos de documentos existentes para verificar duplicados.
+        
+        Args:
+            vectorstore: Instancia de Chroma vectorstore
+            field: Campo de metadata a verificar
+            
+        Returns:
+            set: Conjunto de valores únicos del campo especificado
+        """
+        existing_values = set()
+        
+        try:
+            if hasattr(vectorstore, 'get'):
+                # Obtener todos los metadatos de Chroma
+                all_data = vectorstore.get()
+                metadatas = all_data.get('metadatas', [])
+                
+                for metadata in metadatas:
+                    if metadata and field in metadata and metadata[field]:
+                        existing_values.add(metadata[field])
+                        
+                logger.info(f"Metadatos existentes encontrados para '{field}': {len(existing_values)} valores únicos")
+                        
+        except Exception as e:
+            logger.warning(f"No se pudieron obtener metadatos existentes: {e}")
+            
+        return existing_values

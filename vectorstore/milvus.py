@@ -848,4 +848,39 @@ class MilvusVectorStore(VectorStoreBase):
                     return False
                     
         # Añadir los documentos a la colección
-        return self.add_documents_to_collection(vectorstore, documents, source_documents) 
+        return self.add_documents_to_collection(vectorstore, documents, source_documents)
+
+    def get_existing_documents_metadata(self, vectorstore, field: str = "source") -> set:
+        """
+        Obtiene metadatos de documentos existentes para verificar duplicados.
+        
+        Args:
+            vectorstore: Instancia de Milvus vectorstore
+            field: Campo de metadata a verificar
+            
+        Returns:
+            set: Conjunto de valores únicos del campo especificado
+        """
+        existing_values = set()
+        
+        try:
+            if hasattr(vectorstore, 'similarity_search'):
+                # Hacer múltiples búsquedas para obtener más documentos
+                search_terms = ["cubo", "información", "datos", "consulta", ""]
+                
+                for term in search_terms:
+                    try:
+                        docs = vectorstore.similarity_search(term, k=50)
+                        for doc in docs:
+                            if field in doc.metadata and doc.metadata[field]:
+                                existing_values.add(doc.metadata[field])
+                    except Exception as e:
+                        logger.debug(f"Error en búsqueda con término '{term}': {e}")
+                        continue
+                        
+                logger.info(f"Metadatos existentes encontrados para '{field}': {len(existing_values)} valores únicos")
+                        
+        except Exception as e:
+            logger.warning(f"No se pudieron obtener metadatos existentes: {e}")
+            
+        return existing_values
