@@ -452,18 +452,19 @@ async def on_chat_start():
     """
     Inicializa la conversación mostrando la información de los ámbitos disponibles.
     """
-    # Crear el botón de modo consulta
-    consulta_button = cl.Button(
+    # Crear la acción de modo consulta
+    consulta_action = cl.Action(
         name="toggle_consulta",
-        text="🔍 Activar modo consulta",
+        value="toggle",
+        label="🔍 Activar modo consulta",
         description="Activa el modo consulta para realizar consultas SQL directas"
     )
     
-    # Mostrar información de los ámbitos con el botón
+    # Mostrar información de los ámbitos con la acción
     await cl.Message(
         content=get_ambitos_info(),
         author="Sistema",
-        actions=[consulta_button]
+        actions=[consulta_action]
     ).send()
 
 @cl.action_callback("toggle_consulta")
@@ -475,26 +476,27 @@ async def on_toggle_consulta(action):
     consulta_mode = not consulta_mode
     
     if consulta_mode:
-        button_text = "🔍 Desactivar modo consulta"
+        action_label = "🔍 Desactivar modo consulta"
         status_message = "✅ **Modo consulta activado** - Las consultas se procesarán como consultas SQL directas"
-        button_description = "Desactiva el modo consulta"
+        action_description = "Desactiva el modo consulta"
     else:
-        button_text = "🔍 Activar modo consulta"
+        action_label = "🔍 Activar modo consulta"
         status_message = "❌ **Modo consulta desactivado** - Las consultas se procesarán normalmente"
-        button_description = "Activa el modo consulta para realizar consultas SQL directas"
+        action_description = "Activa el modo consulta para realizar consultas SQL directas"
     
-    # Crear el nuevo botón con el estado actualizado
-    new_button = cl.Button(
+    # Crear la nueva acción con el estado actualizado
+    new_action = cl.Action(
         name="toggle_consulta",
-        text=button_text,
-        description=button_description
+        value="toggle",
+        label=action_label,
+        description=action_description
     )
     
-    # Enviar mensaje de estado con el nuevo botón
+    # Enviar mensaje de estado con la nueva acción
     await cl.Message(
         content=status_message,
         author="Sistema",
-        actions=[new_button]
+        actions=[new_action]
     ).send()
 
 @cl.on_message
@@ -503,51 +505,36 @@ async def on_message(message: cl.Message):
     global consulta_mode
     user_message = message.content
     
-    # Crear el estado inicial para el agente de ámbito
-    ambito_initial_state = {
-        "question": user_message,
-        "is_consulta": consulta_mode  # Pasar el estado del modo consulta
-    }
+    # Procesar la consulta con el agente, pasando el estado del modo consulta
+    result = agent.run(user_message)
     
-    # Primero, identificar el ámbito con el estado del modo consulta
-    ambito_result = agent.ambito_app.invoke(ambito_initial_state)
+    # Añadir el estado del modo consulta al resultado
+    if isinstance(result, dict):
+        result["is_consulta"] = consulta_mode
     
-    # Si tenemos un ámbito identificado, proceder con el workflow principal
-    if ambito_result.get("ambito"):
-        # Crear el estado inicial para el workflow principal
-        initial_state = {
-            "question": user_message,
-            "ambito": ambito_result["ambito"],
-            "cubos": ambito_result["cubos"],
-            "is_consulta": ambito_result.get("is_consulta", consulta_mode),  # Usar el estado del modo consulta
-            "retry_count": 0,
-            "evaluation_metrics": {},
-            "granularity_history": agent.granularity_history.copy()
-        }
+    # Si necesitamos clarificación sobre el ámbito
+    if result.get("type") == "clarification_needed":
+        await cl.Message(
+            content=result["question"]
+        ).send()
+        return
+    
+    # Si tenemos un ámbito identificado
+    if "ambito" in result:
+        # Mostrar el ámbito y cubos identificados
+        ambito_info = f"""
+        📊 **Ámbito identificado**: {result['ambito']}
+        📦 **Cubos relevantes**: {', '.join(result['cubos'])}
+        """
+        if result.get("is_visualization", False):
+            ambito_info += "\n🎨 **Tipo de consulta**: Visualización"
         
-        # Ejecutar el workflow principal
-        result = agent.run(initial_state)
+        if result.get("is_consulta", False):
+            ambito_info += "\n🔍 **Modo consulta**: Activado"
         
-        # Añadir información del ámbito al resultado
-        result["ambito"] = ambito_result["ambito"]
-        result["cubos"] = ambito_result["cubos"]
-        result["is_consulta"] = ambito_result.get("is_consulta", consulta_mode)
-        
-        return result
+        await cl.Message(content=ambito_info).send()
     
-    # Si no se pudo identificar el ámbito, ejecutar el workflow principal con la consulta original
-    default_state = {
-        "question": user_message,
-        "is_consulta": consulta_mode,  # Incluir el estado del modo consulta
-        "retry_count": 0,
-        "evaluation_metrics": {},
-        "granularity_history": agent.granularity_history.copy()
-    }
-    
-    # Ejecutar el workflow principal
-    result = agent.run(default_state)
-    
-    return result
+    # ...existing code...
 
 def run_chainlit(port=8000):
     """

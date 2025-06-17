@@ -75,7 +75,7 @@ VECTORSTORE_CONFIG = {
 
 # Configuración de SQL
 SQL_CONFIG = {
-    "db_uri": "jdbc:oracle:thin:C##DM_ACADEMICO/YourPassword123@//localhost:1521/XEPDB1",  # URI de conexión a la base de datos
+    "db_uri": "oracle+cx_oracle://C##DM_ACADEMICO:YourPassword123@127.0.0.1:15210/?service_name=XEPDB1",  # URI de conexión a la base de datos
     "dialect": "oracle",                           # Dialecto SQL (sqlite, postgres, etc.)
     "enable_sql_queries": True,                    # Habilitar consultas SQL
     "max_results": 20,                             # Número máximo de resultados por consulta
