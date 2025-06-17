@@ -187,7 +187,7 @@ class DocumentUploader:
         except Exception as e:
             logger.error(f"Error general eliminando documentos: {e}")
             return False
-
+    
     def load_documents_intelligently(self, documents: List[Document], 
                                    collection_name: str = None,
                                    force_recreate: bool = False) -> bool:
@@ -363,30 +363,4 @@ class DocumentUploader:
                 logger.error(f"Error procesando colección {collection_name}")
         
         return results
-                logger.info(f"Creando nueva colección adaptativa {collection_name}...")
                 
-                # Crear text splitter específico para este tamaño
-                adaptive_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=chunk_size,
-                    chunk_overlap=int(chunk_size * 0.1)  # 10% de overlap
-                )
-                
-                # Chunkar documentos con el tamaño específico
-                adaptive_chunks = adaptive_splitter.split_documents(documents)
-                
-                # Crear vectorstore para esta estrategia
-                vectorstore = self.vectorstore_handler.create_vectorstore(
-                    documents=adaptive_chunks,
-                    embeddings=self.embeddings,
-                    collection_name=collection_name,
-                    drop_old=True
-                )
-                
-                results[strategy] = vectorstore is not None
-            
-            if results[strategy]:
-                logger.info(f"Colección {collection_name} procesada correctamente")
-            else:
-                logger.error(f"Error procesando colección {collection_name}")
-        
-        return results
