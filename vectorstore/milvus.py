@@ -673,7 +673,8 @@ class MilvusVectorStore(VectorStoreBase):
                 logger.info(f"Añadiendo {total_docs} documentos a la colección Milvus")
                 
                 # Para Milvus, usar add_documents sin especificar IDs (auto_id=True)
-                ids = vectorstore.add_documents(documents)
+                # Pasar ids=None explícitamente para forzar auto-generación
+                ids = vectorstore.add_documents(documents, ids=None)
                 logger.info(f"Se han añadido {total_docs} documentos correctamente con IDs autogenerados")
                 logger.info(f"Primeros IDs generados: {ids[:5] if ids else 'No se devolvieron IDs'}")
             else:
@@ -694,7 +695,8 @@ class MilvusVectorStore(VectorStoreBase):
                         
                         try:
                             # Añadir el lote sin especificar IDs (auto_id=True)
-                            batch_ids = vectorstore.add_documents(batch)
+                            # Pasar ids=None explícitamente para forzar auto-generación
+                            batch_ids = vectorstore.add_documents(batch, ids=None)
                             if batch_ids:
                                 all_ids.extend(batch_ids)
                             
@@ -704,39 +706,77 @@ class MilvusVectorStore(VectorStoreBase):
                         except Exception as batch_error:
                             logger.error(f"Error añadiendo lote {current_batch}: {str(batch_error)}")
                             
-                            # Si el error es sobre IDs, intentar una vez más con documentos limpios
+                            # Si el error es sobre IDs, intentar con método alternativo
                             if "auto_id" in str(batch_error) or "valid ids" in str(batch_error):
-                                logger.warning("Error relacionado con IDs - verificando configuración auto_id")
+                                logger.warning("Error relacionado con IDs - intentando método alternativo")
                                 
-                                # Verificar si la colección tiene auto_id habilitado
                                 try:
+                                    # Método alternativo: usar directamente la colección de Milvus
                                     if hasattr(vectorstore, 'col') and vectorstore.col is not None:
-                                        schema = vectorstore.col.schema
-                                        logger.info(f"Schema de la colección: {schema}")
+                                        logger.info("Intentando inserción directa en la colección")
                                         
-                                        # Intentar añadir sin metadatos problemáticos como test
-                                        clean_batch = []
-                                        for doc in batch:
-                                            # Crear una copia limpia del documento
-                                            clean_doc = Document(
-                                                page_content=doc.page_content,
-                                                metadata=doc.metadata.copy()
-                                            )
-                                            clean_batch.append(clean_doc)
+                                        # Preparar datos para inserción directa
+                                        texts = [doc.page_content for doc in batch]
+                                        metadatas = [doc.metadata for doc in batch]
                                         
-                                        batch_ids = vectorstore.add_documents(clean_batch)
+                                        # Usar el método insert de vectorstore con ids=None
+                                        batch_ids = vectorstore.add_texts(
+                                            texts=texts,
+                                            metadatas=metadatas,
+                                            ids=None  # Explícitamente None para auto-generación
+                                        )
+                                        
                                         if batch_ids:
                                             all_ids.extend(batch_ids)
-                                        logger.info(f"Lote {current_batch} añadido exitosamente después del reintento")
+                                        logger.info(f"Lote {current_batch} añadido exitosamente con método alternativo")
                                         progress_bar.update(1)
                                         
                                     else:
-                                        logger.error("No se pudo acceder a la colección para verificar schema")
+                                        logger.error("No se pudo acceder a la colección para método alternativo")
                                         raise batch_error
                                         
-                                except Exception as retry_error:
-                                    logger.error(f"Error en reintento del lote {current_batch}: {str(retry_error)}")
-                                    raise batch_error
+                                except Exception as alt_error:
+                                    logger.error(f"Error en método alternativo del lote {current_batch}: {str(alt_error)}")
+                                    
+                                    # Último intento: recrear documentos completamente limpios
+                                    try:
+                                        logger.info("Último intento con documentos completamente limpios")
+                                        
+                                        clean_texts = []
+                                        clean_metadatas = []
+                                        
+                                        for doc in batch:
+                                            # Limpiar contenido
+                                            clean_text = doc.page_content.strip()
+                                            if not clean_text:
+                                                clean_text = "Contenido vacío"
+                                            
+                                            # Limpiar metadatos
+                                            clean_metadata = {}
+                                            for key, value in doc.metadata.items():
+                                                if value is not None and str(value).strip():
+                                                    clean_metadata[key] = str(value).strip()
+                                                else:
+                                                    clean_metadata[key] = "default"
+                                            
+                                            clean_texts.append(clean_text)
+                                            clean_metadatas.append(clean_metadata)
+                                        
+                                        # Intentar con textos y metadatos limpios
+                                        batch_ids = vectorstore.add_texts(
+                                            texts=clean_texts,
+                                            metadatas=clean_metadatas
+                                            # No especificar ids en absoluto
+                                        )
+                                        
+                                        if batch_ids:
+                                            all_ids.extend(batch_ids)
+                                        logger.info(f"Lote {current_batch} añadido exitosamente con limpieza completa")
+                                        progress_bar.update(1)
+                                        
+                                    except Exception as final_error:
+                                        logger.error(f"Error en último intento del lote {current_batch}: {str(final_error)}")
+                                        raise batch_error
                             else:
                                 raise batch_error
                 
@@ -764,6 +804,11 @@ class MilvusVectorStore(VectorStoreBase):
                         logger.info(f"Schema de la colección: {schema}")
                         for field in schema.fields:
                             logger.info(f"Campo: {field.name}, Tipo: {field.dtype}, Auto ID: {field.auto_id}")
+                        
+                        # Información adicional sobre el campo primario
+                        primary_field = schema.primary_field
+                        if primary_field:
+                            logger.info(f"Campo primario: {primary_field.name}, Auto ID: {primary_field.auto_id}")
                             
                 except Exception as diag_error:
                     logger.error(f"Error en diagnóstico: {diag_error}")
