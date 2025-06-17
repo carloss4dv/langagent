@@ -1270,67 +1270,77 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         }
 
     def execute_sql_query(state):
-    """
-    Ejecuta una consulta SQL y devuelve el resultado usando la configuración SQL.
-    
-    Args:
-        state (dict): Estado actual del grafo.
+        """
+        Ejecuta una consulta SQL y devuelve el resultado usando la configuración SQL.
         
-    Returns:
-        dict: Estado actualizado con el resultado de la consulta SQL.
-    """
-    from langchain_community.utilities import SQLDatabase
-    from langchain_community.tools.sql_database.tool import QuerySQLDatabaseTool
-    
-    logger.info("---EXECUTE SQL QUERY---")
-    
-    # Extraer la consulta SQL del estado
-    sql_query = state.get("sql_query")
-    if not sql_query:
-        logger.error("No hay consulta SQL en el estado")
-        return {
-            **state,
-            "sql_result": "Error: No se encontró consulta SQL para ejecutar",
-            "needs_sql_interpretation": True
-        }
-    
-    # Limpiar la consulta SQL si viene en formato JSON
-    clean_sql_query = sql_query
-    if isinstance(sql_query, str):
-        try:
-            if sql_query.strip().startswith('{'):
-                import json
-                query_data = json.loads(sql_query)
-                if "query" in query_data:
-                    clean_sql_query = query_data["query"]
-                elif "sql" in query_data:
-                    clean_sql_query = query_data["sql"]
-        except json.JSONDecodeError:
-            # Si no es JSON válido, usar como está
-            pass
-    
-    logger.info(f"Ejecutando consulta SQL: {clean_sql_query}")
-    
-    try:
-        # Crear la conexión a la base de datos usando la configuración
-        if SQL_CONFIG.get("db_uri"):
-            db = SQLDatabase.from_uri(SQL_CONFIG.get("db_uri"))
-            execute_query_tool = QuerySQLDatabaseTool(db=db)
+        Args:
+            state (dict): Estado actual del grafo.
             
-            # Ejecutar la consulta
-            result = execute_query_tool.invoke(clean_sql_query)
-            logger.info("Consulta SQL ejecutada con éxito.")
-            logger.info(f"Resultado: {result}")
-            
+        Returns:
+            dict: Estado actualizado con el resultado de la consulta SQL.
+        """
+        from langchain_community.utilities import SQLDatabase
+        from langchain_community.tools.sql_database.tool import QuerySQLDatabaseTool
+        
+        logger.info("---EXECUTE SQL QUERY---")
+        
+        # Extraer la consulta SQL del estado
+        sql_query = state.get("sql_query")
+        if not sql_query:
+            logger.error("No hay consulta SQL en el estado")
             return {
                 **state,
-                "sql_result": result,
-                "sql_query": clean_sql_query,
+                "sql_result": "Error: No se encontró consulta SQL para ejecutar",
                 "needs_sql_interpretation": True
             }
-            
-        else:
-            error_msg = "Error: No se ha configurado la URI de la base de datos"
+        
+        # Limpiar la consulta SQL si viene en formato JSON
+        clean_sql_query = sql_query
+        if isinstance(sql_query, str):
+            try:
+                if sql_query.strip().startswith('{'):
+                    import json
+                    query_data = json.loads(sql_query)
+                    if "query" in query_data:
+                        clean_sql_query = query_data["query"]
+                    elif "sql" in query_data:
+                        clean_sql_query = query_data["sql"]
+            except json.JSONDecodeError:
+                # Si no es JSON válido, usar como está
+                pass
+        
+        logger.info(f"Ejecutando consulta SQL: {clean_sql_query}")
+        
+        try:
+            # Crear la conexión a la base de datos usando la configuración
+            if SQL_CONFIG.get("db_uri"):
+                db = SQLDatabase.from_uri(SQL_CONFIG.get("db_uri"))
+                execute_query_tool = QuerySQLDatabaseTool(db=db)
+                
+                # Ejecutar la consulta
+                result = execute_query_tool.invoke(clean_sql_query)
+                logger.info("Consulta SQL ejecutada con éxito.")
+                logger.info(f"Resultado: {result}")
+                
+                return {
+                    **state,
+                    "sql_result": result,
+                    "sql_query": clean_sql_query,
+                    "needs_sql_interpretation": True
+                }
+                
+            else:
+                error_msg = "Error: No se ha configurado la URI de la base de datos"
+                logger.error(error_msg)
+                return {
+                    **state,
+                    "sql_result": error_msg,
+                    "sql_query": clean_sql_query,
+                    "needs_sql_interpretation": False
+                }
+                
+        except Exception as e:
+            error_msg = f"Error al ejecutar la consulta SQL: {str(e)}"
             logger.error(error_msg)
             return {
                 **state,
@@ -1338,136 +1348,126 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                 "sql_query": clean_sql_query,
                 "needs_sql_interpretation": False
             }
-            
-    except Exception as e:
-        error_msg = f"Error al ejecutar la consulta SQL: {str(e)}"
-        logger.error(error_msg)
-        return {
-            **state,
-            "sql_result": error_msg,
-            "sql_query": clean_sql_query,
-            "needs_sql_interpretation": False
-        }
 
-def execute_query_with_metrics(state):
-    """
-    Ejecuta la consulta SQL generada con métricas integradas.
-    
-    Args:
-        state (dict): Estado actual del grafo.
-        
-    Returns:
-        dict: Estado actualizado con el resultado de la consulta SQL.
-    """
-    # Iniciar medición del nodo
-    node_context = metrics_collector.start_node("execute_query")
-    
-    try:
-        # Usar la función execute_sql_query
-        result_state = execute_sql_query(state)
-        success = not str(result_state.get("sql_result", "")).startswith("Error")
-        
-        # Finalizar medición del nodo
-        metrics_collector.end_node(node_context, result_state, success=success)
-        
-        return result_state
-        
-    except Exception as e:
-        logger.error(f"Error en execute_query_with_metrics: {str(e)}")
-        error_state = {**state, "sql_result": f"Error: {str(e)}"}
-        
-        # Finalizar medición del nodo con error
-        metrics_collector.end_node(node_context, error_state, success=False)
-        
-        return error_state
-
-    # Añadir nodos al grafo
-    workflow.add_node("entry_point", lambda state: state)  # Nodo dummy para entrada condicional
-    workflow.add_node("rewrite_query", rewrite_query)
-    workflow.add_node("retrieve", retrieve)
-    workflow.add_node("grade_relevance", grade_relevance)
-    workflow.add_node("generate", generate)
-    workflow.add_node("evaluate_response_granular", evaluate_response_granular)
-    workflow.add_node("update_granularity_history", update_granularity_history)
-    workflow.add_node("update_chunk_strategy", update_chunk_strategy)
-    workflow.add_node("increment_retry_count", increment_retry_count)
-    workflow.add_node("execute_query", execute_query_with_metrics)
-    workflow.add_node("generate_sql_interpretation", generate_sql_interpretation)
-    workflow.add_node("sql_db_query", sql_db_query)
-    
-    # Definir entrada condicional - flujo con query rewriting condicional
-    workflow.set_entry_point("entry_point")
-    workflow.add_conditional_edges(
-        "entry_point",
-        route_entry_point,
-        {
-            "rewrite_query": "rewrite_query",
-            "retrieve": "retrieve"
-        }
-    )
-    workflow.add_edge("rewrite_query", "retrieve")
-    workflow.add_edge("retrieve", "grade_relevance")
-    workflow.add_edge("grade_relevance", "generate")
-    workflow.add_edge("generate", "evaluate_response_granular")
-    workflow.add_edge("evaluate_response_granular", "update_granularity_history")
-    workflow.add_edge("update_chunk_strategy", "increment_retry_count")
-    workflow.add_edge("increment_retry_count", "retrieve")
-    
-    # Definir condición para enrutamiento después de actualizar histórico
-    def route_after_update_history(state):
+    def execute_query_with_metrics(state):
         """
-        Determina qué hacer después de actualizar el histórico de granularidades:
-        - Ejecutar SQL si es una consulta
-        - Actualizar estrategia y reintentar si las métricas no son suficientes
-        - Finalizar si las métricas son buenas o se alcanzó el máximo de reintentos
+        Ejecuta la consulta SQL generada con métricas integradas.
         
         Args:
             state (dict): Estado actual del grafo.
             
         Returns:
-            str: Siguiente nodo a ejecutar
+            dict: Estado actualizado con el resultado de la consulta SQL.
         """
-        # Verificar si es una consulta SQL que necesita ejecución
-        is_consulta = state.get("is_consulta", False)
-        sql_query = state.get("sql_query")
+        # Iniciar medición del nodo
+        node_context = metrics_collector.start_node("execute_query")
         
-        if is_consulta and sql_query and not state.get("sql_result"):
-            logger.info("Se detectó una consulta SQL válida. Procediendo a ejecutarla.")
-            return "execute_query"
-        
-        # Usar la lógica de route_next_strategy para decidir si reintentar
-        decision = route_next_strategy(state)
-        
-        if decision == "UPDATE_HISTORY_AND_RETRY":
-            logger.info("Actualizando estrategia y reintentando")
-            return "update_chunk_strategy"
-        elif decision in ["UPDATE_HISTORY_AND_END", "END"]:
-            logger.info("Finalizando workflow después de actualizar histórico.")
-            return "END"
-        else:  # Fallback
-            logger.warning(f"Decisión no reconocida: {decision}. Finalizando.")
-            return "END"
-    
-    # Definir condición para después de ejecutar consulta SQL
-    def route_after_execute_query(state):
+        try:
+            # Usar la función execute_sql_query
+            result_state = execute_sql_query(state)
+            success = not str(result_state.get("sql_result", "")).startswith("Error")
+            
+            # Finalizar medición del nodo
+            metrics_collector.end_node(node_context, result_state, success=success)
+            
+            return result_state
+            
+        except Exception as e:
+            logger.error(f"Error en execute_query_with_metrics: {str(e)}")
+            error_state = {**state, "sql_result": f"Error: {str(e)}"}
+            
+            # Finalizar medición del nodo con error
+            metrics_collector.end_node(node_context, error_state, success=False)
+            
+            return error_state
+
+    def sql_db_query(state):
         """
-        Determina qué hacer después de ejecutar la consulta SQL.
+        Ejecuta la consulta SQL generada contra la base de datos.
+        Extrae la consulta SQL del campo generation si es necesario.
+        """
+        logger.info("---SQL DB QUERY---")
+        
+        # Extraer la consulta SQL del campo generation
+        sql_query = None
+        if "generation" in state:
+            sql_query = extract_sql_query_from_generation(state["generation"])
+        elif "sql_query" in state:
+            sql_query = state["sql_query"]
+        
+        if not sql_query:
+            logger.error("No se pudo extraer la consulta SQL")
+            return {
+                **state,
+                "sql_result": "Error: No se pudo extraer la consulta SQL",
+                "sql_query": None
+            }
+        
+        logger.info(f"Consulta SQL extraída: {sql_query}")
+        
+        try:
+            # Crear la conexión a la base de datos usando la configuración
+            if SQL_CONFIG.get("db_uri"):
+                from langchain_community.utilities import SQLDatabase
+                from langchain_community.tools.sql_database.tool import QuerySQLDatabaseTool
+                
+                db = SQLDatabase.from_uri(SQL_CONFIG.get("db_uri"))
+                execute_query_tool = QuerySQLDatabaseTool(db=db)
+                
+                # Ejecutar la consulta
+                result = execute_query_tool.invoke(sql_query)
+                
+                logger.info(f"Resultado de la consulta: {result}")
+                
+                return {
+                    **state,
+                    "sql_result": result,
+                    "sql_query": sql_query
+                }
+            else:
+                error_msg = "Error: No se ha configurado la URI de la base de datos"
+                logger.error(error_msg)
+                return {
+                    **state,
+                    "sql_result": error_msg,
+                    "sql_query": sql_query
+                }
+        except Exception as e:
+            logger.error(f"Error al ejecutar consulta SQL: {str(e)}")
+            return {
+                **state,
+                "sql_result": f"Error al ejecutar consulta: {str(e)}",
+                "sql_query": sql_query
+            }
+
+    def extract_sql_query_from_generation(generation_text):
+        """
+        Extrae la consulta SQL del campo generation que viene en formato JSON.
         
         Args:
-            state (dict): Estado actual del grafo.
+            generation_text (str): Texto del campo generation
             
         Returns:
-            str: Siguiente nodo a ejecutar
+            str: Consulta SQL extraída o None si no se encuentra
         """
-        needs_interpretation = state.get("needs_sql_interpretation", False)
-        
-        if needs_interpretation:
-            logger.info("Generando interpretación de resultados SQL...")
-            return "generate_sql_interpretation"
-        else:
-            return "END"
-    
-    # Añadir borde condicional desde update_granularity_history
+        try:
+            # Limpiar el texto
+            generation_text = generation_text.strip()
+            
+            # Buscar el patrón JSON que contiene la query
+            json_pattern = r'\{\s*"query":\s*"([^"]+)"\s*\}'
+            match = re.search(json_pattern, generation_text)
+            
+            if match:
+                return match.group(1)
+            
+            # Si no funciona con regex, intentar parsear como JSON línea por línea
+            lines = generation_text.split('\n')
+            for line in lines:
+                line = line.strip()
+                if line.startswith('{') and '"query"' in line:
+                    try:
+                        json_data = json.loads(line)
     workflow.add_conditional_edges(
         "update_granularity_history",
         route_after_update_history,
