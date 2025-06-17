@@ -77,7 +77,7 @@ def create_rag_sql_chain(llm, db_uri=SQL_CONFIG["db_uri"], dialect=SQL_CONFIG["d
     db = SQLDatabase.from_uri(db_uri)
     
     # Obtener información del esquema
-    table_info = db.get_table_info(sample_rows=8, include_views=False) 
+    table_info = db.get_table_info() 
     # Crear plantilla para generar consultas SQL
     sql_prompt_template = _get_prompt_template(llm, "sql_generator")
     sql_prompt = PromptTemplate.from_template(sql_prompt_template)

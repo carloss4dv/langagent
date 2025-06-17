@@ -1283,7 +1283,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
         
         try:
             # Reutilizar la lógica de la función execute_sql_query original
-            result_state = execute_sql_query(state)
+            result_state = execute_sql_query(state, SQL_CONFIG)
             success = not result_state.get("sql_result", "").startswith("Error")
             
             # Finalizar medición del nodo

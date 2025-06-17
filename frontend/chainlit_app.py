@@ -12,6 +12,7 @@ import re
 import ast
 import json
 from typing import Dict, Any, List, Tuple, Union
+import asyncio
 
 # Añadir el directorio raíz al PYTHONPATH de forma más robusta
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -460,6 +461,36 @@ async def on_chat_start():
         author="Sistema"
     ).send()
 
+async def show_processing_message():
+    """
+    Muestra un mensaje de procesamiento intermitente con círculo girando.
+    """
+    processing_states = [
+        "🔄 Procesando consulta",
+        "🔄 Procesando consulta.",
+        "🔄 Procesando consulta..",
+        "🔄 Procesando consulta...",
+    ]
+    
+    processing_msg = await cl.Message(
+        content=processing_states[0],
+        author="Sistema"
+    ).send()
+    
+    state_index = 0
+    
+    async def update_processing():
+        nonlocal state_index
+        while True:
+            await asyncio.sleep(0.5)  # Actualizar cada 500ms
+            state_index = (state_index + 1) % len(processing_states)
+            try:
+                await processing_msg.update(content=processing_states[state_index])
+            except:
+                break  # Si falla la actualización, salir del bucle
+    
+    return processing_msg, update_processing
+
 @cl.on_message
 async def on_message(message: cl.Message):
     """Procesa los mensajes del usuario y maneja la selección de ámbitos y cubos."""
@@ -473,7 +504,7 @@ async def on_message(message: cl.Message):
         icon = "✅" if consulta_mode else "❌"
         await cl.Message(
             content=f"{icon} **Modo consulta {status}**",
-            author="Sistema"
+            autor="Sistema"
         ).send()
         return
     
@@ -483,20 +514,21 @@ async def on_message(message: cl.Message):
         temp_consulta_mode = True
         user_message = user_message[10:]  # Remover "/consulta " del inicio
     
-    # Mostrar mensaje de procesamiento
-    processing_msg = await cl.Message(
-        content="🔄 Procesando consulta...",
-        author="Sistema"
-    ).send()
+    # Mostrar mensaje de procesamiento intermitente
+    processing_msg, update_task = await show_processing_message()
+    processing_task = asyncio.create_task(update_task())
     
     try:
         # Procesar la consulta con el agente
         result = agent.run(user_message, is_consulta=temp_consulta_mode)
         
-        # Actualizar el mensaje de procesamiento
+        # Detener la tarea de actualización y remover el mensaje
+        processing_task.cancel()
         await processing_msg.remove()
         
     except Exception as e:
+        # Detener la tarea de actualización y remover el mensaje
+        processing_task.cancel()
         await processing_msg.remove()
         await cl.Message(
             content=f"❌ Error al procesar la consulta: {str(e)}",
