@@ -103,5 +103,12 @@
     "submitting": "Enviando...",
     "submitted": "Valoración enviada",
     "errorOccurred": "Ha ocurrido un error"
+  },
+  "consultaMode": {
+    "enable": "Activar modo consulta",
+    "disable": "Desactivar modo consulta",
+    "enabled": "Modo consulta activado",
+    "disabled": "Modo consulta desactivado",
+    "description": "El modo consulta permite realizar consultas SQL directas"
   }
-} 
+}

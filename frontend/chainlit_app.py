@@ -444,73 +444,110 @@ def parse_tabulated_data(text):
     
     return df
 
+# Variable global para el estado del modo consulta
+consulta_mode = False
+
 @cl.on_chat_start
 async def on_chat_start():
     """
     Inicializa la conversación mostrando la información de los ámbitos disponibles.
     """
-    # Mostrar información de los ámbitos
+    # Crear el botón de modo consulta
+    consulta_button = cl.Button(
+        name="toggle_consulta",
+        text="🔍 Activar modo consulta",
+        description="Activa el modo consulta para realizar consultas SQL directas"
+    )
+    
+    # Mostrar información de los ámbitos con el botón
     await cl.Message(
         content=get_ambitos_info(),
-        author="Sistema"
+        author="Sistema",
+        actions=[consulta_button]
+    ).send()
+
+@cl.action_callback("toggle_consulta")
+async def on_toggle_consulta(action):
+    """
+    Maneja el toggle del modo consulta.
+    """
+    global consulta_mode
+    consulta_mode = not consulta_mode
+    
+    if consulta_mode:
+        button_text = "🔍 Desactivar modo consulta"
+        status_message = "✅ **Modo consulta activado** - Las consultas se procesarán como consultas SQL directas"
+        button_description = "Desactiva el modo consulta"
+    else:
+        button_text = "🔍 Activar modo consulta"
+        status_message = "❌ **Modo consulta desactivado** - Las consultas se procesarán normalmente"
+        button_description = "Activa el modo consulta para realizar consultas SQL directas"
+    
+    # Crear el nuevo botón con el estado actualizado
+    new_button = cl.Button(
+        name="toggle_consulta",
+        text=button_text,
+        description=button_description
+    )
+    
+    # Enviar mensaje de estado con el nuevo botón
+    await cl.Message(
+        content=status_message,
+        author="Sistema",
+        actions=[new_button]
     ).send()
 
 @cl.on_message
 async def on_message(message: cl.Message):
     """Procesa los mensajes del usuario y maneja la selección de ámbitos y cubos."""
+    global consulta_mode
     user_message = message.content
     
-    # Procesar la consulta con el agente
-    result = agent.run(user_message)
+    # Crear el estado inicial para el agente de ámbito
+    ambito_initial_state = {
+        "question": user_message,
+        "is_consulta": consulta_mode  # Pasar el estado del modo consulta
+    }
     
-    # Si necesitamos clarificación sobre el ámbito
-    if result.get("type") == "clarification_needed":
-        await cl.Message(
-            content=result["question"]
-        ).send()
-        return
+    # Primero, identificar el ámbito con el estado del modo consulta
+    ambito_result = agent.ambito_app.invoke(ambito_initial_state)
     
-    # Si tenemos un ámbito identificado
-    if "ambito" in result:
-        # Mostrar el ámbito y cubos identificados
-        ambito_info = f"""
-        📊 **Ámbito identificado**: {result['ambito']}
-        📦 **Cubos relevantes**: {', '.join(result['cubos'])}
-        """
-        if result.get("is_visualization", False):
-            ambito_info += "\n🎨 **Tipo de consulta**: Visualización"
+    # Si tenemos un ámbito identificado, proceder con el workflow principal
+    if ambito_result.get("ambito"):
+        # Crear el estado inicial para el workflow principal
+        initial_state = {
+            "question": user_message,
+            "ambito": ambito_result["ambito"],
+            "cubos": ambito_result["cubos"],
+            "is_consulta": ambito_result.get("is_consulta", consulta_mode),  # Usar el estado del modo consulta
+            "retry_count": 0,
+            "evaluation_metrics": {},
+            "granularity_history": agent.granularity_history.copy()
+        }
         
-        await cl.Message(content=ambito_info).send()
+        # Ejecutar el workflow principal
+        result = agent.run(initial_state)
+        
+        # Añadir información del ámbito al resultado
+        result["ambito"] = ambito_result["ambito"]
+        result["cubos"] = ambito_result["cubos"]
+        result["is_consulta"] = ambito_result.get("is_consulta", consulta_mode)
+        
+        return result
     
-    # Mostrar la respuesta
-    if "generation" in result:
-        await cl.Message(content=result["generation"]).send()
+    # Si no se pudo identificar el ámbito, ejecutar el workflow principal con la consulta original
+    default_state = {
+        "question": user_message,
+        "is_consulta": consulta_mode,  # Incluir el estado del modo consulta
+        "retry_count": 0,
+        "evaluation_metrics": {},
+        "granularity_history": agent.granularity_history.copy()
+    }
     
-    # Si hay documentos recuperados, mostrarlos
-    if "documents" in result:
-        docs_content = "\n\n".join(result["documents"])
-        await cl.Message(content=f"📚 **Documentos recuperados**:\n{docs_content}").send()
+    # Ejecutar el workflow principal
+    result = agent.run(default_state)
     
-    # Si hay una consulta SQL, mostrarla
-    if "sql_query" in result:
-        await cl.Message(content=f"🔍 **Consulta SQL generada**:\n```sql\n{result['sql_query']}\n```").send()
-    
-    # Si hay resultados SQL, mostrarlos
-    if "sql_result" in result:
-        # Si es una visualización, intentar crear un gráfico
-        if result.get("is_visualization", False):
-            try:
-                df = format_sql_result(result["sql_result"], result.get("sql_query"))
-                if not df.empty:
-                    # Crear un gráfico usando los datos del DataFrame
-                    chart = cl.Chart(df)
-                    await chart.send()
-            except Exception as e:
-                print(f"Error al crear visualización: {str(e)}")
-                # Si falla la visualización, mostrar la tabla
-                await cl.Message(content=f"📊 **Resultados SQL**:\n{result['sql_result']}").send()
-        else:
-            await cl.Message(content=f"📊 **Resultados SQL**:\n{result['sql_result']}").send()
+    return result
 
 def run_chainlit(port=8000):
     """
@@ -535,4 +572,4 @@ def run_chainlit(port=8000):
 
 if __name__ == "__main__":
     # Si se ejecuta directamente, lanzar Chainlit
-    run_chainlit() 
+    run_chainlit()

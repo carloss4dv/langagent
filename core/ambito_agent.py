@@ -29,6 +29,7 @@ class AmbitoState(TypedDict):
     needs_clarification: bool
     clarification_question: Optional[str]
     is_visualization: bool
+    is_consulta: bool  # Nuevo campo para modo consulta
 
 def create_ambito_workflow(retriever: any, llm: any):
     """
@@ -53,10 +54,11 @@ def create_ambito_workflow(retriever: any, llm: any):
         question = state["question"]
         question_lower = question.lower()
         
-        # Inicializar is_visualization y needs_clarification
+        # Inicializar campos
         state["is_visualization"] = False
         state["needs_clarification"] = False
         state["clarification_question"] = None
+        state["is_consulta"] = state.get("is_consulta", False)  # Mantener el estado del modo consulta
         
         # Palabras clave para identificar visualizaciones
         visualization_keywords = [
@@ -252,4 +254,4 @@ def create_ambito_workflow(retriever: any, llm: any):
     
     workflow.add_edge("generate_clarification", END)
     
-    return workflow 
+    return workflow

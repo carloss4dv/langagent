@@ -269,10 +269,9 @@ class LangChainAgent:
                 "ambito": ambito_result["ambito"],
                 "cubos": ambito_result["cubos"],
                 "is_consulta": ambito_result.get("is_consulta", False),
-                # chunk_strategy se derivará del nombre de la colección en el workflow
                 "retry_count": 0,
                 "evaluation_metrics": {},
-                "granularity_history": self.granularity_history.copy()  # Pasar historial persistente
+                "granularity_history": self.granularity_history.copy()
             }
             
             # Ejecutar el workflow principal con métricas
@@ -292,7 +291,7 @@ class LangChainAgent:
         # Si no se pudo identificar el ámbito, ejecutar el workflow principal con la consulta original
         default_state = {
             "question": query,
-            # chunk_strategy se derivará del nombre de la colección en el workflow
+            "is_consulta": ambito_result.get("is_consulta", False),  # Pasar el estado del modo consulta
             "retry_count": 0,
             "evaluation_metrics": {},
             "granularity_history": self.granularity_history.copy()  # Pasar historial persistente
