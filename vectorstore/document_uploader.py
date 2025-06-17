@@ -223,8 +223,7 @@ class DocumentUploader:
             if not documents_to_load and not cubos_to_remove:
                 logger.info("No hay cambios que aplicar")
                 return True
-            
-            # Eliminar documentos obsoletos si es necesario
+              # Eliminar documentos obsoletos si es necesario
             if cubos_to_remove:
                 logger.info(f"Eliminando documentos obsoletos de cubos: {cubos_to_remove}")
                 if not self.remove_documents_by_cubo(existing_vectorstore, cubos_to_remove):
@@ -234,8 +233,8 @@ class DocumentUploader:
             if documents_to_load:
                 logger.info(f"Cargando {len(documents_to_load)} documentos actualizados...")
                 
-                # Chunkar documentos a cargar
-                new_chunks = self.text_splitter.split_documents(documents_to_load)
+                # Chunkar documentos a cargar usando el text_splitter dinámico
+                new_chunks = text_splitter.split_documents(documents_to_load)
                 
                 # Crear diccionario de documentos originales para generación de contexto
                 source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents_to_load)}
@@ -248,15 +247,17 @@ class DocumentUploader:
                 )
             
             return True
+            
         else:
             # Crear nueva vectorstore
             logger.info("Creando nueva vectorstore...")
             
-            # Chunkar todos los documentos
-            chunked_documents = self.text_splitter.split_documents(documents)
+            # Chunkar todos los documentos usando el text_splitter dinámico
+            chunked_documents = text_splitter.split_documents(documents)
             
             # Crear diccionario de documentos originales para generación de contexto
-            source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents)}            
+            source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents)}
+            
             # Cargar documentos usando el método existente (incluye generación de contexto)
             return self.vectorstore_handler.load_documents(
                 chunked_documents, 
