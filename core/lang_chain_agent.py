@@ -183,6 +183,7 @@ class LangChainAgent:
     def _load_documents_with_uploader(self):
         """
         Carga documentos usando DocumentUploader.
+        Si la recuperación adaptativa está activada, solo carga esas colecciones.
         """
         logger.info("Cargando documentos...")
         documents = load_documents_from_directory(self.data_dir)
@@ -194,19 +195,16 @@ class LangChainAgent:
             documents.extend(consultas)
         
         # Cargar documentos usando DocumentUploader
-        collection_name = VECTORSTORE_CONFIG.get("collection_name", "default_collection")
-        success = self.document_uploader.load_documents_intelligently(documents, collection_name)
-        
-        if success:
-            logger.info("Documentos cargados correctamente")
-        else:
-            logger.error("Error al cargar documentos")
-        
-        # Crear colecciones adaptativas si está habilitado
         if VECTORSTORE_CONFIG.get("use_adaptive_retrieval", False):
-            logger.info("Creando colecciones adaptativas...")
-            adaptive_results = self.document_uploader.create_adaptive_collections(documents)
-            logger.info(f"Resultados de colecciones adaptativas: {adaptive_results}")
+            logger.info("Recuperación adaptativa activada. Cargando solo colecciones adaptativas.")
+            self.document_uploader.create_adaptive_collections(documents)
+        else:
+            logger.info("Cargando colección principal.")
+            self.document_uploader.load_documents_intelligently(
+                documents, 
+                collection_name=VECTORSTORE_CONFIG["collection_name"],
+                force_recreate=False
+            )
 
     def _create_workflows(self):
         """

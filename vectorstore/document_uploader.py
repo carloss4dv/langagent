@@ -33,23 +33,30 @@ class DocumentUploader:
         self.embeddings = embeddings
         # No inicializar text_splitter aquí - se creará dinámicamente según la colección
     
-    def extract_cubo_and_version(self, source: str) -> Tuple[str, int]:
+    def extract_cubo_and_version(self, source: str) -> Tuple[Optional[str], Optional[int]]:
         """
         Extrae el nombre del cubo y la versión del source path.
+        Es más robusto para manejar paths completos.
         
         Args:
             source: Path del archivo fuente
             
         Returns:
-            Tuple[str, int]: (nombre_cubo, version_numero)
+            Tuple[str, int]: (nombre_cubo, version_numero) o (None, None)
         """
+        if not source:
+            return None, None
+            
+        file_name = os.path.basename(source)
         # Extraer el nombre del cubo y versión usando el patrón info_cubo_X_vY.md
-        match = re.search(r'info_cubo_([^_]+)_v(\d+)\.md', source)
+        match = re.search(r'info_cubo_([^_]+)_v(\d+)\.md', file_name)
         if match:
             cubo_name = match.group(1)
             version = int(match.group(2))
             return cubo_name, version
-        return "general", 0
+        
+        logger.debug(f"No se pudo extraer el cubo y la versión de: {source}")
+        return None, None
     
     def get_existing_cubos_with_versions(self, vectorstore) -> Dict[str, int]:
         """
@@ -186,7 +193,8 @@ class DocumentUploader:
     
     def load_documents_intelligently(self, documents: List[Document], 
                                    collection_name: str = None,
-                                   force_recreate: bool = False) -> bool:
+                                   force_recreate: bool = False,
+                                   chunk_size: Optional[int] = None) -> bool:
         """
         Carga documentos de forma inteligente en la vectorstore.
         
@@ -194,6 +202,7 @@ class DocumentUploader:
             documents: Lista de documentos a cargar
             collection_name: Nombre de la colección
             force_recreate: Si True, fuerza la recreación completa
+            chunk_size: Si se proporciona, sobreescribe el tamaño de chunk
             
         Returns:
             bool: True si se cargaron correctamente
@@ -204,9 +213,12 @@ class DocumentUploader:
         
         collection_name = collection_name or VECTORSTORE_CONFIG.get("collection_name", "default_collection")
         
-        # Extraer chunk_size del nombre de la colección
-        chunk_size = self.extract_chunk_size_from_collection(collection_name)
-        text_splitter = self.create_text_splitter(chunk_size)
+        # Usar el chunk_size proporcionado o extraerlo de la configuración/nombre
+        final_chunk_size = chunk_size if chunk_size is not None else self.extract_chunk_size_from_collection(collection_name)
+        
+        logger.info(f"Preparando para cargar documentos en '{collection_name}' con chunk_size={final_chunk_size}")
+        
+        text_splitter = self.create_text_splitter(final_chunk_size)
         
         # Intentar cargar vectorstore existente
         existing_vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, collection_name)
@@ -280,95 +292,32 @@ class DocumentUploader:
         adaptive_collections = VECTORSTORE_CONFIG.get("adaptive_collections", {})
         
         if not adaptive_collections:
-            logger.warning("No se encontraron colecciones adaptativas configuradas")
-            return {}
+            logger.warning("No hay colecciones adaptativas configuradas en VECTORSTORE_CONFIG.")
+            return results
         
-        logger.info(f"Colecciones adaptativas configuradas: {adaptive_collections}")
-          # Mapeo de estrategias a tamaños de chunk reales
-        # Basado en la configuración actual en config.py
-        strategy_to_chunk_size = {
-            "167": 167,   # Chunk size pequeño (actual en config)
-            "369": 369,   # Chunk size mediano
-            "646": 646,   # Chunk size grande (actual en config)
-            "1094": 1094  # Chunk size muy grande
-        }
-        
+        logger.info(f"Creando/actualizando colecciones adaptativas: {list(adaptive_collections.keys())}")
+
         for strategy, collection_name in adaptive_collections.items():
-            # Obtener el tamaño de chunk correspondiente a la estrategia
-            if strategy not in strategy_to_chunk_size:
-                logger.warning(f"Estrategia {strategy} no tiene un tamaño de chunk definido, saltando...")
-                continue
+            try:
+                chunk_size = int(strategy)
+                logger.info(f"Procesando estrategia '{strategy}' para la colección '{collection_name}' con chunk_size={chunk_size}")
                 
-            chunk_size = strategy_to_chunk_size[strategy]
-            logger.info(f"Procesando colección adaptativa {collection_name} para estrategia {strategy} (chunk_size: {chunk_size})")
-            
-            # Verificar si existe la colección
-            existing_vectorstore = self.vectorstore_handler.load_vectorstore(self.embeddings, collection_name)
-            
-            if existing_vectorstore:
-                logger.info(f"Colección {collection_name} existe - analizando actualizaciones...")
-                
-                # Analizar actualizaciones para esta colección
-                existing_cubos = self.get_existing_cubos_with_versions(existing_vectorstore)
-                documents_to_load, cubos_to_remove = self.analyze_document_updates(documents, existing_cubos)
-                
-                if cubos_to_remove:
-                    if not self.remove_documents_by_cubo(existing_vectorstore, cubos_to_remove):
-                        logger.error(f"Error eliminando documentos obsoletos de {collection_name}")
-                        results[strategy] = False
-                        continue
-                
-                if documents_to_load:
-                    # Crear text splitter específico para este tamaño
-                    adaptive_splitter = RecursiveCharacterTextSplitter(
-                        chunk_size=chunk_size,
-                        chunk_overlap=int(chunk_size * 0.1)  # 10% de overlap
-                    )
-                    
-                    # Chunkar documentos con el tamaño específico
-                    adaptive_chunks = adaptive_splitter.split_documents(documents_to_load)
-                    
-                    # Crear diccionario de documentos originales
-                    source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents_to_load)}
-                    
-                    # Añadir documentos actualizados
-                    success = self.vectorstore_handler.add_documents_to_collection(
-                        existing_vectorstore, 
-                        adaptive_chunks, 
-                        source_documents
-                    )
-                    results[strategy] = success
-                else:
-                    logger.info(f"No hay actualizaciones para {collection_name}")
-                    results[strategy] = True
-            else:
-                # Crear nueva colección adaptativa
-                logger.info(f"Creando nueva colección adaptativa {collection_name}...")
-                
-                # Crear text splitter específico para este tamaño
-                adaptive_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=chunk_size,
-                    chunk_overlap=int(chunk_size * 0.1)  # 10% de overlap
-                )
-                
-                # Chunkar documentos con el tamaño específico
-                adaptive_chunks = adaptive_splitter.split_documents(documents)
-                
-                # Crear vectorstore para esta estrategia
-                vectorstore = self.vectorstore_handler.create_vectorstore(
-                    documents=adaptive_chunks,
-                    embeddings=self.embeddings,
+                # No forzar la recreación completa por defecto, la lógica inteligente se encargará
+                force_recreate = False
+
+                success = self.load_documents_intelligently(
+                    documents,
                     collection_name=collection_name,
-                    drop_old=True
+                    force_recreate=force_recreate,
+                    chunk_size=chunk_size
                 )
+                results[collection_name] = success
+            except ValueError:
+                logger.warning(f"La clave de estrategia '{strategy}' en adaptive_collections no es un entero válido para chunk_size. Saltando...")
+            except Exception as e:
+                logger.error(f"Error al crear la colección adaptativa para la estrategia '{strategy}': {e}", exc_info=True)
+                results[collection_name] = False
                 
-                results[strategy] = vectorstore is not None
-            
-            if results[strategy]:
-                logger.info(f"Colección {collection_name} procesada correctamente")
-            else:
-                logger.error(f"Error procesando colección {collection_name}")
-        
         return results
     
     def extract_chunk_size_from_collection(self, collection_name: str) -> int:
