@@ -78,15 +78,16 @@ class DocumentUploader:
             
             for source in existing_metadata:
                 cubo, version = self.extract_cubo_and_version(source)
-                if cubo != "general":
+                if cubo and version is not None and cubo != "general":
                     # Mantener la versión más alta encontrada para cada cubo
-                    if cubo not in existing_cubos or version > existing_cubos[cubo]:
+                    existing_version = existing_cubos.get(cubo)
+                    if existing_version is None or version > existing_version:
                         existing_cubos[cubo] = version
             
             logger.info(f"Cubos existentes con versiones: {existing_cubos}")
             
         except Exception as e:
-            logger.warning(f"No se pudieron verificar cubos existentes: {e}")
+            logger.warning(f"No se pudieron verificar cubos existentes: {e}", exc_info=True)
             
         return existing_cubos
     
@@ -111,7 +112,10 @@ class DocumentUploader:
         for doc in documents:
             source = doc.metadata.get('source', '')
             cubo, version = self.extract_cubo_and_version(source)
-            
+
+            if not cubo:
+                continue
+
             if cubo == "general":
                 # Documentos generales siempre se añaden
                 new_documents.append(doc)
@@ -124,21 +128,26 @@ class DocumentUploader:
                 
             processed_cubos.add(cubo)
             
-            if cubo not in existing_cubos:
+            existing_version = existing_cubos.get(cubo)
+
+            if existing_version is None:
                 # Cubo nuevo - añadir
                 logger.info(f"Cubo nuevo detectado: {cubo} v{version}")
                 new_documents.append(doc)
-            elif version > existing_cubos[cubo]:
+            elif version is not None and version > existing_version:
                 # Versión más nueva - eliminar la anterior y añadir la nueva
-                logger.info(f"Actualización detectada: {cubo} v{existing_cubos[cubo]} -> v{version}")
+                logger.info(f"Actualización detectada: {cubo} v{existing_version} -> v{version}")
                 cubos_to_remove.append(cubo)
                 new_documents.append(doc)
-            elif version == existing_cubos[cubo]:
+            elif version is not None and version == existing_version:
                 # Misma versión - no hacer nada
                 logger.info(f"Cubo {cubo} v{version} ya existe con la misma versión")
             else:
-                # Versión más antigua - no añadir
-                logger.warning(f"Versión más antigua ignorada: {cubo} v{version} (existente: v{existing_cubos[cubo]})")
+                # Versión más antigua o version is None
+                if version is not None:
+                    logger.warning(f"Versión más antigua ignorada: {cubo} v{version} (existente: v{existing_version})")
+                else:
+                    logger.warning(f"Versión no encontrada para el cubo {cubo} en el documento {source}. Se ignora.")
         
         # Añadir todos los documentos de los cubos que necesitan ser cargados
         final_documents = []
