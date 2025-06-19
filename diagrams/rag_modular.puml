@@ -1,27 +1,32 @@
-@startuml
-!define LIGHTYELLOW #FFFACD
+@startuml "Arquitectura de RAG Modular"
+' Mejora la legibilidad y la calidad de la imagen para documentos.
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 12
 
-skinparam component {
-    BackgroundColor LIGHTYELLOW
-    BorderColor Black
-    FontSize 12
+    component {
+        backgroundColor #add8e6
+        borderColor #2688d4
+    }
+
+    arrow {
+        color #2688d4
+    }
 }
-
-skinparam arrow {
-    FontSize 9
-}
-
-skinparam minlen 2
 
 component "Nodo Politica" as NP
 component "Modulo Recuperacion" as MR 
 component "Modulo Generacion" as MG
 component "Modulo Fusion" as MF
 
-NP .down.> MR : Config\ndinamica
-NP .down.> MG : Seleccion\nmodelo
-MR .down.> MF : Resultados\nrecuperacion  
-MG .down.> MF : Resultados\ngeneracion
+NP .down.> MR : Config. dinamica
+NP .down.> MG : Seleccion modelo
+MR .down.> MF : Resultados recuperacion
+MG .down.> MF : Resultados generacion
 MF .up.> NP : Retroalimentacion
 
 @enduml

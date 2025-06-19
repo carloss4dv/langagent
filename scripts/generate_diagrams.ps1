@@ -105,13 +105,13 @@ if ($javaOK -and $plantUMLOK) {
             
             try {
                 # Comando PlantUML
-                $command = "java -jar `"$PlantUMLJar`" -tpng -o `"$OutputDir`" `"$inputFile`""
+                $command = "java -jar `"$PlantUMLJar`" -tsvg -o `"$OutputDir`" `"$inputFile`""
                 Write-Host "  Ejecutando: $command" -ForegroundColor DarkGray
                 
                 Invoke-Expression $command
                 
                 # PlantUML genera con el mismo nombre pero extensión .png
-                $generatedFile = $inputFile -replace '\.puml$', '.png'
+                $generatedFile = $inputFile -replace '\.puml$', '.svg'
                 $generatedPath = Join-Path $OutputDir (Split-Path $generatedFile -Leaf)
                 
                 if (Test-Path $generatedPath) {

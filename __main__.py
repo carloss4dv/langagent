@@ -44,11 +44,14 @@ def main():
     eval_parser.add_argument("--chroma_dir", help="Directorio de bases vectoriales Chroma")
     eval_parser.add_argument("--modelo", help="Nombre del modelo LLM principal")
     eval_parser.add_argument("--modelo2", help="Nombre del segundo modelo LLM")
+    eval_parser.add_argument("--modelo3", help="Nombre del tercer modelo LLM (para batch mode)")
     eval_parser.add_argument("--salida", help="Ruta para guardar los resultados")
     eval_parser.add_argument("--verbose", action="store_true", help="Mostrar información detallada")
     eval_parser.add_argument("--casos", help="Archivo JSON con casos de prueba personalizados")
     eval_parser.add_argument("--vector_db_type", default="milvus", choices=["chroma", "milvus"],
                            help="Tipo de vectorstore a utilizar (default: milvus)")
+    eval_parser.add_argument("--batch", action="store_true", help="Ejecutar en modo batch para solo generar respuestas.")
+    eval_parser.add_argument("--output_dir", default="batch_results", help="Directorio para guardar los resultados en modo batch.")
     
     # Analizar argumentos
     args = parser.parse_args()
@@ -122,12 +125,18 @@ def main():
                 eval_main_args.extend(["--modelo", args.modelo])
             if args.modelo2:
                 eval_main_args.extend(["--modelo2", args.modelo2])
+            if args.modelo3:
+                eval_main_args.extend(["--modelo3", args.modelo3])
             if args.salida:
                 eval_main_args.extend(["--salida", args.salida])
             if args.verbose:
                 eval_main_args.append("--verbose")
             if args.casos:
                 eval_main_args.extend(["--casos", args.casos])
+            if args.batch:
+                eval_main_args.append("--batch")
+            if args.output_dir:
+                eval_main_args.extend(["--output_dir", args.output_dir])
             
             # Agregar el tipo de vectorstore
             eval_main_args.extend(["--vector_db_type", args.vector_db_type])
@@ -149,12 +158,18 @@ def main():
                     eval_main_args.extend(["--modelo", args.modelo])
                 if args.modelo2:
                     eval_main_args.extend(["--modelo2", args.modelo2])
+                if args.modelo3:
+                    eval_main_args.extend(["--modelo3", args.modelo3])
                 if args.salida:
                     eval_main_args.extend(["--salida", args.salida])
                 if args.verbose:
                     eval_main_args.append("--verbose")
                 if args.casos:
                     eval_main_args.extend(["--casos", args.casos])
+                if args.batch:
+                    eval_main_args.append("--batch")
+                if args.output_dir:
+                    eval_main_args.extend(["--output_dir", args.output_dir])
                 
                 # Agregar el tipo de vectorstore
                 eval_main_args.extend(["--vector_db_type", args.vector_db_type])
@@ -171,4 +186,4 @@ def main():
         parser.print_help()
 
 if __name__ == "__main__":
-    main() 
+    main()

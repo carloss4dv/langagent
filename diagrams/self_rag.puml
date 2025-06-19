@@ -1,5 +1,24 @@
-@startuml
-skinparam style strictuml
+@startuml "Workflow de SELF-RAG"
+' Mejora la legibilidad y la calidad de la imagen para documentos.
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 12
+
+    sequence {
+        participantBorderColor #2688d4
+        participantBackgroundColor #add8e6
+        actorBorderColor #2688d4
+        actorBackgroundColor #ffdead
+    }
+
+    arrow {
+        color #2688d4
+    }
+}
 
 title Workflow de SELF-RAG
 
@@ -8,32 +27,32 @@ participant "Sistema SELF-RAG" as SELFRAGSystem
 participant "Retriever Externo" as ExternalRetriever
 participant "Base de Conocimiento" as KnowledgeBase
 
-User -> SELFRAGSystem: Envia Consulta (Query)
+User -> SELFRAGSystem: Envia consulta
 activate SELFRAGSystem
 
-loop Mientras no se genere el token de fin
-    SELFRAGSystem -> SELFRAGSystem: Decide si Recuperar
+loop Hasta generar token de fin
+    SELFRAGSystem -> SELFRAGSystem: ¿Recuperar?
     alt Decidir Recuperar
-        SELFRAGSystem -> ExternalRetriever: Solicita Recuperacion (Query + Generacion Actual)
+        SELFRAGSystem -> ExternalRetriever: Solicitar recuperacion
         activate ExternalRetriever
-        ExternalRetriever -> KnowledgeBase: Recupera Pasajes
+        ExternalRetriever -> KnowledgeBase: Recuperar pasajes
         activate KnowledgeBase
-        KnowledgeBase --> ExternalRetriever: Devuelve Pasajes
+        KnowledgeBase --> ExternalRetriever: Pasajes
         deactivate KnowledgeBase
-        ExternalRetriever --> SELFRAGSystem: Devuelve Pasajes
+        ExternalRetriever --> SELFRAGSystem: Pasajes
         deactivate ExternalRetriever
-        SELFRAGSystem -> SELFRAGSystem: Genera Tokens de Critica para Pasajes
+        SELFRAGSystem -> SELFRAGSystem: Generar criticas para pasajes
         alt Pasajes Relevantes
-            SELFRAGSystem -> SELFRAGSystem: Genera Continuacion con Pasajes
+            SELFRAGSystem -> SELFRAGSystem: Generar continuacion con pasajes
         else
-            SELFRAGSystem -> SELFRAGSystem: Genera Continuacion sin Pasajes
+            SELFRAGSystem -> SELFRAGSystem: Generar continuacion sin pasajes
         end
     else
-        SELFRAGSystem -> SELFRAGSystem: Genera Siguiente Segmento sin Recuperacion
+        SELFRAGSystem -> SELFRAGSystem: Generar siguiente segmento
     end
 end
 
-SELFRAGSystem --> User: Envia Respuesta Final
+SELFRAGSystem --> User: Envia respuesta final
 deactivate SELFRAGSystem
 
 @enduml

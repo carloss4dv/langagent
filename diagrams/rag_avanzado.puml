@@ -1,5 +1,24 @@
-@startuml
-skinparam style strictuml
+@startuml "Workflow de RAG Avanzado"
+' Mejora la legibilidad y la calidad de la imagen para documentos.
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 12
+
+    sequence {
+        participantBorderColor #2688d4
+        participantBackgroundColor #add8e6
+        actorBorderColor #2688d4
+        actorBackgroundColor #ffdead
+    }
+
+    arrow {
+        color #2688d4
+    }
+}
 
 title RAG Avanzado Workflow
 
@@ -11,15 +30,15 @@ participant "Reordenador" as Rerank
 participant "LLM CoN" as Gen
 
 User -> Proc: Consulta
-Proc -> Proc: Transformar Query
+Proc -> Proc: Transformar consulta
 Proc -> Ret: Subconsultas
-Ret -> DB: Recuperacion Densa
-DB --> Ret: Docs Candidatos
-Ret --> Rerank: Docs Recuperados
-Rerank -> Rerank: Reordenar por Relevancia
-Rerank --> Gen: Docs Reordenados
+Ret -> DB: Recuperacion densa
+DB --> Ret: Documentos candidatos
+Ret --> Rerank: Documentos recuperados
+Rerank -> Rerank: Reordenar por relevancia
+Rerank --> Gen: Documentos reordenados
 Gen -> Gen: Generar con Chain of Note
 Gen --> Proc: Respuesta
-Proc --> User: Respuesta Final
+Proc --> User: Respuesta final
 
 @enduml

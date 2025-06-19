@@ -4,6 +4,7 @@
 Script para ejecutar la evaluación del agente LangChain con casos predefinidos.
 Este script usa el evaluador de evaluate.py para probar el agente con un conjunto
 de preguntas predefinidas y genera un informe de evaluación.
+También puede ejecutarse en modo batch para solo generar respuestas.
 """
 
 import os
@@ -19,6 +20,10 @@ if current_dir not in sys.path:
 
 # Importar desde el módulo local
 from langagent.evaluation.evaluate import AgentEvaluator
+from langagent.core.lang_chain_agent import LangChainAgent
+from langagent.config.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Casos de prueba basados en los cubos de datos del sistema
 CASOS_PRUEBA = [
@@ -56,50 +61,145 @@ CASOS_PRUEBA = [
     }
 ]
 
+def run_batch_evaluation(preguntas_file, output_dir, agent_config):
+    """
+    Ejecuta una evaluación en batch de preguntas usando el LangChainAgent.
+    """
+    logger.info(f"Iniciando evaluación en batch desde el archivo: {preguntas_file}")
+
+    # Cargar preguntas
+    try:
+        with open(preguntas_file, 'r', encoding='utf-8') as f:
+            preguntas_data = json.load(f)
+        # Soporta ambos formatos: lista de strings o lista de dicts con "pregunta"
+        if isinstance(preguntas_data[0], dict):
+            preguntas = [item["pregunta"] for item in preguntas_data]
+        else:
+            preguntas = preguntas_data
+        logger.info(f"Se cargaron {len(preguntas)} preguntas.")
+    except Exception as e:
+        logger.error(f"Error al cargar el archivo de preguntas: {e}")
+        return
+
+    # Inicializar agente
+    try:
+        agent = LangChainAgent(
+            data_dir=agent_config.get("data_dir"),
+            vectorstore_dir=agent_config.get("vectorstore_dir"),
+            vector_db_type=agent_config.get("vector_db_type"),
+            local_llm=agent_config.get("modelo"),
+            local_llm2=agent_config.get("modelo2"),
+            local_llm3=agent_config.get("modelo3")
+        )
+    except Exception as e:
+        logger.error(f"Error al inicializar LangChainAgent: {e}")
+        return
+
+    results = []
+    for i, pregunta in enumerate(preguntas):
+        logger.info(f"Procesando pregunta {i+1}/{len(preguntas)}: {pregunta}")
+        try:
+            # Ejecutar la consulta a través del agente
+            result = agent.run(pregunta)
+
+            # Capturar metadatos
+            serializable_result = {}
+            for key, value in result.items():
+                try:
+                    json.dumps(value)
+                    serializable_result[key] = value
+                except (TypeError, OverflowError):
+                    serializable_result[key] = str(value)
+
+            results.append({
+                "pregunta": pregunta,
+                "respuesta_generada": serializable_result.get('generation', ''),
+                "metadata_completa": serializable_result
+            })
+
+        except Exception as e:
+            logger.error(f"Error procesando la pregunta '{pregunta}': {e}")
+            results.append({
+                "pregunta": pregunta,
+                "error": str(e)
+            })
+
+    # Guardar resultados
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = os.path.join(output_dir, f"batch_results_{timestamp}.json")
+
+    try:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(results, f, ensure_ascii=False, indent=4)
+        logger.info(f"Resultados de la evaluación guardados en: {output_file}")
+    except Exception as e:
+        logger.error(f"Error al guardar los resultados: {e}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Ejecuta una evaluación completa del agente RAG")
     parser.add_argument("--data_dir", help="Directorio con datos de documentos")
     parser.add_argument("--chroma_dir", help="Directorio de bases vectoriales Chroma")
     parser.add_argument("--modelo", help="Nombre del modelo LLM principal")
     parser.add_argument("--modelo2", help="Nombre del segundo modelo LLM")
-    parser.add_argument("--salida", help="Ruta para guardar los resultados")
+    parser.add_argument("--modelo3", help="Nombre del tercer modelo LLM (para batch mode)")
+    parser.add_argument("--salida", help="Ruta para guardar los resultados (modo deepeval)")
     parser.add_argument("--verbose", action="store_true", help="Mostrar información detallada")
-    parser.add_argument("--casos", help="Archivo JSON con casos de prueba personalizados")
+    parser.add_argument("--casos", help="Archivo JSON con casos de prueba")
     parser.add_argument("--vector_db_type", default="milvus", choices=["chroma", "milvus"],
                        help="Tipo de vectorstore a utilizar (default: milvus)")
+    parser.add_argument("--batch", action="store_true", help="Ejecutar en modo batch para solo generar respuestas.")
+    parser.add_argument("--output_dir", default="batch_results", help="Directorio para guardar los resultados en modo batch.")
     
     args = parser.parse_args()
-    
-    # Cargar casos personalizados si se proporciona un archivo
-    casos_prueba = CASOS_PRUEBA
-    if args.casos and os.path.exists(args.casos):
-        try:
+
+    if args.batch:
+        if not args.casos:
+            logger.error("El modo batch requiere un archivo de casos de prueba con --casos.")
+            sys.exit(1)
+        
+        agent_config = {
+            "data_dir": args.data_dir,
+            "vectorstore_dir": args.chroma_dir,
+            "vector_db_type": args.vector_db_type,
+            "modelo": args.modelo,
+            "modelo2": args.modelo2,
+            "modelo3": args.modelo3
+        }
+        run_batch_evaluation(args.casos, args.output_dir, agent_config)
+    else:
+        # Lógica original de deepeval
+        evaluador = AgentEvaluator(
+            data_dir=args.data_dir,
+            vectorstore_dir=args.chroma_dir,
+            vector_db_type=args.vector_db_type,
+            local_llm=args.modelo,
+            local_llm2=args.modelo2
+        )
+        
+        # Cargar casos de prueba
+        if args.casos and os.path.exists(args.casos):
             with open(args.casos, 'r', encoding='utf-8') as f:
-                casos_prueba = json.load(f)
-            print(f"Casos de prueba personalizados cargados de: {args.casos}")
-        except Exception as e:
-            print(f"Error al cargar casos personalizados: {e}")
-    
-    # Crear evaluador
-    evaluador = AgentEvaluator(
-        data_dir=args.data_dir,
-        vectorstore_dir=args.chroma_dir,
-        vector_db_type=args.vector_db_type,
-        local_llm=args.modelo,
-        local_llm2=args.modelo2
-    )
-    
-    # Extraer preguntas y respuestas esperadas
-    preguntas = [caso["pregunta"] for caso in casos_prueba]
-    respuestas_esperadas = [caso.get("respuesta_esperada") for caso in casos_prueba]
-    
-    print(f"Evaluando {len(preguntas)} casos de prueba...")
-    
-    # Ejecutar evaluación
-    evaluador.evaluar(preguntas, respuestas_esperadas)
-    
-    print("Evaluación completada.")
-    
-    
+                casos = json.load(f)
+            preguntas = [caso["pregunta"] for caso in casos]
+            respuestas_esperadas = [caso.get("respuesta_esperada") for caso in casos]
+        else:
+            preguntas = [caso["pregunta"] for caso in CASOS_PRUEBA]
+            respuestas_esperadas = [caso["respuesta_esperada"] for caso in CASOS_PRUEBA]
+        
+        # Ejecutar evaluación
+        resultados = evaluador.evaluar(preguntas, respuestas_esperadas)
+        
+        # Guardar resultados si se especifica
+        if args.salida:
+            if not os.path.exists(os.path.dirname(args.salida)):
+                os.makedirs(os.path.dirname(args.salida))
+            with open(args.salida, 'w', encoding='utf-8') as f:
+                json.dump(resultados, f, ensure_ascii=False, indent=4)
+            print(f"Resultados guardados en {args.salida}")
+
 if __name__ == "__main__":
-    main() 
+    main()

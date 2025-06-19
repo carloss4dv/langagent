@@ -1,5 +1,24 @@
-@startuml
-skinparam style strictuml
+@startuml "Workflow de Corrective RAG (CRAG)"
+' Mejora la legibilidad y la calidad de la imagen para documentos.
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 12
+
+    sequence {
+        participantBorderColor #2688d4
+        participantBackgroundColor #add8e6
+        actorBorderColor #2688d4
+        actorBackgroundColor #ffdead
+    }
+
+    arrow {
+        color #2688d4
+    }
+}
 
 title Corrective RAG (CRAG) Workflow
 
@@ -13,26 +32,26 @@ participant "Web Search" as Web
 participant "LLM" as Gen
 
 User -> System: Consulta
-System -> Ret: Recuperar Docs
+System -> Ret: Recuperar documentos
 Ret -> DB: Busqueda
 DB --> Ret: Documentos
-Ret --> System: Docs Iniciales
+Ret --> System: Documentos iniciales
 
-System -> Eval: Evaluar Relevancia
+System -> Eval: Evaluar relevancia
 Eval --> System: Decision
 
-alt Docs IRRELEVANTES
-    System -> Reform: Reformular Query
-    Reform --> System: Query Reformulada
-    System -> Web: Busqueda Web
-    Web --> System: Resultados Web
-    System -> Gen: Generar (Query + Docs + Web)
+alt Documentos Irrelevantes
+    System -> Reform: Reformular consulta
+    Reform --> System: Consulta reformulada
+    System -> Web: Busqueda web
+    Web --> System: Resultados web
+    System -> Gen: Generar (Consulta + Docs + Web)
     Gen --> System: Respuesta
-else Docs RELEVANTES
-    System -> Gen: Generar (Query + Docs)
+else Documentos Relevantes
+    System -> Gen: Generar (Consulta + Docs)
     Gen --> System: Respuesta
 end
 
-System --> User: Respuesta Final
+System --> User: Respuesta final
 
 @enduml

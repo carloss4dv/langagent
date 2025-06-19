@@ -1,131 +1,135 @@
-# Script simplificado para generar diagramas PNG
-Write-Host "=== GENERADOR DE DIAGRAMAS RAG ===" -ForegroundColor Green
+# Script para generar diagramas en formato SVG desde archivos PlantUML
 
-# Cambiar al directorio raíz del proyecto
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$rootDir = Split-Path -Parent $scriptDir
-Set-Location $rootDir
+param(
+    [string]$InputDir = "diagrams",
+    [string]$OutputDir = "img/svg",
+    [string]$PlantUMLJar = "./tools/plantuml.jar"
+)
 
-Write-Host "Directorio de trabajo: $rootDir" -ForegroundColor Yellow
+Write-Host "=== GENERADOR DE DIAGRAMAS SVG (SIMPLE) ====" -ForegroundColor Green
+Write-Host ""
 
-# Crear directorio img si no existe
-if (!(Test-Path "img")) {
-    Write-Host "Creando directorio img..." -ForegroundColor Yellow
-    New-Item -ItemType Directory -Path "img" -Force | Out-Null
+# Crear directorio de salida si no existe
+if (!(Test-Path $OutputDir)) {
+    Write-Host "Creando directorio: $OutputDir" -ForegroundColor Yellow
+    New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 }
 
 # Verificar herramientas
-Write-Host "=== VERIFICANDO HERRAMIENTAS ===" -ForegroundColor Cyan
+Write-Host "=== VERIFICANDO HERRAMIENTAS ====" -ForegroundColor Cyan
+$javaOK = Get-Command java -ErrorAction SilentlyContinue
+$plantUMLOK = Test-Path $PlantUMLJar
 
-$graphvizOK = $false
-if (Get-Command dot -ErrorAction SilentlyContinue) {
-    Write-Host "OK Graphviz encontrado" -ForegroundColor Green
-    $graphvizOK = $true
+if ($javaOK) {
+    Write-Host "[OK] Java disponible" -ForegroundColor Green
 } else {
-    Write-Host "ERROR Graphviz no encontrado" -ForegroundColor Red
+    Write-Host "[ERROR] Java no encontrado. Asegurate de que este en el PATH." -ForegroundColor Red
 }
 
-$javaOK = $false
-if (Get-Command java -ErrorAction SilentlyContinue) {
-    Write-Host "OK Java encontrado" -ForegroundColor Green
-    $javaOK = $true
+if ($plantUMLOK) {
+    Write-Host "[OK] PlantUML JAR encontrado: $PlantUMLJar" -ForegroundColor Green
 } else {
-    Write-Host "ERROR Java no encontrado" -ForegroundColor Red
+    Write-Host "[ERROR] PlantUML JAR no encontrado en la raiz del proyecto." -ForegroundColor Red
+    Write-Host "  Puedes descargarlo desde https://plantuml.com/download"
 }
-
-$plantUMLOK = $false
-$plantUMLPath = "tools/plantuml.jar"
-if (Test-Path $plantUMLPath) {
-    Write-Host "OK PlantUML encontrado en $plantUMLPath" -ForegroundColor Green
-    $plantUMLOK = $true
-} else {
-    Write-Host "ERROR PlantUML no encontrado en $plantUMLPath" -ForegroundColor Red
-}
-
 Write-Host ""
 
-# Generar diagramas con Graphviz
-if ($graphvizOK) {
-    Write-Host "=== GENERANDO CON GRAPHVIZ ===" -ForegroundColor Cyan
-    
-    # Buscar todos los archivos .dot en el directorio diagrams
-    $dotFiles = Get-ChildItem -Path "diagrams" -Filter "*.dot" -ErrorAction SilentlyContinue
-    
-    if ($dotFiles) {
-        foreach ($dotFile in $dotFiles) {
-            $baseName = [System.IO.Path]::GetFileNameWithoutExtension($dotFile.Name)
-            $outputFile = "img/$baseName.png"
-            
-            Write-Host "Generando $outputFile desde $($dotFile.Name)..." -ForegroundColor Yellow
+if (-not ($javaOK -and $plantUMLOK)) {
+    Write-Host "Faltan herramientas necesarias. Abortando." -ForegroundColor Red
+    exit 1
+}
+
+# Obtener lista de archivos .puml
+$pumlFiles = Get-ChildItem -Path $InputDir -Filter *.puml
+
+if ($pumlFiles.Count -eq 0) {
+    Write-Host "No se encontraron archivos .puml en el directorio '$InputDir'" -ForegroundColor Yellow
+    exit
+}
+
+Write-Host "=== PROCESANDO ARCHIVOS PUML (PLANTUML) ====" -ForegroundColor Cyan
+Write-Host "Se encontraron $($pumlFiles.Count) archivos para procesar."
+Write-Host ""
+
+foreach ($file in $pumlFiles) {
+    $inputFile = $file.FullName
+    $outputFileName = $file.BaseName + ".svg"
+    $outputFilePath = Join-Path $OutputDir $outputFileName
+
+    Write-Host "Generando: $($file.Name)" -ForegroundColor Yellow
+    Write-Host "  Input:  $inputFile" -ForegroundColor Gray
+    Write-Host "  Output: $outputFilePath" -ForegroundColor Gray
+
+    try {
+        # Usar .NET Process para un control más robusto de la salida
+        $pinfo = New-Object System.Diagnostics.ProcessStartInfo
+        $pinfo.FileName = "java"
+        $pinfo.RedirectStandardError = $true
+        $pinfo.RedirectStandardOutput = $true
+        $pinfo.UseShellExecute = $false
+        $pinfo.CreateNoWindow = $true # Ocultar la ventana de la consola
+        $pinfo.Arguments = "-jar `"$PlantUMLJar`" -tsvg -verbose `"$inputFile`" -o `"$OutputDir`""
+        
+        Write-Host "  Ejecutando: $($pinfo.FileName) $($pinfo.Arguments)" -ForegroundColor DarkGray
+
+        $p = New-Object System.Diagnostics.Process
+        $p.StartInfo = $pinfo
+        $p.Start() | Out-Null
+          # Aplicar un timeout de 60 segundos
+        $timeoutReached = $false
+        if (-not $p.WaitForExit(60000)) {
+            Write-Host "  [WARNING] Timeout alcanzado (60s). Terminando proceso..." -ForegroundColor Yellow
+            $p.Kill()
+            $timeoutReached = $true
+        }
+
+        $plantUMLOutput = ""
+        $plantUMLError = ""
+        $fullOutput = ""
+        
+        if (-not $timeoutReached) {
             try {
-                dot -Tpng -Gdpi=300 -o $outputFile $dotFile.FullName
-                if (Test-Path $outputFile) {
-                    Write-Host "OK $baseName generado" -ForegroundColor Green
-                } else {
-                    Write-Host "ERROR al generar $baseName" -ForegroundColor Red
-                }
+                $plantUMLOutput = $p.StandardOutput.ReadToEnd()
+                $plantUMLError = $p.StandardError.ReadToEnd()
+                $fullOutput = $plantUMLOutput + $plantUMLError
             } catch {
-                Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "  [WARNING] Error al leer la salida del proceso: $($_.Exception.Message)" -ForegroundColor Yellow
             }
         }
-    } else {
-        Write-Host "No se encontraron archivos .dot en el directorio diagrams" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "Saltando Graphviz (no disponible)" -ForegroundColor Yellow
-}
 
-# Generar diagramas con PlantUML
-if ($javaOK -and $plantUMLOK) {
-    Write-Host "=== GENERANDO CON PLANTUML ===" -ForegroundColor Cyan
-    
-    # Buscar todos los archivos .puml en el directorio diagrams
-    $pumlFiles = Get-ChildItem -Path "diagrams" -Filter "*.puml" -ErrorAction SilentlyContinue
-    
-    if ($pumlFiles) {
-        Write-Host "Encontrados $($pumlFiles.Count) archivos .puml:" -ForegroundColor Yellow
-        foreach ($pumlFile in $pumlFiles) {
-            Write-Host "  - $($pumlFile.Name)" -ForegroundColor Gray
+        # Analizar la salida para encontrar el archivo que PlantUML realmente creó
+        $createdFilePath = $null
+        if ($fullOutput -match "Creating file: (.*)") {
+            $createdFilePath = $matches[1].Trim()
+        }        if ($timeoutReached) {
+            Write-Host "  [ERROR] Proceso terminado por timeout. Saltando al siguiente archivo." -ForegroundColor Red
+            continue
+        } elseif ($createdFilePath -and (Test-Path $createdFilePath)) {
+             $fileSize = (Get-Item $createdFilePath).Length
+             Write-Host "  [OK] Generado correctamente: $createdFilePath ($([math]::Round($fileSize/1024, 2)) KB)" -ForegroundColor Green
+        } else {
+            # Intentar encontrar el archivo por nombre si el regex falló
+            $expectedSVGPath = Join-Path $OutputDir ($file.BaseName + ".svg")
+            if (Test-Path $expectedSVGPath) {
+                $fileSize = (Get-Item $expectedSVGPath).Length
+                Write-Host "  [OK] Generado correctamente: $expectedSVGPath ($([math]::Round($fileSize/1024, 2)) KB)" -ForegroundColor Green
+            } else {
+                Write-Host "  [ERROR] Error: PlantUML finalizó pero no se encontró el archivo de salida." -ForegroundColor Red
+                if (-not [string]::IsNullOrWhiteSpace($fullOutput)) {
+                    Write-Host "--- Salida de PlantUML ---" -ForegroundColor DarkGray
+                    Write-Host $fullOutput -ForegroundColor DarkGray
+                    Write-Host "--------------------------" -ForegroundColor DarkGray
+                }
+                Write-Host "Continuando con el siguiente archivo..." -ForegroundColor Yellow
+                continue
+            }
         }
-        
-        Write-Host "Generando diagramas PlantUML..." -ForegroundColor Yellow
-        try {
-            # Generar todos los archivos .puml del directorio diagrams
-            java -jar $plantUMLPath -tpng -o "../img" "diagrams/*.puml"
-            Write-Host "OK Todos los diagramas PlantUML generados" -ForegroundColor Green
-        } catch {
-            Write-Host "ERROR PlantUML: $($_.Exception.Message)" -ForegroundColor Red
-        }
-    } else {
-        Write-Host "No se encontraron archivos .puml en el directorio diagrams" -ForegroundColor Yellow
+    } catch {
+        Write-Host "  [ERROR] Error al ejecutar el proceso: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Continuando con el siguiente archivo..." -ForegroundColor Yellow
+        continue
     }
-} else {
-    Write-Host "Saltando PlantUML (Java o JAR no disponible)" -ForegroundColor Yellow
+    Write-Host ""
 }
 
-Write-Host ""
-Write-Host "=== RESUMEN ===" -ForegroundColor Green
-
-$pngFiles = Get-ChildItem -Path "img" -Filter "*.png" -ErrorAction SilentlyContinue
-if ($pngFiles) {
-    Write-Host "Archivos generados en img/:" -ForegroundColor Green
-    foreach ($file in $pngFiles) {
-        $fileSize = [math]::Round($file.Length / 1KB, 1)
-        Write-Host "  - $($file.Name) ($fileSize KB)" -ForegroundColor White
-    }
-} else {
-    Write-Host "No se generaron archivos PNG" -ForegroundColor Red
-}
-
-Write-Host ""
-Write-Host "=== COMANDOS MANUALES ===" -ForegroundColor Cyan
-Write-Host "Si prefieres ejecutar manualmente desde el directorio raíz:" -ForegroundColor Yellow
-Write-Host 'dot -Tpng -Gdpi=300 -o "img/nombre_diagrama.png" "diagrams/archivo.dot"' -ForegroundColor Gray
-Write-Host "java -jar tools/plantuml.jar -tpng -o img diagrams/*.puml" -ForegroundColor Gray
-
-Write-Host ""
-Write-Host "=== ESTRUCTURA DE DIRECTORIOS ===" -ForegroundColor Cyan
-Write-Host "diagrams/     - Archivos fuente de diagramas (.puml, .dot, .md)" -ForegroundColor Gray
-Write-Host "img/          - Imágenes generadas (.png)" -ForegroundColor Gray
-Write-Host "scripts/      - Scripts de PowerShell" -ForegroundColor Gray
-Write-Host "tools/        - Herramientas (plantuml.jar)" -ForegroundColor Gray 
+Write-Host "=== PROCESO COMPLETADO ====" -ForegroundColor Green

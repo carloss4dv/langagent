@@ -1,29 +1,51 @@
-@startuml
+@startuml "Flujo de Generacion en RAG"
+' Mejora la legibilidad y la calidad de la imagen para documentos.
 !theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 12
+    
+    activity {
+        borderColor #2688d4
+        backgroundColor #add8e6
+        fontName "Arial"
+        fontSize 11
+    }
+
+    arrow {
+        color #2688d4
+    }
+
+    partition {
+        borderColor #2688d4
+        backgroundColor #f0f8ff
+    }
+}
 
 |Usuario|
 start
-
-:Recibir consulta del usuario;
+:Recibir consulta;
 
 |Sistema|
-:Procesar consulta;
-:Vectorizar consulta;
-:Buscar en base de conocimiento vectorial;
+:Procesar y vectorizar consulta;
+:Buscar en base de conocimiento;
 :Recuperar fragmentos relevantes;
-:Combinar consulta original con fragmentos recuperados;
+:Combinar consulta y fragmentos;
 
 |LLM|
-:Generar prompt completo;
-:Enviar prompt al modelo de lenguaje;
+:Generar prompt;
+:Enviar a modelo de lenguaje;
 :Generar respuesta;
 
 |Sistema|
 :Postprocesar respuesta;
 
 |Usuario|
-:Devolver respuesta al usuario;
+:Devolver respuesta;
 
 stop
 
-@enduml 
+@enduml

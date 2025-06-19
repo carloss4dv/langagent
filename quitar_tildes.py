@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Script para quitar todas las tildes y caracteres acentuados de un archivo JSON.
+Script para quitar todas las tildes y caracteres acentuados de archivos JSON y diagramas PlantUML.
 Autor: Script generado automáticamente
 """
 
@@ -9,6 +9,7 @@ import json
 import unicodedata
 import argparse
 import os
+import glob
 from pathlib import Path
 
 def remove_accents(text):
@@ -53,6 +54,77 @@ def process_json_data(data):
         return remove_accents(data)
     else:
         return data
+
+def remove_accents_from_puml(input_file, output_file=None):
+    """
+    Quita todas las tildes de un archivo PlantUML.
+    
+    Args:
+        input_file (str): Ruta del archivo PUML de entrada
+        output_file (str, optional): Ruta del archivo PUML de salida. 
+                                   Si no se especifica, sobrescribe el archivo original.
+    """
+    try:
+        # Verificar que el archivo de entrada existe
+        if not os.path.exists(input_file):
+            raise FileNotFoundError(f"El archivo {input_file} no existe.")
+        
+        # Leer el archivo PUML
+        print(f"Leyendo archivo: {input_file}")
+        with open(input_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Procesar el contenido para quitar tildes
+        print("Procesando contenido para quitar tildes...")
+        processed_content = remove_accents(content)
+        
+        # Determinar el archivo de salida
+        if output_file is None:
+            output_file = input_file  # Sobrescribir el archivo original
+        
+        # Guardar el archivo procesado
+        print(f"Guardando archivo procesado: {output_file}")
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(processed_content)
+        
+        print(f"✅ Archivo PUML procesado exitosamente: {output_file}")
+        
+        return output_file
+        
+    except FileNotFoundError as e:
+        print(f"❌ Error: {e}")
+    except Exception as e:
+        print(f"❌ Error inesperado procesando {input_file}: {e}")
+
+def process_all_puml_files(diagrams_dir="diagrams"):
+    """
+    Procesa todos los archivos .puml en el directorio de diagramas.
+    
+    Args:
+        diagrams_dir (str): Directorio que contiene los archivos .puml
+    """
+    if not os.path.exists(diagrams_dir):
+        print(f"❌ El directorio {diagrams_dir} no existe.")
+        return
+    
+    # Buscar todos los archivos .puml
+    puml_pattern = os.path.join(diagrams_dir, "*.puml")
+    puml_files = glob.glob(puml_pattern)
+    
+    if not puml_files:
+        print(f"No se encontraron archivos .puml en {diagrams_dir}")
+        return
+    
+    print(f"\n🔄 Procesando {len(puml_files)} archivos .puml...")
+    
+    processed_count = 0
+    for puml_file in puml_files:
+        print(f"\nProcesando: {os.path.basename(puml_file)}")
+        result = remove_accents_from_puml(puml_file)
+        if result:
+            processed_count += 1
+    
+    print(f"\n✅ Se procesaron {processed_count} de {len(puml_files)} archivos .puml")
 
 def remove_accents_from_json(input_file, output_file=None):
     """
@@ -103,19 +175,28 @@ def remove_accents_from_json(input_file, output_file=None):
 def main():
     """Función principal del script."""
     parser = argparse.ArgumentParser(
-        description="Quita todas las tildes y acentos de un archivo JSON",
+        description="Quita todas las tildes y acentos de archivos JSON y diagramas PlantUML",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Ejemplos de uso:
+  # Procesar un archivo JSON específico:
   python quitar_tildes.py archivo.json
   python quitar_tildes.py archivo.json -o archivo_limpio.json
   python quitar_tildes.py preguntas_eval.json
+  
+  # Procesar todos los diagramas .puml:
+  python quitar_tildes.py --puml
+  python quitar_tildes.py --puml -d ruta/a/diagramas
+  
+  # Procesar tanto JSON como diagramas:
+  python quitar_tildes.py preguntas_eval.json --puml
         """
     )
     
     parser.add_argument(
         'input_file',
-        help='Archivo JSON de entrada'
+        nargs='?',
+        help='Archivo JSON de entrada (opcional si solo se procesan diagramas)'
     )
     
     parser.add_argument(
@@ -124,10 +205,36 @@ Ejemplos de uso:
         help='Archivo JSON de salida (opcional). Si no se especifica, se añade "_sin_tildes" al nombre original.'
     )
     
+    parser.add_argument(
+        '--puml',
+        action='store_true',
+        help='Procesar todos los archivos .puml en el directorio de diagramas'
+    )
+    
+    parser.add_argument(
+        '-d', '--diagrams-dir',
+        dest='diagrams_dir',
+        default='diagrams',
+        help='Directorio que contiene los archivos .puml (por defecto: diagrams)'
+    )
+    
     args = parser.parse_args()
     
-    # Ejecutar el procesamiento
-    remove_accents_from_json(args.input_file, args.output_file)
+    # Validar argumentos
+    if not args.input_file and not args.puml:
+        parser.error("Debe especificar un archivo JSON o usar --puml para procesar diagramas")
+    
+    # Procesar archivo JSON si se especifica
+    if args.input_file:
+        print("📄 Procesando archivo JSON...")
+        remove_accents_from_json(args.input_file, args.output_file)
+    
+    # Procesar archivos PUML si se solicita
+    if args.puml:
+        print("📊 Procesando diagramas PlantUML...")
+        process_all_puml_files(args.diagrams_dir)
+    
+    print("\n🎉 ¡Proceso completado!")
 
 if __name__ == "__main__":
-    main() 
+    main()
