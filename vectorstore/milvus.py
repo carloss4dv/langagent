@@ -558,8 +558,7 @@ class MilvusVectorStore(VectorStoreBase):
                     return fallback_retriever
                 except Exception as e_fallback:
                     logger.error(f"Error incluso con retriever fallback: {e_fallback}")
-            
-            # Último intento con parámetros mínimos
+              # Último intento con parámetros mínimos
             try:
                 logger.info("Intentando crear retriever con parámetros mínimos")
                 return vectorstore.as_retriever()
@@ -568,7 +567,8 @@ class MilvusVectorStore(VectorStoreBase):
                 return None
     
     def add_documents_to_collection(self, vectorstore: Milvus, documents: List[Document], 
-                                 source_documents: Dict[str, Document] = None) -> bool:
+                                 source_documents: Dict[str, Document] = None,
+                                 chunk_size: Optional[int] = None) -> bool:
         """
         Añade documentos a una vectorstore Milvus existente.
         Si está habilitado, genera contexto para mejorar la recuperación.
@@ -578,6 +578,7 @@ class MilvusVectorStore(VectorStoreBase):
             vectorstore: Instancia de Milvus vectorstore
             documents: Lista de documentos a añadir
             source_documents: Diccionario con los documentos originales completos (opcional)
+            chunk_size: Tamaño de chunk específico de la colección (opcional)
             
         Returns:
             bool: True si los documentos se añadieron correctamente
@@ -630,7 +631,7 @@ class MilvusVectorStore(VectorStoreBase):
             logger.info("🤖 INICIANDO GENERACIÓN DE CONTEXTO CON LLM")
             logger.info("=" * 70)
             
-            documents = self._generate_context_for_chunks(documents, source_documents)
+            documents = self._generate_context_for_chunks(documents, source_documents, chunk_size)
             
             logger.info("=" * 70)
             logger.info("✅ GENERACIÓN DE CONTEXTO COMPLETADA")
@@ -849,20 +850,18 @@ class MilvusVectorStore(VectorStoreBase):
                         logger.info(f"Schema de la colección: {schema}")
                         for field in schema.fields:
                             logger.info(f"Campo: {field.name}, Tipo: {field.dtype}, Auto ID: {field.auto_id}")
-                        
-                        # Información adicional sobre el campo primario
+                          # Información adicional sobre el campo primario
                         primary_field = schema.primary_field
                         if primary_field:
                             logger.info(f"Campo primario: {primary_field.name}, Auto ID: {primary_field.auto_id}")
                             
                 except Exception as diag_error:
                     logger.error(f"Error en diagnóstico: {diag_error}")
-            
             return False
     
-
     def _generate_context_for_chunks(self, documents: List[Document], 
-                               source_documents: Dict[str, Document]) -> List[Document]:
+                               source_documents: Dict[str, Document], 
+                               chunk_size: Optional[int] = None) -> List[Document]:
         """
         Genera contexto para cada chunk utilizando el documento completo y el LLM.
         Optimizado para procesamiento en lotes y concurrencia.
@@ -870,6 +869,7 @@ class MilvusVectorStore(VectorStoreBase):
         Args:
             documents: Lista de chunks (documentos) a enriquecer con contexto
             source_documents: Diccionario con los documentos originales completos
+            chunk_size: Tamaño de chunk específico de la colección (opcional)
             
         Returns:
             List[Document]: Documentos con contexto generado añadido
@@ -908,23 +908,24 @@ class MilvusVectorStore(VectorStoreBase):
         if not docs_to_process:
             logger.info("No hay documentos para procesar contexto")
             return documents
+          # Determinar el chunk_size a usar: parámetro específico o configuración global
+        final_chunk_size = chunk_size if chunk_size is not None else VECTORSTORE_CONFIG.get("chunk_size", 512)
         
         logger.info(f"Procesando contexto para {len(docs_to_process)} chunks en lotes de {batch_size}")
-        logger.info(f"Usando chunk_size de configuración: {VECTORSTORE_CONFIG.get('chunk_size', 512)}")
+        logger.info(f"Usando chunk_size específico de la colección: {final_chunk_size}")
         
         # Función para procesar un lote de documentos
         def process_batch(batch):
             batch_results = []
             for doc_idx, doc, full_document in batch:
                 try:
-                    # Obtener chunk_size directamente de la configuración actual
-                    chunk_size = VECTORSTORE_CONFIG.get("chunk_size", 512)
+                    # Usar el chunk_size específico determinado
                     
                     # Preparar input para el generador
                     context_input = {
                         "document": full_document.page_content,
                         "chunk": doc.page_content,
-                        "chunk_size": chunk_size
+                        "chunk_size": final_chunk_size
                     }
                     
                     # Generar contexto
@@ -1006,7 +1007,8 @@ class MilvusVectorStore(VectorStoreBase):
         return documents 
 
     def load_documents(self, documents: List[Document], embeddings: Embeddings = None, 
-                     source_documents: Dict[str, Document] = None) -> bool:
+                     source_documents: Dict[str, Document] = None, 
+                     chunk_size: Optional[int] = None) -> bool:
         """
         Carga documentos en la vectorstore.
         Si la colección no existe, la crea.
@@ -1016,6 +1018,7 @@ class MilvusVectorStore(VectorStoreBase):
             documents: Lista de documentos a cargar
             embeddings: Modelo de embeddings a utilizar (opcional)
             source_documents: Diccionario con los documentos originales completos (opcional)
+            chunk_size: Tamaño de chunk específico de la colección (opcional)
             
         Returns:
             bool: True si los documentos se cargaron correctamente
@@ -1051,9 +1054,8 @@ class MilvusVectorStore(VectorStoreBase):
                 if vectorstore is None:
                     logger.error("No se pudo crear la colección vacía")
                     return False
-                
-                # Ahora añadir los documentos reales con generación de contexto
-                return self.add_documents_to_collection(vectorstore, documents, source_documents)
+                  # Ahora añadir los documentos reales con generación de contexto
+                return self.add_documents_to_collection(vectorstore, documents, source_documents, chunk_size)
             else:
                 # Sin generación de contexto, crear directamente
                 vectorstore = self.create_vectorstore(documents, embeddings, collection_name)
@@ -1061,10 +1063,9 @@ class MilvusVectorStore(VectorStoreBase):
                     logger.error("No se pudo crear la vectorstore")
                     return False
                 return True
-        else:
-            # La colección ya existe, añadir los documentos
+        else:            # La colección ya existe, añadir los documentos
             logger.info("Vectorstore existente encontrado - añadiendo documentos...")
-            return self.add_documents_to_collection(vectorstore, documents, source_documents)
+            return self.add_documents_to_collection(vectorstore, documents, source_documents, chunk_size)
     
     def get_existing_documents_metadata(self, vectorstore, field: str = "source") -> set:
         """

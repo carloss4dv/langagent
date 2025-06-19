@@ -259,12 +259,12 @@ class DocumentUploader:
                 
                 # Crear diccionario de documentos originales para generación de contexto
                 source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents_to_load)}
-                
-                # Añadir documentos con generación de contexto
+                  # Añadir documentos con generación de contexto, pasando el chunk_size específico
                 return self.vectorstore_handler.add_documents_to_collection(
                     existing_vectorstore, 
                     new_chunks, 
-                    source_documents
+                    source_documents,
+                    chunk_size=final_chunk_size
                 )
             
             return True
@@ -278,12 +278,12 @@ class DocumentUploader:
             
             # Crear diccionario de documentos originales para generación de contexto
             source_documents = {doc.metadata.get('source', str(i)): doc for i, doc in enumerate(documents)}
-            
-            # Cargar documentos usando el método existente (incluye generación de contexto)
+              # Cargar documentos usando el método existente (incluye generación de contexto)
             return self.vectorstore_handler.load_documents(
                 chunked_documents, 
                 embeddings=self.embeddings,
-                source_documents=source_documents
+                source_documents=source_documents,
+                chunk_size=final_chunk_size
             )
     
     def create_adaptive_collections(self, documents: List[Document]) -> Dict[str, bool]:
