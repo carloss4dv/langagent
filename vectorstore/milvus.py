@@ -434,7 +434,8 @@ class MilvusVectorStore(VectorStoreBase):
             vs_kwargs = {
                 "embedding_function": embeddings,
                 "collection_name": collection_name,
-                "connection_args": connection_args
+                "connection_args": connection_args,
+                "auto_id": True
             }
             
             # Si queremos usar búsqueda híbrida
