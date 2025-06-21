@@ -224,20 +224,10 @@ ollama pull mistral-small-3.1:24b
 ollama pull qwen2.5:1.5b  
 ollama pull llama3.2:3b
 ```
+### Variables de Entorno Principales
 
-### 3. Configuración de Variables de Entorno
+Estan en config.py[(config/config.py)]
 
-Crear archivo `.env` en el directorio raíz:
-
-```bash
-# Configuración Milvus/Zilliz Cloud (opcional)
-ZILLIZ_CLOUD_URI=https://your-cluster.gcp-us-west1.vectordb.zilliz.cloud
-ZILLIZ_CLOUD_TOKEN=your_token_here
-ZILLIZ_CLOUD_SECURE=True
-
-# Configuración Oracle (opcional)
-ORACLE_URI=oracle+cx_oracle://user:pass@host:port/?service_name=XEPDB1
-```
 
 ## Uso del Sistema
 
@@ -521,11 +511,6 @@ prompts/
 - **Logging de Seguridad**: Registro de intentos de acceso
 
 ## Configuración Avanzada
-
-### Variables de Entorno Principales
-
-Estan en config.py[(config/config.py)]
-
 
 ## Contribución y Desarrollo
 
