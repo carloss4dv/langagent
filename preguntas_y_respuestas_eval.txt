@@ -1,0 +1,99 @@
+1. ¿Por qué en el cubo de admisión me salen siempre muchas más solicitudes que solicitantes?
+
+Respuesta:
+En el cubo de admisión, las solicitudes pueden contabilizarse múltiples veces debido a varias razones. Primero, si se ejecuta una consulta sin incluir la convocatoria, se cuenta dos veces a las personas que presentan una solicitud en la convocatoria ordinaria y otra en la extraordinaria. Segundo, si no se incluye el plan de estudios, se cuenta el número total de personas que presentan una solicitud de admisión. Además, si se incluye el plan de estudios, se contabilizan tantas solicitudes como opciones de preferencia incluyan los estudiantes en su solicitud de admisión. Por lo tanto, un mismo estudiante puede generar varias solicitudes dependiendo de sus preferencias y convocatorias. Para obtener una visión más precisa, es recomendable revisar la documentación del cubo de oferta de plazas, específicamente el documento info_cubo_ofertaplazas_v18.
+
+2. Estoy mirando los datos de admisión del curso 2023/24 y veo que para el plan de estudios de medicina de Zaragoza hay estudiantes admitidos con un rango de nota entre 5 y 6, mientras que hay otros estudiantes con rangos de nota mucho más altos que no han sido admitidos. ¿Cómo puede ser?
+
+Respuesta:
+La variabilidad en las notas de admisión para el plan de estudios de medicina en Zaragoza puede deberse a varios factores. En primer lugar, la dimensión 'Acceso – Rango de Nota de Admisión' dentro del cubo Rendimiento permite clasificar a los estudiantes según su rango de nota de admisión, lo que incluye rangos inferiores a 5 para ciertos procedimientos de acceso distintos a la preinscripción o aquellos anteriores al curso 2010-11. Además, en el cubo ADMISIÓN, la dimensión 'Solicitud – Rango de calificación' clasifica las solicitudes según el rango válido de nota de admisión para cada titulación solicitada, abarcando desde notas entre 5 y 6 hasta notas entre 13 y 14. Esto indica que los estudiantes admitidos con notas bajas podrían haber accedido mediante procedimientos especiales o cuotas específicas. Para obtener más detalles sobre cómo se calculan estas notas y las condiciones de admisión, es recomendable revisar el documento info_cubo_admision_v19
+
+3. ¿Cómo puedo saber cuántos estudiantes de nuevo ingreso hay en la Universidad de Zaragoza en el curso 2024-25?
+
+Respuesta:
+Para conocer cuántos estudiantes de nuevo ingreso hay en la Universidad de Zaragoza en el curso 2024-25, debes consultar las plazas ofertadas para ese curso académico. Estas plazas son aprobadas por el Consejo Gobierno de la UZ y publicadas en el Boletín Oficial del Estado. La medida 'Alumnos de Nuevo Ingreso' dentro del cubo MATRÍCULA te permitirá identificar a los estudiantes que se inscriben por primera vez. Además, es importante considerar las dimensiones como 'Acceso – Nuevo Ingreso (S/N)' y 'Alumno – País Nacionalidad' para filtrar adecuadamente la información. Esa respuesta no es totalmente completa ya que me falta informacion, debes consultar el documento info_cubo_matricula_v24
+
+4. ¿Qué quiere decir que una movilidad sea UNITA?
+
+Respuesta:
+La clasificación UNITA dentro del ámbito de movilidad en SEGEDA se refiere a si una universidad pertenece o no a la alianza europea de universidades UNITA. Esta dimensión, llamada 'Movilidad-Universidad de Destino UNITA (S/N)', permite clasificar los datos según esta pertenencia, siendo relevante desde el curso académico 2020/21. En concreto, se indica con una S si la universidad es parte de UNITA y con una N si no lo es. Esta dimensión es crucial para analizar las movilidades dentro del ámbito MOVILIDAD en SEGEDA, ya que permite identificar las universidades participantes en esta alianza. Esa respuesta no es totalmente completa ya que me falta información, por favor consulte el documento info_cubo_solicitudes_movilidad_OUT_v11
+
+5. ¿Cuáles son los estudiantes que se incluyen como matriculados?
+
+Respuesta:
+Los estudiantes incluidos como matriculados en la Universidad de Zaragoza son aquellos que tienen al menos una asignatura matriculada dentro de un plan de estudios oficial. Esto incluye a los estudiantes cuyo expediente está asociado a un plan de estudios, así como a los participantes en programas de intercambio que estudian en otras universidades españolas o extranjeras. No se incluyen los estudiantes que solo formalizan matrícula con convalidaciones o adaptaciones. Además, se consideran matriculados aquellos estudiantes que obtendrán una calificación en las actas de la asignatura correspondiente. Para obtener más información sobre este tema, debe consultar el documento info_cubo_matricula_v24.
+
+6. ¿Cuáles son los estudios de la Universidad de Zaragoza que tienen una mayor tasa de abandonos iniciales?
+
+Respuesta:
+Para identificar los estudios con mayor tasa de abandonos iniciales, es necesario analizar la medida alumnos que interrumpen sus estudios el primer año dentro del cubo Egresados. Esta medida se define como aquellos estudiantes que no se matriculan durante dos años consecutivos inmediatamente después del año de acceso al estudio, sin obtener el título ni trasladarse a otra universidad. Los tipos de egreso asociados incluyen abandono voluntario y régimen de permanencia. Para obtener una lista detallada de los estudios con mayor tasa de abandonos iniciales, es necesario consultar la información específica en el documento info_cubo_egresados_v23
+
+7. ¿Cómo se calcula la tasa de éxito?
+
+Respuesta:
+La tasa de éxito se calcula como la relación porcentual entre el número total de créditos superados por los estudiantes en un estudio y el número total de créditos presentados a examen dentro del cubo RENDIMIENTO. En este cálculo, se cuentan los créditos presentados una sola vez en el curso académico, incluso si se ha presentado a más de una convocatoria en ese mismo curso. Se excluyen del cálculo los créditos de asignaturas cursadas por estudiantes de la UZ en otras universidades mediante un programa de intercambio, los créditos de asignaturas del plan matriculados por estudiantes de programas de movilidad de otras universidades, los créditos matriculados en asignaturas que no son las del plan del alumno y los créditos reconocidos, adaptados o convalidados. Esa respuesta no es totalmente completa ya que me falta información, debe consultar el documento info_cubo_rendimiento_v21 para obtener más detalles.
+
+8. ¿Cómo puedo obtener el número de estudiantes de estudios propios con edad 40 ó más, por tipo de estudio en un curso académico?
+
+Respuesta:
+Para obtener el número de estudiantes de estudios propios con edad de 40 años o más, por tipo de estudio en un curso académico, debes utilizar las dimensiones y medidas disponibles en los cubos MATRÍCULA y RENDIMIENTO. En primer lugar, accede al cubo MATRÍCULA y utiliza la dimensión Alumno – Rango de Edad para filtrar a los estudiantes con 40 años o más. Luego, aplica el filtro correspondiente en la dimensión Estudio Propio - Nombre para clasificar por tipo de estudio. Además, puedes utilizar la dimensión Matrícula – Modalidad para identificar si los estudiantes están matriculados a tiempo completo, parcial o bajo otra dedicación. Para obtener información detallada sobre cómo combinar estas dimensiones y medidas, consulta el documento info_cubo_matricula_v24
+
+9. ¿Qué quiere decir PTGAS de investigación?
+
+Respuesta:
+La dimensión Puesto – PTGAS de Investigación del cubo PTGAS permite identificar si el Personal Técnico, de Gestión y Administración y Servicios (PTGAS) recibe su remuneración a través de proyectos de investigación. Esta distinción se marca con 'S' para sí o 'N' para no, dependiendo de si los empleados ocupan puestos asignados a programas específicos como 148I, 171I, 417-I, 423-I o 425-I. Esta información es crucial para analizar la financiación y las dinámicas operativas dentro de las actividades de investigación de la institución. Además, esta dimensión ayuda a entender cómo se distribuyen los recursos humanos en diferentes unidades y proyectos, proporcionando una visión detallada de sus roles y responsabilidades. Esa respuesta no es totalmente completa ya que me falta información, para obtener más detalles debe consultar el documento info_cubo_PTGAS_v21
+
+10. ¿Cómo puedo saber el número de alumnos matriculados por tipo de estudio en centros de Teruel?
+
+Respuesta:
+Para saber el número de alumnos matriculados por tipo de estudio en centros de Teruel, debe utilizar el cubo MATRÍCULA. En este cubo, seleccione la dimensión Centro - Tipo y filtre por los centros ubicados en Teruel. Además, utilice la dimensión Plan de Estudio para desglosar los datos por tipo de estudio. Esta combinación le permitirá obtener el número exacto de alumnos matriculados en cada tipo de estudio dentro de los centros específicos de Teruel. Esa respuesta no es totalmente completa ya que me falta información, consulte el documento info_cubo_matricula_v24 para más detalles.
+
+11. ¿Cómo puede ayudarme Datuz a ver la evolución en la edad del PTGAS de la Universidad de Zaragoza?
+
+Respuesta:
+Para ver la evolución en la edad del PTGAS, Datuz te permite utilizar el cubo 'PTGAS' dentro del ámbito RRHH. Este cubo contiene información detallada sobre los empleados de Personal Técnico, de Gestión y Administración y Servicios, incluyendo su edad. Puedes analizar esta dimensión a lo largo del tiempo utilizando la medida 'edad' en combinación con la dimensión 'año'. Esto te permitirá observar cómo ha cambiado la distribución de edades dentro del PTGAS a lo largo de los años. Para obtener más información sobre las dimensiones y medidas disponibles, consulta el documento info_cubo_PTGAS_v21
+
+12. ¿Cómo puede utilizarse Datuz para analizar la evolución temporal y por áreas de conocimiento, del perfil de género del profesorado en la Universidad de Zaragoza?
+
+Respuesta:
+Para analizar la evolución temporal y por áreas de conocimiento del perfil de género del profesorado en la Universidad de Zaragoza utilizando Datuz, es necesario acceder al cubo Personal Docente e Investigador (PDI). Este cubo permite clasificar a los profesores según su sexo mediante la dimensión Profesor - Sexo. Además, se puede utilizar la dimensión Asignatura – Área del cubo Docencia para categorizar los datos en función de las áreas de conocimiento encargadas de impartir asignaturas. Para el análisis temporal, se debe considerar el rango de edad y otros atributos demográficos disponibles en el mismo cubo PDI. Esta información permite obtener una visión detallada sobre cómo ha evolucionado la distribución de género entre el profesorado a lo largo del tiempo y en diferentes áreas académicas. Esa respuesta no es totalmente completa ya que me falta informacion, para más detalles consulte el documento info_cubo_docenciaPDI_v11.
+
+13. ¿Cuántos estudiantes ucranianos se han presentado y aprobado asignaturas en titulaciones oficiales de la Universidad de Zaragoza en los últimos 3 años?
+
+Respuesta:
+Para determinar el número de estudiantes ucranianos que se han presentado y aprobado asignaturas en titulaciones oficiales de la Universidad de Zaragoza en los últimos tres años, es necesario consultar las medidas 'Alumnos Presentados' y 'Alumnos Superados' del cubo RENDIMIENTO. La medida Alumnos Presentados cuenta el número de estudiantes matriculados que han recibido cualquier calificación en sus asignaturas, incluyendo tanto evaluaciones positivas como negativas. Por otro lado, la medida Alumnos Superados se refiere específicamente a aquellos estudiantes que han obtenido calificaciones aprobatorias como Aprobado, Notable o Sobresaliente. Para obtener datos específicos sobre estudiantes ucranianos, es crucial filtrar por la dimensión de nacionalidad dentro del cubo RENDIMIENTO. Esa respuesta no es totalmente completa ya que me falta información. Consulte el documento info_cubo_rendimiento_v21 para más detalles.
+
+14. ¿Cómo puedo saber cuántos estudiantes se han graduado en el curso 2023-24 que hayan realizado una movilidad internacional y cuánto suponen respecto al total de graduados?
+
+Respuesta:
+Para determinar cuántos estudiantes se graduaron en el curso académico 2023-24 y realizaron una movilidad internacional, debes utilizar la dimensión 'Movilidad - Internacional' dentro del cubo EGRESADOS. Esta dimensión permite identificar si los estudiantes egresados han realizado alguna estancia en una universidad extranjera durante sus estudios. Para filtrar específicamente el curso académico 2023-24, utiliza la dimensión CURSO ACADÉMICO y selecciona el valor correspondiente. Además, para calcular el porcentaje de graduados que realizaron movilidad internacional respecto al total de graduados, puedes utilizar las medidas proporcionadas en el cubo EGRESADOS. Esa respuesta no es totalmente completa ya que me falta información. Debes consultar el documento info_cubo_egresados_v23
+
+15. Financiación obtenida tanto en convocatorias competitivas como sin concurrencia competitiva captados y/o en vigencia en el año 2024 cuyo IP es miembro de un instituto de investigación concreto
+
+Respuesta:
+Para obtener información sobre la financiación captada y/o en vigencia en el año 2024, tanto en convocatorias competitivas como sin concurrencia competitiva, es necesario utilizar el cubo PROYECTOS. Dentro de este cubo, se debe considerar la dimensión Proyecto – Categoría baremo que clasifica los proyectos según su tipo de convocatoria y actividad, incluyendo valores como Proyectos I+D en convocatorias no competitivas, Asesorías I+D en convocatorias no competitivas, Servicios en convocatorias no competitivas, Proyectos no baremables y Proyectos en convocatorias competitivas. Además, se debe incorporar la dimensión AÑO DE CONVOCATORIA para segmentar los datos por año y evitar la acumulación de solicitudes desde el inicio del dataset. Para identificar proyectos cuyo IP es miembro de un instituto de investigación concreto, se debe utilizar la dimensión Proyecto – Oficina gestora que permite clasificar los datos según las oficinas gestionadoras. Esa respuesta no es totalmente completa ya que me falta información, por lo tanto debes consultar el documento solicitudConvocatoria para obtener más detalles sobre las medidas Importe concedido y Solicitudes concedidas.
+
+16. ¿Qué diferencia hay entre el centro del profesor y el centro de la asignatura en el cubo de docencia del PDI?
+
+Respuesta:
+En el cubo de docencia del PDI, el centro del profesor y el centro de la asignatura son dos dimensiones distintas que pueden no coincidir. El centro del profesor se refiere al centro al cual está afiliado el profesor encargado de impartir la docencia, mientras que el centro de la asignatura corresponde al centro donde se imparte el plan de estudios al que pertenece dicha asignatura. Esta diferencia es crucial para entender cómo se clasifican y filtran los datos en SEGEDA, ya que permite analizar las responsabilidades docentes y sus ubicaciones físicas dentro del marco institucional. Por ejemplo, un profesor puede estar afiliado a un centro específico pero impartir clases en otro centro debido a la estructura organizativa de la universidad. Esta distinción es fundamental para una correcta interpretación de los datos en el cubo de docencia del PDI. Esa respuesta no es totalmente completa ya que me falta informacion, por lo tanto debe consultar el documento info_cubo_docenciaPDI_v11.
+
+17. ¿De qué países extranjeros son los investigadores que han realizado estancias de movilidad en la Universidad de Zaragoza en el año 2024?
+
+Respuesta:
+Para determinar los países extranjeros de los investigadores que han realizado estancias de movilidad en la Universidad de Zaragoza en el año 2024, se debe utilizar el cubo 'Estudiantes Salientes' dentro del ámbito MOVILIDAD. En este cubo, específicamente en la dimensión 'Movilidad-País de la Universidad de Destino', se clasifica los datos según los países a los que pertenecen las universidades de destino donde los estudiantes realizan sus estancias. Esta información es crucial para identificar los países extranjeros involucrados en los programas de movilidad. Además, se debe considerar la dimensión 'Año' para filtrar los datos específicos del año 2024. Esa respuesta no es totalmente completa ya que me falta informacion. Para obtener más detalles sobre esta consulta, consulte el documento info_cubo_estudiantesOUT_v11.
+
+18. ¿Cuántos grupos de investigación en vigor hay en la Universidad de Zaragoza y cuánto importe tienen concedido?
+
+Respuesta:
+Para determinar el número de grupos de investigación en vigor y el importe anual concedido en la Universidad de Zaragoza, es necesario consultar el cubo Grupos de Investigación. En este cubo se encuentra la medida Número de investigadores que cuenta los investigadores pertenecientes a un grupo de investigación. Además, se puede obtener el Importe anual concedido, que informa sobre las subvenciones recibidas por cada uno de los grupos. Para ambas medidas es recomendable incorporar la dimensión año en la consulta para evitar datos acumulados desde todos los años disponibles. Esa respuesta no es totalmente completa ya que me falta información, debe consultar info_cubo_grupos_v13 para obtener más detalles.
+
+19. ¿Qué son los sexenios de investigación?
+
+Respuesta:
+Los sexenios de investigación son períodos de seis años reconocidos por la Comisión Nacional Evaluadora de la Actividad Investigadora (CNEAI) a los investigadores, tanto del cuerpo docente universitario como al personal contratado. Estos sexenios se utilizan para clasificar datos en función del número de tramos de investigación reconocidos y son cruciales para evaluar la productividad académica y el reconocimiento dentro del marco institucional. En SEGEDA, esta información se encuentra en las dimensiones 'Tramos – Investigación Sexenios Estatales' e 'Investigador – Sexenios Estatales,' que permiten desagregar y filtrar datos relacionados con el Personal Docente e Investigador (PDI). Para obtener más detalles sobre los sexenios posibles, consulte la dimensión 'Tramos – Sexenios posibles'.
+
+20. ¿Qué profesores son los asociados sanitarios?
+
+Respuesta:
+Los profesores que son asociados sanitarios en el contexto del sistema SEGEDA se clasifican bajo la dimensión 'Contrato – Dedicación' dentro del cubo PDI. En esta categoría, los valores posibles incluyen 'conjunta completa,' que es la dedicación de algunos profesores vinculados a instituciones sanitarias distintas de los asociados de ciencias de la salud y 'conjunta parcial,' que específicamente se refiere a la dedicación de los asociados de ciencias de la salud. Esta información se encuentra detallada en el documento info_cubo_PDI_v21

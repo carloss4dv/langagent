@@ -75,7 +75,6 @@ def create_rag_sql_chain(llm, db_uri=SQL_CONFIG["db_uri"], dialect=SQL_CONFIG["d
     """
     # Crear la conexión a la base de datos
     db = SQLDatabase.from_uri(db_uri)
-    
     # Obtener información del esquema
     table_info = db.get_table_info() 
     # Crear plantilla para generar consultas SQL

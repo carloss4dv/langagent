@@ -360,7 +360,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                     
                     grader_input = {
                         "content": document_data["content"],
-                        "metadata": str(document_data["metadata"][ambito]) if ambito in document_data["metadata"] else "",
+                        "ambito_document": str(document_data["metadata"][ambito]) if ambito in document_data["metadata"] else "",
                         "source": document_data["source"],
                         "question": question,
                         "ambito": ambito,

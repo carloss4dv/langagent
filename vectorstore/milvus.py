@@ -1083,7 +1083,12 @@ class MilvusVectorStore(VectorStoreBase):
         try:
             if hasattr(vectorstore, 'similarity_search'):
                 # Hacer múltiples búsquedas para obtener más documentos
-                search_terms = ["cubo", "información", "datos", "consulta", ""]
+                search_terms = ["cubo", "información", "datos", "consulta", 
+                                "docencia", "convocatoria", "puesto", "estudios propios",
+                                "solicitud convocatoria", "solicitud puesto", "puesto docente"
+                                "proyectos", "proyecto", "proyectos de investigación",
+                                "cargo", "rendimiento", "tasa", "evaluación docente", "estudiantesIN",
+                                "grupos", "egresados", "estudiantesOUT"]
                 
                 for term in search_terms:
                     try:
