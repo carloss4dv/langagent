@@ -1,7 +1,7 @@
 # SEGEDA: Sistema RAG Adaptativo con LangGraph y Estrategias Mix-of-Granularity
 
 <div align="center">
-  <img src="NEAT-AMBIENCE-logo.png" alt="Sistema RAG SEGEDA" width="800"/>
+  <img src="logos/NEAT-AMBIENCE-logo.png" alt="Sistema RAG SEGEDA" width="800"/>
   <br>
   <em>Sistema inteligente de respuesta a preguntas con enrutamiento adaptativo y estrategias avanzadas de granularidad</em>
 </div>
@@ -31,7 +31,7 @@ RAGDWAREuz es un sistema avanzado de Retrieval-Augmented Generation (RAG) que im
 ## Arquitectura del Sistema
 
 <div align="center">
-  <img src="Sistema RAGDWAREuz.svg" alt="Arquitectura del Sistema" width="1000"/>
+  <img src="diagrams/img/svg/Sistema RAGDWAREuz.svg" alt="Arquitectura del Sistema" width="1000"/>
   <br>
   <em>Arquitectura completa del sistema SEGEDA con flujos de trabajo adaptativos</em>
 </div>
@@ -526,23 +526,6 @@ prompts/
 
 Estan en config.py[(config/config.py)]
 
-### Optimización de Rendimiento
-
-```python
-# Configuraciones recomendadas por entorno
-
-# Desarrollo Local
-VECTOR_DB_TYPE=chroma
-CHUNK_SIZE=512
-USE_GPU=false
-
-# Producción
-VECTOR_DB_TYPE=milvus
-USE_HYBRID_SEARCH=true
-USE_CONTEXT_GENERATION=true
-BGE_DEVICE=cuda
-CONTEXT_BATCH_SIZE=10
-```
 
 ## Contribución y Desarrollo
 
@@ -552,13 +535,6 @@ CONTEXT_BATCH_SIZE=10
 - **Sistema de Plugins**: Extensión modular de funcionalidades
 - **Testing Automatizado**: Suite de pruebas con casos reales
 
-### Roadmap Futuro
-- [ ] Soporte para modelos de embeddings adicionales
-- [ ] Integración con más bases de datos vectoriales
-- [ ] Sistema de caché inteligente
-- [ ] Análisis de sentimientos en consultas
-- [ ] Soporte multiidioma mejorado
-- [ ] Integración con sistemas LMS
 
 <div align="center">
   <div style="display: flex; justify-content: center; align-items: center; gap: 30px;">
