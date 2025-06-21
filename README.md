@@ -77,7 +77,7 @@ langagent/
 │   ├── config.py         # Configuraciones del sistema (LLM, vectorstore, SQL)
 │   └── logging_config.py # Sistema de logging centralizado
 ├── core/                 # Núcleo del sistema
-│   ├── lang_chain_agent.py # Agente principal con orchestación LangGraph
+│   ├── lang_chain_agent.py # Agente principal con orquestación LangGraph
 │   └── ambito_agent.py    # Agente especializado en identificación de ámbitos
 ├── evaluation/           # Sistema de evaluación y métricas
 │   ├── evaluate.py       # Evaluador con deepeval y métricas personalizadas
