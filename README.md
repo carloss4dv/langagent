@@ -131,7 +131,7 @@ langagent/
 - **Patrón Factory**: `VectorStoreFactory` para abstracción transparente
 - **Reranker**: BGE Reranker v2-m3 para compresión contextual
 
-### Framework y Orchestación
+### Framework y Orquestación
 - **Workflow**: LangGraph para flujos complejos multi-agente
 - **Chains**: LangChain para cadenas RAG/SQL integradas
 - **Splitting**: RecursiveCharacterTextSplitter con estrategias adaptativas
@@ -414,7 +414,7 @@ El sistema organiza la información académica en una estructura de dos niveles:
 ### Enrutamiento Inteligente
 
 - **Análisis Semántico**: Identificación automática de keywords por ámbito
-- **Agente Especializado**: `AmbitoAgent` con LangGraph para decisiones complejas
+- **Agente Especializado**: `AmbitoAgent` con LangGraph para detectar ambito
 - **Clarificación Automática**: Generación de preguntas cuando el ámbito es ambiguo
 - **Fallback Inteligente**: Búsqueda en múltiples ámbitos si es necesario
 
@@ -524,26 +524,7 @@ prompts/
 
 ### Variables de Entorno Principales
 
-```bash
-# Modelos LLM
-OLLAMA_BASE_URL=http://localhost:11434
-DEFAULT_MODEL=mistral-small-3.1:24b
-MODEL_TEMPERATURE=0.15
-
-# Vectorstore
-VECTOR_DB_TYPE=milvus
-CHUNK_SIZE=646
-CHUNK_OVERLAP=50
-K_RETRIEVAL=12
-
-# API y Seguridad
-API_PORT=5001
-JWT_SECRET_KEY=your_secret_key
-TOKEN_EXPIRATION_MINUTES=60
-
-# Base de Datos
-ORACLE_URI=oracle+cx_oracle://user:pass@host:port/?service_name=XEPDB1
-```
+Estan en config.py[(config/config.py)]
 
 ### Optimización de Rendimiento
 
