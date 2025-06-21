@@ -1,0 +1,76 @@
+@startuml "Evaluacion Granular RAG"
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 10
+    sequenceArrowThickness 1
+    sequenceParticipant {
+        padding 5
+    }
+    sequence {
+        participantBorderColor #2688d4
+        participantBackgroundColor #add8e6
+    }
+    arrow {
+        color #2688d4
+    }
+}
+
+title Evaluacion Granular RAG
+
+participant "Workflow" as WF
+participant "Evaluador" as EvalGran
+participant "Anal. Relevancia" as RelAnalyzer
+participant "Anal. Completitud" as CompAnalyzer
+participant "Anal. Coherencia" as CohAnalyzer
+participant "Colector Metricas" as Metrics
+
+WF -> EvalGran: Evaluar(query, docs, response)
+activate EvalGran
+
+EvalGran -> RelAnalyzer: Analizar relevancia
+activate RelAnalyzer
+RelAnalyzer -> RelAnalyzer: Comparar query/respuesta
+RelAnalyzer --> EvalGran: Score relevancia
+deactivate RelAnalyzer
+
+EvalGran -> CompAnalyzer: Analizar completitud
+activate CompAnalyzer
+CompAnalyzer -> CompAnalyzer: Verificar uso docs
+CompAnalyzer --> EvalGran: Score completitud
+deactivate CompAnalyzer
+
+EvalGran -> CohAnalyzer: Analizar coherencia
+activate CohAnalyzer
+CohAnalyzer -> CohAnalyzer: Verificar consistencia
+CohAnalyzer --> EvalGran: Score coherencia
+deactivate CohAnalyzer
+
+EvalGran -> EvalGran: Calcular calidad global
+
+alt Calidad Alta
+    EvalGran -> Metrics: Registrar exito
+    activate Metrics
+    Metrics --> EvalGran: Metricas OK
+    deactivate Metrics
+    EvalGran --> WF: Respuesta aprobada
+else Calidad Media
+    EvalGran -> Metrics: Registrar refinamiento
+    activate Metrics
+    Metrics --> EvalGran: Metricas OK
+    deactivate Metrics
+    EvalGran --> WF: Requiere ajuste
+else Calidad Baja
+    EvalGran -> Metrics: Registrar fallo
+    activate Metrics
+    Metrics --> EvalGran: Metricas OK
+    deactivate Metrics
+    EvalGran --> WF: Respuesta rechazada
+end
+
+deactivate EvalGran
+
+@enduml

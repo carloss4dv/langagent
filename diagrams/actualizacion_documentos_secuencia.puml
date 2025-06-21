@@ -1,0 +1,64 @@
+@startuml
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 10
+    sequenceArrowThickness 1
+    sequenceParticipant {
+        padding 5
+    }
+    package {
+        borderColor #2688d4
+        backgroundColor #f0f8ff
+    }
+    database {
+        borderColor #2688d4
+        backgroundColor #add8e6
+    }
+}
+title "Actualizacion Inteligente de Documentos"
+
+actor "Operador" as Operator
+participant "Agent" as Agent
+participant "DocUploader" as Uploader
+participant "VectorHandler" as Handler
+participant "Milvus" as VectorStore
+
+Operator -> Agent: Cargar docs (reinicio)
+Agent -> Uploader: load_docs_intelligently()
+
+Uploader -> Handler: load_vectorstore()
+Handler --> Uploader: vectorstore existente
+
+Uploader -> Handler: get_existing_cubos_versions()
+note right: Obtiene cubos/versiones
+Handler -> VectorStore: query metadatos
+VectorStore --> Handler: metadatos
+Handler --> Uploader: existing_cubos
+
+Uploader -> Uploader: analyze_updates()
+note right: Compara versiones
+Uploader --> Uploader: docs_cargar, cubos_eliminar
+
+opt hay_cubos_eliminar
+    Uploader -> Handler: remove_by_cubo()
+    Handler -> VectorStore: eliminar (filtro)
+    VectorStore --> Handler: confirmacion
+    Handler --> Uploader: resultado
+end
+
+opt hay_docs_cargar
+    Uploader -> Handler: add_documents()
+    note right: Puede incluir gen. contexto
+    Handler -> VectorStore: anadir chunks
+    VectorStore --> Handler: confirmacion
+    Handler --> Uploader: resultado
+end
+
+Uploader --> Agent: Carga completa
+Agent --> Operator: Actualizacion OK
+
+@enduml

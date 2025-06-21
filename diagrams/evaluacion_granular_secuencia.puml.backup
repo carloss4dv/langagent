@@ -1,0 +1,75 @@
+@startuml "Evaluacion Granular de Respuestas RAG"
+' Mejora la legibilidad y la calidad de la imagen para documentos.
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 12
+
+    sequence {
+        participantBorderColor #2688d4
+        participantBackgroundColor #add8e6
+    }
+
+    arrow {
+        color #2688d4
+    }
+}
+
+title Evaluacion Granular de Respuestas RAG
+
+participant "Workflow" as WF
+participant "Evaluador Granular" as EvalGran
+participant "Analizador Relevancia" as RelAnalyzer
+participant "Analizador Completitud" as CompAnalyzer
+participant "Analizador Coherencia" as CohAnalyzer
+participant "Colector de Metricas" as Metrics
+
+WF -> EvalGran: Evaluar respuesta (query, docs, response)
+activate EvalGran
+
+EvalGran -> RelAnalyzer: Analizar relevancia
+activate RelAnalyzer
+RelAnalyzer -> RelAnalyzer: Comparar query y respuesta
+RelAnalyzer --> EvalGran: Score de relevancia
+deactivate RelAnalyzer
+
+EvalGran -> CompAnalyzer: Analizar completitud
+activate CompAnalyzer
+CompAnalyzer -> CompAnalyzer: Verificar uso de documentos
+CompAnalyzer --> EvalGran: Score de completitud
+deactivate CompAnalyzer
+
+EvalGran -> CohAnalyzer: Analizar coherencia
+activate CohAnalyzer
+CohAnalyzer -> CohAnalyzer: Verificar consistencia interna
+CohAnalyzer --> EvalGran: Score de coherencia
+deactivate CohAnalyzer
+
+EvalGran -> EvalGran: Calcular metricas y calidad global
+
+alt Calidad Alta
+    EvalGran -> Metrics: Registrar exito
+    activate Metrics
+    Metrics --> EvalGran: Metricas registradas
+    deactivate Metrics
+    EvalGran --> WF: Respuesta aprobada
+else Calidad Media
+    EvalGran -> Metrics: Registrar necesidad de refinamiento
+    activate Metrics
+    Metrics --> EvalGran: Metricas registradas
+    deactivate Metrics
+    EvalGran --> WF: Requiere refinamiento
+else Calidad Baja
+    EvalGran -> Metrics: Registrar fallo
+    activate Metrics
+    Metrics --> EvalGran: Metricas registradas
+    deactivate Metrics
+    EvalGran --> WF: Respuesta rechazada
+end
+
+deactivate EvalGran
+
+@enduml

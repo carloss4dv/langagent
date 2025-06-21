@@ -1,0 +1,55 @@
+@startuml
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 10
+    sequenceArrowThickness 1
+    sequenceParticipant {
+        padding 5
+    }
+    package {
+        borderColor #2688d4
+        backgroundColor #f0f8ff
+    }
+    database {
+        borderColor #2688d4
+        backgroundColor #add8e6
+    }
+}
+title "Recuperacion Avanzada"
+
+actor "Usuario" as User
+participant "Agent" as Agent
+participant "AmbitoAgent" as AmbitoAgent
+participant "Workflow" as Workflow
+participant "AdaptiveRetriever" as AdaptiveRetriever
+participant "Milvus" as VectorStore
+
+User -> Agent: Consulta(pregunta)
+Agent -> AmbitoAgent: Identificar ambito
+AmbitoAgent --> Agent: Ambito y cubos
+
+Agent -> Workflow: Ejecutar flujo(pregunta, ambito)
+
+Workflow -> AdaptiveRetriever: Recuperar docs(query, chunk_size, ambito)
+
+AdaptiveRetriever -> VectorStore: Buscar docs(query, filtro_ambito)
+note right: Busqueda acotada al ambito
+VectorStore --> AdaptiveRetriever: Documentos
+
+AdaptiveRetriever --> Workflow: Docs recuperados
+
+Workflow -> Workflow: Evaluar relevancia docs
+
+alt Docs relevantes
+    Workflow --> Agent: Continuar a generacion
+else Docs insuficientes
+    Workflow -> Workflow: Cambiar estrategia
+    Workflow -> Workflow: Actualizar chunk_size (256->512)
+    Workflow -> Workflow: Reintentar recuperacion
+end
+
+@enduml

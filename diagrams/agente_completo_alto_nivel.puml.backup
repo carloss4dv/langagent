@@ -1,0 +1,128 @@
+@startuml "Sistema RAGDWAREuz"
+' Mejora la legibilidad y la calidad de la imagen para documentos.
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 12
+
+    sequence {
+        participantBorderColor #2688d4
+        participantBackgroundColor #add8e6
+        actorBorderColor #2688d4
+        actorBackgroundColor #ffdead
+    }
+
+    arrow {
+        color #2688d4
+    }
+}
+
+title Sistema RAGDWAREuz
+
+
+participant "Usuario" as User
+participant "Agente RAG" as MainAgent
+participant "Identificador Ambito" as AmbitoAgent
+participant "Reescritor Consulta" as QueryRewriter
+participant "Motor RAG" as RAGEngine
+participant "Generador SQL" as SQLGen
+participant "Ejecutor SQL" as SQLExec
+participant "Interprete SQL" as SQLInterp
+participant "Base Conocimiento" as KB
+participant "Evaluador Calidad" as QualityEval
+
+User -> MainAgent: Pregunta sobre SEGEDA
+activate MainAgent
+
+MainAgent -> AmbitoAgent: Identificar ambito/cubo
+activate AmbitoAgent
+
+AmbitoAgent -> AmbitoAgent: Analizar patrones y keywords
+
+alt Ambito Identificado Directamente
+    note right: Patrones explicitos\no keywords encontrados
+    AmbitoAgent --> MainAgent: Ambito y cubos identificados
+else Ambito No Claro
+    AmbitoAgent -> KB: Buscar contexto para inferir
+    activate KB
+    KB --> AmbitoAgent: Documentos con metadatos
+    deactivate KB
+    
+    alt Contexto Suficiente
+        AmbitoAgent --> MainAgent: Ambito inferido y contexto
+    else Contexto Insuficiente
+        AmbitoAgent --> MainAgent: Solicitar clarificacion
+        MainAgent --> User: Pregunta de clarificacion
+        User -> MainAgent: Aclaracion
+        MainAgent -> AmbitoAgent: Procesar aclaracion
+        AmbitoAgent --> MainAgent: Ambito y contexto
+        
+        MainAgent -> QueryRewriter: Reescribir con terminos SEGEDA
+        activate QueryRewriter
+        QueryRewriter --> MainAgent: Consulta optimizada
+        deactivate QueryRewriter
+    end
+end
+
+deactivate AmbitoAgent
+
+MainAgent -> RAGEngine: Procesar consulta con contexto
+activate RAGEngine
+
+RAGEngine -> KB: Recuperar documentos
+activate KB
+KB --> RAGEngine: Documentos especializados
+deactivate KB
+
+alt Consulta SQL Detectada
+    RAGEngine -> SQLGen: Generar SQL
+    activate SQLGen
+    SQLGen --> RAGEngine: SQL generado
+    deactivate SQLGen
+    
+    RAGEngine -> SQLExec: Ejecutar SQL
+    activate SQLExec
+    SQLExec --> RAGEngine: Resultados SQL
+    deactivate SQLExec
+    
+    RAGEngine -> SQLInterp: Interpretar resultados
+    activate SQLInterp
+    SQLInterp --> RAGEngine: Respuesta interpretada
+    deactivate SQLInterp
+else Consulta RAG Normal
+    loop Refinamiento Adaptativo
+        RAGEngine -> RAGEngine: Generar respuesta candidata
+        
+        RAGEngine -> QualityEval: Evaluar calidad
+        activate QualityEval
+        QualityEval --> RAGEngine: Metricas de calidad
+        deactivate QualityEval
+        
+        alt Calidad Satisfactoria
+            RAGEngine --> RAGEngine: Respuesta aceptada
+        else Calidad Insuficiente
+            RAGEngine -> RAGEngine: Ajustar estrategia
+            note right: Cambia granularidad o reescribe
+            RAGEngine -> KB: Nueva recuperacion
+            activate KB
+            KB --> RAGEngine: Nuevos documentos
+            deactivate KB
+        end
+    end
+end
+
+deactivate RAGEngine
+
+MainAgent --> User: Respuesta especializada
+
+note over User, QualityEval
+  El sistema se adapta automaticamente
+  para encontrar la mejor respuesta.
+end note
+
+deactivate MainAgent
+
+@enduml

@@ -1,0 +1,78 @@
+@startuml "Agente de Ambito - Identificacion de Ambitos y Cubos"
+' Mejora la legibilidad y la calidad de la imagen para documentos.
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 12
+
+    sequence {
+        participantBorderColor #2688d4
+        participantBackgroundColor #add8e6
+        actorBorderColor #2688d4
+        actorBackgroundColor #ffdead
+    }
+
+    arrow {
+        color #2688d4
+    }
+}
+
+participant "Usuario" as User
+participant "Ambito Agent" as Agent
+participant "Analizador Ambito" as Analyzer
+participant "Retriever" as Ret
+participant "Vector DB" as DB
+participant "Generador Clarificacion" as Clarifier
+
+User -> Agent: Pregunta
+activate Agent
+
+Agent -> Analyzer: Identificar ambito
+activate Analyzer
+
+Analyzer -> Analyzer: Buscar patron explicito
+alt Ambito Explicito
+    Analyzer --> Agent: Ambito + Cubos (Confianza Alta)
+else No Explicito
+    Analyzer -> Analyzer: Buscar keywords de ambito
+    alt Keywords Encontradas
+        Analyzer --> Agent: Ambito + Cubos (Confianza Media)
+    else Sin Keywords
+        Analyzer --> Agent: Necesita contexto
+        
+        Agent -> Ret: Recuperar contexto
+        activate Ret
+        Ret -> DB: Buscar documentos similares
+        activate DB
+        DB --> Ret: Documentos relevantes
+        deactivate DB
+        Ret --> Agent: Contexto recuperado
+        deactivate Ret
+        
+        alt Contexto con Metadatos
+            Agent -> Agent: Analizar metadatos
+            Agent --> Agent: Actualizar ambito y confianza
+        else Sin Contexto Suficiente
+            Agent -> Clarifier: Generar pregunta de clarificacion
+            activate Clarifier
+            Clarifier --> Agent: Pregunta de clarificacion
+            deactivate Clarifier
+            Agent --> User: Solicitar clarificacion
+        end
+    end
+end
+
+deactivate Analyzer
+
+alt Ambito Identificado
+    Agent --> User: Ambito y cubos identificados
+else Requiere Clarificacion
+    Agent --> User: Pregunta de clarificacion
+end
+
+deactivate Agent
+
+@enduml

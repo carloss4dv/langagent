@@ -1,0 +1,79 @@
+@startuml "Identificacion de Ambitos y Cubos"
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 10
+    sequenceArrowThickness 1
+    sequenceParticipant {
+        padding 5
+    }
+    sequence {
+        participantBorderColor #2688d4
+        participantBackgroundColor #add8e6
+        actorBorderColor #2688d4
+        actorBackgroundColor #ffdead
+    }
+    arrow {
+        color #2688d4
+    }
+}
+
+participant "Usuario" as User
+participant "AmbitoAgent" as Agent
+participant "Analizador" as Analyzer
+participant "Retriever" as Ret
+participant "VectorDB" as DB
+participant "Clarificador" as Clarifier
+
+User -> Agent: Pregunta
+activate Agent
+
+Agent -> Analyzer: Identificar ambito
+activate Analyzer
+
+Analyzer -> Analyzer: Buscar patrones
+alt Ambito Explicito
+    Analyzer --> Agent: Ambito+Cubos (Alta conf)
+else No Explicito
+    Analyzer -> Analyzer: Buscar keywords
+    alt Keywords OK
+        Analyzer --> Agent: Ambito+Cubos (Media conf)
+    else Sin Keywords
+        Analyzer --> Agent: Necesita contexto
+        
+        Agent -> Ret: Get contexto
+        activate Ret
+        Ret -> DB: Buscar docs
+        activate DB
+        DB --> Ret: Docs relevantes
+        deactivate DB
+        Ret --> Agent: Contexto
+        deactivate Ret
+        
+        alt Contexto OK
+            Agent -> Agent: Analizar metadatos
+            Agent --> Agent: Update ambito
+        else Contexto insuficiente
+            Agent -> Clarifier: Generar pregunta
+            activate Clarifier
+            Clarifier --> Agent: Pregunta
+            deactivate Clarifier
+            Agent --> User: Pedir clarificacion
+        end
+    end
+end
+
+deactivate Analyzer
+
+alt Ambito OK
+    Agent --> User: Ambito identificado
+else Requiere Info
+    Agent --> User: Pregunta clarificacion
+end
+
+deactivate Agent
+
+@enduml

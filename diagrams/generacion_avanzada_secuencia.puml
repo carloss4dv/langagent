@@ -1,0 +1,57 @@
+@startuml
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 10
+    sequenceArrowThickness 1
+    sequenceParticipant {
+        padding 5
+    }
+    package {
+        borderColor #2688d4
+        backgroundColor #f0f8ff
+    }
+    database {
+        borderColor #2688d4
+        backgroundColor #add8e6
+    }
+}
+title "Generacion y Evaluacion"
+
+participant "Workflow" as Workflow
+participant "RAG Chain" as RAGChain
+participant "LLM (Principal)" as LLM
+participant "Evaluador" as Evaluator
+participant "LLM (Eval)" as LLM_Eval
+participant "Usuario" as User
+
+Workflow -> RAGChain: Generar(pregunta, docs)
+note right: Sintetiza respuesta
+
+RAGChain -> LLM: Llamar con prompt y contexto
+LLM --> RAGChain: Respuesta generada
+RAGChain --> Workflow: Respuesta
+
+Workflow -> Evaluator: Evaluar(pregunta, respuesta, docs)
+
+Evaluator -> LLM_Eval: Evaluar metricas
+LLM_Eval --> Evaluator: Puntuaciones
+Evaluator --> Workflow: Metricas
+
+Workflow -> Workflow: Check metricas
+
+alt Respuesta OK
+    Workflow --> User: Respuesta final
+else Respuesta con problemas
+    Workflow -> Workflow: Route_next_strategy
+    alt Reintentar
+        Workflow --> Workflow: Volver a recuperacion
+    else Finalizar
+        Workflow --> User: No hay respuesta adecuada
+    end
+end
+
+@enduml

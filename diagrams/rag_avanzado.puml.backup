@@ -1,0 +1,44 @@
+@startuml "Workflow de RAG Avanzado"
+' Mejora la legibilidad y la calidad de la imagen para documentos.
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 12
+
+    sequence {
+        participantBorderColor #2688d4
+        participantBackgroundColor #add8e6
+        actorBorderColor #2688d4
+        actorBackgroundColor #ffdead
+    }
+
+    arrow {
+        color #2688d4
+    }
+}
+
+title RAG Avanzado Workflow
+
+participant "Usuario" as User
+participant "Procesador" as Proc
+participant "Retriever DPR" as Ret
+participant "Vector DB" as DB
+participant "Reordenador" as Rerank
+participant "LLM CoN" as Gen
+
+User -> Proc: Consulta
+Proc -> Proc: Transformar consulta
+Proc -> Ret: Subconsultas
+Ret -> DB: Recuperacion densa
+DB --> Ret: Documentos candidatos
+Ret --> Rerank: Documentos recuperados
+Rerank -> Rerank: Reordenar por relevancia
+Rerank --> Gen: Documentos reordenados
+Gen -> Gen: Generar con Chain of Note
+Gen --> Proc: Respuesta
+Proc --> User: Respuesta final
+
+@enduml

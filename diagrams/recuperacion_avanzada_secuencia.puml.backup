@@ -1,0 +1,55 @@
+@startuml
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 12
+
+    package {
+        borderColor #2688d4
+        backgroundColor #f0f8ff
+    }
+
+    database {
+        borderColor #2688d4
+        backgroundColor #add8e6
+    }
+}
+title "Diagrama de Secuencia: Fase de Recuperación Avanzada"
+
+actor "Usuario" as User
+participant "LangChainAgent" as Agent
+participant "AmbitoAgent Workflow" as AmbitoAgent
+participant "Main Workflow (LangGraph)" as Workflow
+participant "Retriever Adaptativo" as AdaptiveRetriever
+participant "VectorStore (Milvus)" as VectorStore
+
+User -> Agent: Inicia consulta(pregunta)
+Agent -> AmbitoAgent: Identifica el ámbito de la pregunta
+AmbitoAgent --> Agent: Devuelve ámbito y cubos relevantes
+
+Agent -> Workflow: Ejecuta el flujo principal(pregunta, ambito)
+
+Workflow -> Workflow: Llama al nodo `retrieve`
+Workflow -> AdaptiveRetriever: Recupera documentos(pregunta, estrategia_chunk, ambito)
+
+AdaptiveRetriever -> VectorStore: Busca documentos relevantes(pregunta, filtro_por_ambito)
+note right: La búsqueda se acota al ámbito\nidentificado para mayor precisión.
+VectorStore --> AdaptiveRetriever: Devuelve documentos
+
+AdaptiveRetriever --> Workflow: Devuelve documentos recuperados
+
+Workflow -> Workflow: Llama al nodo `grade_relevance`
+Workflow -> Workflow: Evalúa la relevancia de los documentos
+
+alt Documentos relevantes
+    Workflow --> Agent: Continúa a la fase de generación
+else Documentos no relevantes o insuficientes
+    Workflow -> Workflow: Llama al nodo `route_next_strategy`
+    Workflow -> Workflow: Actualiza la estrategia de chunk (e.g., 256 -> 512)
+    Workflow --> Workflow: Reintenta la recuperación (vuelve a `retrieve`)
+end
+
+@enduml

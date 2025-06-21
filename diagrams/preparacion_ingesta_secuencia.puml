@@ -1,0 +1,56 @@
+@startuml
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 10
+    sequenceArrowThickness 1
+    sequenceParticipant {
+        padding 5
+    }
+    package {
+        borderColor #2688d4
+        backgroundColor #f0f8ff
+    }
+    database {
+        borderColor #2688d4
+        backgroundColor #add8e6
+    }
+}
+title "Preparacion e Ingesta Inicial"
+
+actor "Operador" as Operator
+participant "Agent" as Agent
+participant "DocUploader" as Uploader
+participant "VectorStoreHandler" as Handler
+participant "ContextGen" as ContextGen
+participant "Milvus" as VectorStore
+
+Operator -> Agent: setup_agent()
+Agent -> Uploader: create_adaptive_collections()
+note right: Colecciones con chunks\n(256, 512, 1024)
+
+loop para cada chunk_size
+    Uploader -> Uploader: TextSplitter(chunk_size)
+    Uploader -> Uploader: Split documentos
+    
+    Uploader -> Handler: create_vectorstore()
+    note right: Nueva coleccion
+
+    alt Contexto ON
+        Handler -> ContextGen: Generar contexto
+        ContextGen --> Handler: Chunks enriquecidos
+        Handler -> VectorStore: Anadir chunks+contexto
+    else Contexto OFF
+        Handler -> VectorStore: Anadir chunks directos
+    end
+    
+    VectorStore --> Handler: Confirmacion
+    Handler --> Uploader: Vectorstore creada
+end
+
+Uploader --> Agent: Colecciones creadas
+Agent --> Operator: Agente listo
+@enduml

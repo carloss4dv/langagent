@@ -1,0 +1,118 @@
+@startuml "Sistema RAGDWAREuz"
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 10
+    sequenceArrowThickness 1
+    sequenceParticipant {
+        padding 5
+    }
+    sequence {
+        participantBorderColor #2688d4
+        participantBackgroundColor #add8e6
+        actorBorderColor #2688d4
+        actorBackgroundColor #ffdead
+    }
+    arrow {
+        color #2688d4
+    }
+}
+
+title Sistema RAGDWAREuz
+
+
+participant "Usuario" as User
+participant "Agente RAG" as MainAgent
+participant "Id. Ambito" as AmbitoAgent
+participant "Reesc. Query" as QueryRewriter
+participant "Motor RAG" as RAGEngine
+participant "Gen. SQL" as SQLGen
+participant "Ejec. SQL" as SQLExec
+participant "Intpr. SQL" as SQLInterp
+participant "Base Conocimiento" as KB
+participant "Eval. Calidad" as QualityEval
+
+User -> MainAgent: Pregunta sobre SEGEDA
+activate MainAgent
+
+MainAgent -> AmbitoAgent: Identificar ambito/cubo
+activate AmbitoAgent
+AmbitoAgent -> AmbitoAgent: Analizar patrones
+
+alt Ambito Identificado
+    note right: Patrones/keywords detectados
+    AmbitoAgent --> MainAgent: Ambito y cubos
+else No Identificado
+    AmbitoAgent -> KB: Buscar contexto
+    activate KB
+    KB --> AmbitoAgent: Documentos
+    deactivate KB
+    
+    alt Contexto OK
+        AmbitoAgent --> MainAgent: Ambito inferido
+    else Contexto Insuficiente
+        AmbitoAgent --> MainAgent: Solicitar clarificacion
+        MainAgent --> User: Pregunta
+        User -> MainAgent: Aclaracion
+        MainAgent -> AmbitoAgent: Procesar aclaracion
+        AmbitoAgent --> MainAgent: Ambito y contexto
+        
+        MainAgent -> QueryRewriter: Reescribir query
+        activate QueryRewriter
+        QueryRewriter --> MainAgent: Query optimizada
+        deactivate QueryRewriter
+    end
+end
+deactivate AmbitoAgent
+
+MainAgent -> RAGEngine: Procesar consulta
+activate RAGEngine
+RAGEngine -> KB: Recuperar docs
+activate KB
+KB --> RAGEngine: Docs especializados
+deactivate KB
+
+alt Query SQL
+    RAGEngine -> SQLGen: Generar SQL
+    activate SQLGen
+    SQLGen --> RAGEngine: SQL generado
+    deactivate SQLGen
+    
+    RAGEngine -> SQLExec: Ejecutar SQL
+    activate SQLExec
+    SQLExec --> RAGEngine: Resultados
+    deactivate SQLExec
+    
+    RAGEngine -> SQLInterp: Interpretar
+    activate SQLInterp
+    SQLInterp --> RAGEngine: Resultado interpretado
+    deactivate SQLInterp
+else Query RAG Normal
+    loop Refinamiento
+        RAGEngine -> RAGEngine: Generar respuesta
+        RAGEngine -> QualityEval: Evaluar calidad
+        activate QualityEval
+        QualityEval --> RAGEngine: Metricas
+        deactivate QualityEval
+        
+        alt Calidad OK
+            RAGEngine --> RAGEngine: Respuesta aceptada
+        else Calidad Insuficiente
+            RAGEngine -> RAGEngine: Ajustar estrategia
+            note right: Cambio granularidad
+            RAGEngine -> KB: Nueva busqueda
+            activate KB
+            KB --> RAGEngine: Nuevos docs
+            deactivate KB
+        end
+    end
+end
+deactivate RAGEngine
+
+MainAgent --> User: Respuesta final
+deactivate MainAgent
+
+@enduml

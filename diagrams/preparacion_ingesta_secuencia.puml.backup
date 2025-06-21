@@ -1,0 +1,55 @@
+@startuml
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 12
+
+    package {
+        borderColor #2688d4
+        backgroundColor #f0f8ff
+    }
+
+    database {
+        borderColor #2688d4
+        backgroundColor #add8e6
+    }
+}
+title "Diagrama de Secuencia: Preparación e Ingesta Inicial de Documentos"
+
+actor "Operador" as Operator
+participant "LangChainAgent" as Agent
+participant "DocumentUploader" as Uploader
+participant "VectorStoreHandler\n(MilvusVectorStore)" as Handler
+participant "ContextGenerator" as ContextGen
+participant "VectorStore (Milvus)" as VectorStore
+
+Operator -> Agent: Inicia `setup_agent()`
+Agent -> Uploader: Llama a `create_adaptive_collections(docs)`
+note right: Proceso para crear colecciones con distintas\nestrategias de chunk (e.g., 256, 512, 1024)
+
+loop para cada estrategia de chunk
+    Uploader -> Uploader: Crea `TextSplitter` con el tamaño de chunk actual
+    Uploader -> Uploader: Divide los documentos en chunks
+    
+    Uploader -> Handler: Llama a `create_vectorstore(chunks, ...)`
+    note right: Se asume que la colección no existe o se fuerza la recreación.
+
+    alt "Generación de Contexto Activada"
+        Handler -> Handler: Llama a `_generate_context_for_chunks(chunks)`
+        Handler -> ContextGen: Genera contexto para cada chunk
+        ContextGen --> Handler: Devuelve chunks enriquecidos
+        Handler -> VectorStore: Añade los chunks enriquecidos a la nueva colección
+    else "Generación de Contexto Desactivada"
+        Handler -> VectorStore: Añade los chunks directamente a la nueva colección
+    end
+    
+    VectorStore --> Handler: Confirma la creación
+    Handler --> Uploader: Devuelve la instancia de la vectorstore
+end
+
+Uploader --> Agent: Finaliza la creación de colecciones
+Agent --> Operator: Agente configurado
+@enduml

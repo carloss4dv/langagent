@@ -1,0 +1,62 @@
+@startuml
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 12
+
+    package {
+        borderColor #2688d4
+        backgroundColor #f0f8ff
+    }
+
+    database {
+        borderColor #2688d4
+        backgroundColor #add8e6
+    }
+}
+title "Diagrama de Secuencia: Actualización Inteligente de Documentos"
+
+actor "Operador" as Operator
+participant "LangChainAgent" as Agent
+participant "DocumentUploader" as Uploader
+participant "VectorStoreHandler\n(MilvusVectorStore)" as Handler
+participant "VectorStore (Milvus)" as VectorStore
+
+Operator -> Agent: Inicia carga de documentos (ej. al reiniciar)
+Agent -> Uploader: Llama a `load_documents_intelligently(docs)`
+
+Uploader -> Handler: `load_vectorstore(...)`
+Handler --> Uploader: Devuelve la vectorstore existente
+
+Uploader -> Handler: `get_existing_cubos_with_versions()`
+note right: Obtiene los cubos y sus versiones actuales de los metadatos
+Handler -> VectorStore: Busca metadatos de los documentos (campo 'source')
+VectorStore --> Handler: Devuelve metadatos
+Handler --> Uploader: Devuelve `existing_cubos` con sus versiones
+
+Uploader -> Uploader: `analyze_document_updates(docs, existing_cubos)`
+note right: Compara las versiones de los documentos nuevos\ncon los existentes para decidir qué actualizar.
+Uploader --> Uploader: Devuelve `documentos_a_cargar` y `cubos_a_eliminar`
+
+opt cubos_a_eliminar no está vacío
+    Uploader -> Handler: `remove_documents_by_cubo(cubos_a_eliminar)`
+    Handler -> VectorStore: Ejecuta la eliminación basada en una expresión de filtro
+    VectorStore --> Handler: Confirma la eliminación
+    Handler --> Uploader: Devuelve resultado
+end
+
+opt documentos_a_cargar no está vacío
+    Uploader -> Handler: `add_documents_to_collection(documentos_a_cargar)`
+    note right: Este paso puede incluir la generación de contexto\nsi está habilitada, como en el diagrama de ingesta inicial.
+    Handler -> VectorStore: Añade los nuevos documentos/chunks
+    VectorStore --> Handler: Confirma la adición
+    Handler --> Uploader: Devuelve resultado
+end
+
+Uploader --> Agent: Finaliza la carga inteligente
+Agent --> Operator: Proceso de actualización completado
+
+@enduml

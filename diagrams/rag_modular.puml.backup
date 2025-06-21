@@ -1,0 +1,32 @@
+@startuml "Arquitectura de RAG Modular"
+' Mejora la legibilidad y la calidad de la imagen para documentos.
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 12
+
+    component {
+        backgroundColor #add8e6
+        borderColor #2688d4
+    }
+
+    arrow {
+        color #2688d4
+    }
+}
+
+component "Nodo Politica" as NP
+component "Modulo Recuperacion" as MR 
+component "Modulo Generacion" as MG
+component "Modulo Fusion" as MF
+
+NP .down.> MR : Config. dinamica
+NP .down.> MG : Seleccion modelo
+MR .down.> MF : Resultados recuperacion
+MG .down.> MF : Resultados generacion
+MF .up.> NP : Retroalimentacion
+
+@enduml

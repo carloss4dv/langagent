@@ -1,0 +1,44 @@
+@startuml "Flujo de Recuperacion en RAG"
+' Mejora la legibilidad y la calidad de la imagen para documentos.
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 12
+    
+    activity {
+        borderColor #2688d4
+        backgroundColor #add8e6
+        fontName "Arial"
+        fontSize 11
+    }
+
+    arrow {
+        color #2688d4
+    }
+
+    partition {
+        borderColor #2688d4
+        backgroundColor #f0f8ff
+    }
+}
+
+|Sistema|
+start
+:Cargar documentos fuente;
+:Dividir en fragmentos;
+:Limpiar y preprocesar;
+
+|Embeddings|
+:Generar embeddings;
+
+|VectorStore|
+:Almacenar embeddings;
+:Crear indices de busqueda;
+
+|Sistema|
+:Validar base de conocimiento;
+stop
+@enduml

@@ -1,0 +1,79 @@
+@startuml "Analisis Mix of Granularity"
+!theme plain
+skinparam {
+    dpi 300
+    shadowing false
+    backgroundColor transparent
+    defaultFontName "Arial"
+    defaultFontSize 10
+    sequenceArrowThickness 1
+    sequenceParticipant {
+        padding 5
+    }
+    sequence {
+        participantBorderColor #2688d4
+        participantBackgroundColor #add8e6
+    }
+    arrow {
+        color #2688d4
+    }
+}
+
+participant "Workflow" as WF
+participant "Analizador" as Analyzer
+participant "EvalComplej" as ComplexEval
+participant "Estrategia" as MoGStrat
+participant "Historial" as History
+
+WF -> Analyzer: Analizar query
+activate Analyzer
+
+Analyzer -> ComplexEval: Evaluar complejidad
+activate ComplexEval
+ComplexEval -> ComplexEval: Buscar indicadores
+ComplexEval --> Analyzer: Score complejidad
+deactivate ComplexEval
+
+Analyzer -> History: Consultar historial
+activate History
+History --> Analyzer: Estrategias previas
+deactivate History
+
+Analyzer -> MoGStrat: Determinar estrategia
+activate MoGStrat
+
+MoGStrat -> MoGStrat: Calcular granularidad
+
+alt Query Especifica
+    MoGStrat -> MoGStrat: Estrategia fina
+else Query Analitica
+    MoGStrat -> MoGStrat: Estrategia media
+else Query Amplia
+    MoGStrat -> MoGStrat: Estrategia gruesa
+end
+
+MoGStrat --> Analyzer: Recomendacion
+deactivate MoGStrat
+
+alt Estrategia fallida antes
+    Analyzer -> MoGStrat: Pedir alternativa
+    activate MoGStrat
+    MoGStrat -> History: Get estrategias OK
+    activate History
+    History --> MoGStrat: Alternativas
+    deactivate History
+    MoGStrat --> Analyzer: Mejor opcion
+    deactivate MoGStrat
+end
+
+Analyzer --> WF: Estrategia final
+
+WF -> History: Actualizar
+activate History
+History -> History: Registrar estrategia
+History --> WF: OK
+deactivate History
+
+deactivate Analyzer
+
+@enduml
