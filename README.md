@@ -31,7 +31,7 @@ RAGDWAREuz es un sistema avanzado de Retrieval-Augmented Generation (RAG) que im
 ## Arquitectura del Sistema
 
 <div align="center">
-  <img src="diagrams/img/svg/Sistema RAGDWAREuz.svg" alt="Arquitectura del Sistema" width="1000"/>
+  <img src="diagrams/img/svg/Sistema RAGDWAREuz.svg" alt="Arquitectura del Sistema" width="900"/>
   <br>
   <em>Arquitectura completa del sistema SEGEDA con flujos de trabajo adaptativos</em>
 </div>
