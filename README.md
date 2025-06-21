@@ -1,7 +1,7 @@
 # SEGEDA: Sistema RAG Adaptativo con LangGraph y Estrategias Mix-of-Granularity
 
 <div align="center">
-  <img src="logos/NEAT-AMBIENCE-logo.png" alt="Sistema RAG SEGEDA" width="800"/>
+  <img src="logos/NEAT-AMBIENCE-logo.png" alt="Sistema RAG SEGEDA" width="600"/>
   <br>
   <em>Sistema inteligente de respuesta a preguntas con enrutamiento adaptativo y estrategias avanzadas de granularidad</em>
 </div>
