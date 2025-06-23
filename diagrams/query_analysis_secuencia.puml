@@ -1,11 +1,11 @@
-@startuml "Analisis Mix of Granularity"
+@startuml 
 !theme plain
 skinparam {
-    dpi 300
+    dpi 600
     shadowing false
     backgroundColor transparent
     defaultFontName "Arial"
-    defaultFontSize 10
+    defaultFontSize 15
     sequenceArrowThickness 1
     sequenceParticipant {
         padding 5

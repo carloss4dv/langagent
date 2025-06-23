@@ -1,4 +1,4 @@
-# SEGEDA: Sistema RAG Adaptativo con LangGraph y Estrategias Mix-of-Granularity
+# RAGDWAREuz: Sistema RAG Adaptativo con LangGraph y Estrategias Mix-of-Granularity
 
 <div align="center">
   <img src="logos/NEAT-AMBIENCE-logo.png" alt="Sistema RAG SEGEDA" width="600"/>

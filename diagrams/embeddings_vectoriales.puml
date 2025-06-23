@@ -1,4 +1,4 @@
-@startuml "Proceso de Embeddings y Busqueda Semantica"
+@startuml
 ' Mejora la legibilidad y la calidad de la imagen para documentos.
 !theme plain
 skinparam {
@@ -48,5 +48,4 @@ package "Busqueda Semantica" {
 
 VectorEmbedding --> DBVectores : Almacenamiento
 
-@enduml
 @enduml

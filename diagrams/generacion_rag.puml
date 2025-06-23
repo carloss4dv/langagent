@@ -1,12 +1,12 @@
-@startuml "Flujo de Generacion en RAG"
+@startuml 
 ' Mejora la legibilidad y la calidad de la imagen para documentos.
 !theme plain
 skinparam {
-    dpi 300
+    dpi 600
     shadowing false
     backgroundColor transparent
     defaultFontName "Arial"
-    defaultFontSize 12
+    defaultFontSize 15
     
     activity {
         borderColor #2688d4

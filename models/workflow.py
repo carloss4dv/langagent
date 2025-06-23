@@ -496,6 +496,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                     # Usar el contexto generado si está disponible, de lo contrario usar el contenido original
                     doc_content = doc.page_content
                     generated_context = doc.metadata.get('context_generation', '')
+                    ambito_doc = doc.metadata.get('ambito', 'Desconocido')
                     
                     # Si existe context_generation y no está vacío, añadirlo antes del contenido
                     context_info = ""
@@ -503,7 +504,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                         context_info = f"\n[CONTEXTO: {generated_context}]\n"
                     
                     # Crear string con la info del documento
-                    doc_string = f"\n[DOCUMENTO {idx+1} - {doc_source} - ID: {doc_id}]{context_info}\n{doc_content}\n"
+                    doc_string = f"\n[DOCUMENTO {idx+1} - {doc_source} - ID: {doc_id}]{context_info}\n{doc_content} - Ambito: {ambito_doc}\n"
                     context_docs.append(doc_string)
                 else:
                     # Si no es ni string ni Document válido, convertir a string

@@ -5,7 +5,7 @@ skinparam {
     shadowing false
     backgroundColor transparent
     defaultFontName "Arial"
-    defaultFontSize 10
+    defaultFontSize 15
     sequenceArrowThickness 1
     sequenceParticipant {
         padding 5
@@ -19,9 +19,8 @@ skinparam {
         backgroundColor #add8e6
     }
 }
-title "Actualizacion Inteligente de Documentos"
 
-actor "Operador" as Operator
+participant "Operador" as Operator
 participant "Agent" as Agent
 participant "DocUploader" as Uploader
 participant "VectorHandler" as Handler

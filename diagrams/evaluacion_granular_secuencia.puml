@@ -1,11 +1,11 @@
-@startuml "Evaluacion Granular RAG"
+@startuml 
 !theme plain
 skinparam {
-    dpi 300
+    dpi 600
     shadowing false
     backgroundColor transparent
     defaultFontName "Arial"
-    defaultFontSize 10
+    defaultFontSize 15
     sequenceArrowThickness 1
     sequenceParticipant {
         padding 5
@@ -19,7 +19,6 @@ skinparam {
     }
 }
 
-title Evaluacion Granular RAG
 
 participant "Workflow" as WF
 participant "Evaluador" as EvalGran

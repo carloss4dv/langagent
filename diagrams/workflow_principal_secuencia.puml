@@ -1,12 +1,11 @@
-@startuml "Workflow Principal RAG - Recuperacion Adaptativa"
-' Mejora la legibilidad y la calidad de la imagen para documentos.
+@startuml 
 !theme plain
 skinparam {
-    dpi 300
+    dpi 600
     shadowing false
     backgroundColor transparent
     defaultFontName "Arial"
-    defaultFontSize 12
+    defaultFontSize 15
 
     sequence {
         participantBorderColor #2688d4

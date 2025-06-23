@@ -2,11 +2,11 @@
 ' Mejora la legibilidad y la calidad de la imagen para documentos.
 !theme plain
 skinparam {
-    dpi 300
+    dpi 600
     shadowing false
     backgroundColor transparent
     defaultFontName "Arial"
-    defaultFontSize 12
+    defaultFontSize 15
 
     sequence {
         participantBorderColor #2688d4
@@ -20,7 +20,7 @@ skinparam {
     }
 }
 
-title Corrective RAG (CRAG) Workflow
+
 
 participant "Usuario" as User
 participant "CRAG" as System
