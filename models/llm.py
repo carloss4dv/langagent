@@ -101,6 +101,7 @@ def create_rag_sql_chain(llm, db_uri=SQL_CONFIG["db_uri"], dialect=SQL_CONFIG["d
     answer_chain = (
         {
             "context": lambda x: x["context"] if isinstance(x, dict) and "context" in x else x,
+            "scope": lambda x: x["scope"] if isinstance(x, dict) and "scope" in x else x,
             "question": lambda x: x["question"] if isinstance(x, dict) and "question" in x else x
         }
         | prompt

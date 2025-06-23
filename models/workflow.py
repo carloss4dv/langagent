@@ -504,7 +504,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                         context_info = f"\n[CONTEXTO: {generated_context}]\n"
                     
                     # Crear string con la info del documento
-                    doc_string = f"\n[DOCUMENTO {idx+1} - {doc_source} - ID: {doc_id}]{context_info}\n{doc_content} - Ambito: {ambito_doc}\n"
+                    doc_string = f"\n[DOCUMENTO {idx+1} - {doc_source} - ID: {doc_id} - Ambito: {ambito_doc}]{context_info}\n{doc_content}\n"
                     context_docs.append(doc_string)
                 else:
                     # Si no es ni string ni Document válido, convertir a string
@@ -557,6 +557,7 @@ def create_workflow(retriever, retrieval_grader, granular_evaluator, query_rewri
                 # Asegurar que se pasan los parámetros correctamente
                 rag_input = {
                     "context": clean_context,
+                    "scope": state.get("ambito","Desconocido"),
                     "question": clean_question
                 }
                 logger.info(f"Input para RAG chain: context length={len(clean_context)}, question='{clean_question}'")
